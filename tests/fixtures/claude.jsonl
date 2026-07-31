@@ -1,0 +1,5 @@
+{"type":"summary","summary":"fixture summary line","leafUuid":"claude-msg-2"}
+{"type":"user","uuid":"claude-msg-1","sessionId":"claude-fixture","timestamp":"2026-07-10T00:00:00.000Z","message":{"content":"fixture user message"}}
+{"type":"assistant","uuid":"claude-msg-2","sessionId":"claude-fixture","timestamp":"2026-07-10T00:00:01.000Z","message":{"model":"claude-fixture-model","content":[{"type":"text","text":"fixture assistant message"},{"type":"tool_use","id":"toolu_fixture_1","name":"Read","input":{"file_path":"/tmp/kura-fixture/README.md"}}]}}
+{"type":"user","uuid":"claude-msg-3","sessionId":"claude-fixture","timestamp":"2026-07-10T00:00:02.000Z","message":{"content":[{"type":"tool_result","tool_use_id":"toolu_fixture_1","content":"ignored tool result echo"}]}}
+{"type":"assistant","uuid":"claude-msg-4","sessionId":"claude-fixture","timestamp":"2026-07-10T00:00:03.000Z","message":{"model":"claude-fixture-model","content":[{"type":"tool_use","id":"toolu_fixture_2","name":"Bash","input":{"command":"echo fixture"}}]}}

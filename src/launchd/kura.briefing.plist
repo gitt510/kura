@@ -1,0 +1,62 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  kura.briefing — 毎朝 briefing job を 09:10 / 09:40 / 10:10 の3回起動する (poll-until-success)。
+  feature の run.ts が guard を通して設定済み agent の briefing skill で要約させ、自身で Discord へ配信する。
+  寝起きの冷えたネットワークで最初の発火が落ちても、後続の回が拾う。成功したら run.ts の
+  stamp ガードが以降を即 skip する (当日配信済み / 09:10 前は skip)。失敗通知は最終 10:10 以降で
+  まだ未達のときだけ run.ts が一度打つ (早い回はリトライ前提で静かに落ちる)。
+  スリープ中でも wake 時にまとめて発火する (launchd の catch-up)。catch-up は電源オフを
+  またぐと消えるので、RunAtLoad で boot/login 時にも発火させる。二重配信は stamp ガードが防ぐ。
+  分は :10 / :40 — 毎時の timeline (:00) / english (:05) と agent boot をずらす。
+
+  machine 非依存: launchd は plist の絶対パスに $HOME/~ を展開しないので、
+  ProgramArguments は bash -c 経由で実行時に $HOME を解決させる
+  (launchd は user agent に $HOME を渡す)。これで会社/個人どちらの PC でも
+  正しい home に解決される。StdOut/StdErr の絶対パスは持たない —
+  実ログは run.sh が XDG_STATE_HOME (未設定時は $HOME/.local/state) に書く。
+
+  有効化: launchctl load ~/Library/LaunchAgents/kura.briefing.plist
+-->
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>kura.briefing</string>
+
+  <key>ProgramArguments</key>
+  <array>
+    <string>/bin/bash</string>
+    <string>-c</string>
+    <string>exec "$HOME/.local/share/kura/src/launchd/run.sh" briefing src/features/briefing/run.ts</string>
+  </array>
+
+  <!-- 毎朝 09:10 / 09:40 / 10:10 に発火 (poll-until-success)。成功後は stamp ガードで skip。
+       スリープ中なら wake 時に追いかけ実行。 -->
+  <key>StartCalendarInterval</key>
+  <array>
+    <dict>
+      <key>Hour</key>
+      <integer>9</integer>
+      <key>Minute</key>
+      <integer>10</integer>
+    </dict>
+    <dict>
+      <key>Hour</key>
+      <integer>9</integer>
+      <key>Minute</key>
+      <integer>40</integer>
+    </dict>
+    <dict>
+      <key>Hour</key>
+      <integer>10</integer>
+      <key>Minute</key>
+      <integer>10</integer>
+    </dict>
+  </array>
+
+  <!-- boot/login 時にも発火 (電源オフで発火時刻を逃した朝の catch-up)。
+       skip 判定は run.ts の stamp ガードに委ねる。 -->
+  <key>RunAtLoad</key>
+  <true/>
+</dict>
+</plist>

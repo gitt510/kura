@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  kura.english — 毎時 HH:05 に english job を起動する。
+  run.ts が「直近の完了 hour」を解決し、空き hour / publish 済みは自前で skip する。
+  HH:00 の timeline と agent boot がぶつからないよう 5 分ずらす。
+
+  machine 非依存: launchd は plist の絶対パスに $HOME/~ を展開しないので、
+  ProgramArguments は bash -c 経由で実行時に $HOME を解決させる
+  (launchd は user agent に $HOME を渡す)。これで会社/個人どちらの PC でも
+  正しい home に解決される。StdOut/StdErr の絶対パスは持たない —
+  実ログは run.sh が XDG_STATE_HOME (未設定時は $HOME/.local/state) に書く。
+
+  有効化: launchctl load ~/Library/LaunchAgents/kura.english.plist
+-->
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>kura.english</string>
+
+  <key>ProgramArguments</key>
+  <array>
+    <string>/bin/bash</string>
+    <string>-c</string>
+    <string>exec "$HOME/.local/share/kura/src/launchd/run.sh" english src/features/english/run.ts</string>
+  </array>
+
+  <!-- Minute=5 = 毎時 HH:05 に発火 (24h)。idle hour は tick が無コストで skip。 -->
+  <key>StartCalendarInterval</key>
+  <dict>
+    <key>Minute</key>
+    <integer>5</integer>
+  </dict>
+
+  <!-- load 時の即時実行はしない (次の HH:05 を待つ)。 -->
+  <key>RunAtLoad</key>
+  <false/>
+</dict>
+</plist>

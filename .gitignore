@@ -1,0 +1,13 @@
+# legacy runtime SQLite state — 現在の正本は ~/.local/state/kura/。移行残骸も追跡しない
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+
+.DS_Store
+
+# Local secrets and 1Password references. Public templates are tracked below.
+.env
+.env.*
+!.env.example
+!.env.ref.example
