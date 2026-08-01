@@ -8,11 +8,14 @@
 //     旧 row (gen_model 無し) は "English Feed" と webhook 既定 avatar に fallback。
 //   - 外部送信なので非冪等。冪等ガードは published_at（--force で上書き）。
 //
-// レイアウト (1 カード = 1 field):
-//   title  : "YYYYMMDD HH:MM - HH:MM" (JST hour window)。
-//   field  : name = kind ("🛠 指示")、value =
-//              🇯🇵 **ja** / 💎 phrase     … 常時表示 (phrase は想起のヒント役)
-//              || 🇺🇸 en 🔤 syl 🗣 read 📝 memo ✨ alt ||  … 丸ごと 1 spoiler
+// レイアウト。カナだけを手がかりに en を書き起こす練習が主用途:
+//   title       : "YYYYMMDD HH:MM - HH:MM" (JST hour window)。
+//   description : **📋 問題** / ja / phrase・read の bullet … 常時表示の手がかり
+//   field       : name = 🔓 答え合わせ、value = || syl / memo・alt の bullet ||
+//   2 つの節は「太字の見出し → 無印の主文 → bullet」で同じ 3 段に揃える。絵文字は見出しだけに置く
+//   (spoiler の 1 行目は `||` に続いて行頭を取れないので、主文が無印なのは構造上の要請でもある)。
+//   英文は syl (音節区切り付き) だけ出す。en は表示しない — syl/read/alt の素として DB に残るだけ。
+//   field name が description との唯一のブロック区切りになる (Components V2 の separator は要らない)。
 //   syl/read/memo/alt は旧 row には無いので、ある行だけ出す。
 //
 // schema / 型 / 接続は同居の ./db.ts が所有する。webhook URL は出力に絶対出さない。
@@ -68,24 +71,33 @@ export async function publishEnglish(
     // title は window そのもの: "YYYYMMDD HH:MM - HH:MM" (JST)。date はハイフン無し。
     const title = `${(row.date ?? "").replaceAll("-", "")} ${hhmm(row.window_start)} - ${hhmm(row.window_end)}`;
 
-    // 1 カード = 1 全幅 field。name = kind、value = 常時表示 (ja/phrase) + 英語ブロック 1 spoiler。
-    const fields = cards.map((c) => {
-      const hidden = [`🇺🇸 ${c.en}`];
-      if (c.syl) hidden.push(`🔤 ${c.syl}`);
-      if (c.read) hidden.push(`🗣 ${c.read}`);
-      if (c.memo) hidden.push(`📝 ${c.memo}`);
-      if (c.alt) hidden.push(`✨ ${c.alt}`);
-      const value = [`🇯🇵 **${c.ja}**`, `💎 ${c.phrase}`, `|| ${hidden.join("\n")} ||`].join("\n");
-      return { name: c.kind, value };
-    });
+    // cards は契約上つねに長さ 1（SKILL.md「カードは 1 枚だけ」）。手がかりは見出しを持たない
+    // ブロックなので description に置き、答え合わせは丸ごと 1 spoiler の field 1 つに畳む。
+    const card = cards[0];
+    // 見えている側: 見出し (太字) → 無印の ja → bullet。答え合わせ側と同じ 3 段にする。
+    const cue = [`**📋 問題**`, card.ja, `- ${card.phrase}`];
+    if (card.read) cue.push(`- ${card.read}`);
+
+    // 答え合わせ側: field name (🔓) が節の頭。中身は全部 bullet。
+    // 英文は音節区切りのある syl だけ出す。en は syl/read/alt の素なので DB には残すが表示しない
+    // (syl の無い旧 row だけ、英文がまったく出ないのを防ぐために en で代替する)。
+    // spoiler の 1 行目は `||` に続くので行頭にならず bullet にできない (改行を挟むと空行が入る)。
+    // 先頭の英文は無印のまま節の答えとして置き、注釈だけ bullet にする。
+    const answer = [card.syl ?? card.en];
+    if (card.memo) answer.push(`- ${card.memo}`);
+    if (card.alt) answer.push(`- ${card.alt}`);
+
+    const description = cue.join("\n");
+    const fields = [{ name: "🔓 答え合わせ", value: `|| ${answer.join("\n")} ||` }];
 
     const payload = {
       ...discordIdentity(row.gen_model, row.gen_effort, "English Feed"),
       embeds: [
         {
           title,
+          description,
           color: 0x2ecc71, // green — english の帯色
-          fields: fitDiscordFields(fields, title.length),
+          fields: fitDiscordFields(fields, title.length + description.length),
         },
       ],
     };

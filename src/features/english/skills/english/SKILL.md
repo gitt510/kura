@@ -43,13 +43,15 @@ history / english.db は触らない（読むのも書くのも orchestrator 側
 持っていても、カードに載るのはこの 1 節だけ — **ja も en も切り出した節だけを書き、
 選ばなかった節はどちらにも出さない**。
 
-カードは `{ kind, ja, phrase, en, syl, read, memo, alt }`（並びは Discord 表示順）:
+カードは `{ ja, phrase, en, syl, read, memo, alt }`（並びは Discord 表示順）。
 
-- **kind**: その発話が agent に対する「どんな一手」か。先頭に絵文字を付けたラベル。
-  - `🛠 指示`（やってほしい作業を出す） / `🚦 段取り`（着手前の確認・順序・ゲート） /
-    `❓ 質問`（前提や根っこを問う） / `🤔 相談`（方針を一緒に決める） /
-    `🔧 修正`（直し・変更を頼む） / `🔍 確認`（理解や守備範囲を確かめる）
-  - 合うものを選ぶ。無ければ近いものを 1 つ。
+Discord では **ja / phrase / read が常時表示**、**syl / memo / alt が丸ごと 1 つの spoiler**。
+主な使い方は「read のカナだけを見て en を書き起こし、spoiler を開いて答え合わせする」なので、
+**read は en を音だけで復元できる密度**で書く。
+
+**en は表示されない**が、syl / read / alt を導く素なので必ず作る。表示に出るのは音節区切りのある
+`syl` のほうなので、**`syl` だけ見れば綴りが分かる**精度で書く（`en` の語をそのまま割ること）。
+
 - **ja**: 切り出した芯 1 節の **clean 版**（typo・誤変換・固有名詞は修正、フィラーは落とす。逐語ではない）。
 - **phrase**: 持ち帰る**再利用フレーズ 1 つ**。`"..."` で括る。agent 会話で効く定型を優先
   （`"take it all the way to X"` / `"before we do — let me see X first"` / `"what even is X?"` など）。
@@ -82,7 +84,6 @@ step 2 で作るのはこれだけ（meta は含めない）:
 {
   "cards": [
     {
-      "kind": "🛠 指示",
       "ja": "一旦 branch を切って、PR を出すところまでお願い。",
       "phrase": "\"take it all the way to X\"",
       "en": "For now, cut a branch and take it all the way to a PR.",

@@ -21,18 +21,17 @@ export const ENGLISH_DB = stateDbPath(
 const SCHEMA_SQL = `${import.meta.dir}/schema.sql`;
 
 // 1 カード = その hour のユーザ発話 1 つを英語学習用に解剖したもの (1 hour 1 枚)。
-// 並び順は Discord 表示順と同じ。ja / phrase が常時表示、en 以降は丸ごと 1 spoiler。
-//   kind   : 会話の一手の種類 (先頭に絵文字)。例 "🛠 指示" / "🚦 段取り" / "❓ 質問"
+// 並び順は Discord 表示順と同じ。ja / phrase / read が常時表示、en 以降は spoiler。
 //   ja     : 🇯🇵 言いたいこと (clean 版。typo / 固有名詞は修正、逐語ではない)
 //   phrase : 💎 持ち帰る再利用フレーズ 1 つ ("..." 込み)。常時表示のヒント役
-//   en     : 🇺🇸 その英訳 1 文 (casual / hedged。ここから下が spoiler)
-//   syl    : 🔤 en の音節分割。単語間 " / "・音節間 "·" (例 "Pass·ing / the / da·ta·base")
 //   read   : 🗣 en を流れで読んだカタカナ。連結・弱形・脱落を反映 (例 "スワ ピナ")
-//   memo   : 📝 連結・音変化の解説 1〜2 点 (無い文では省略可)
+//            常時表示 — これだけを見て en を書き起こすのが主な使い方
+//   en     : 🇺🇸 その英訳 1 文 (casual / hedged)。書き取りの正解なので spoiler
+//   syl    : 🔤 en の音節分割。単語間 " / "・音節間 "·" (例 "Pass·ing / the / da·ta·base")
+//   memo   : 連結・音変化の解説 1〜2 点 (無い文では省略可)
 //   alt    : ✨ 同じ意図の別の言い方 1 文 (en と構文を変える)
 // en/alt 以外の optional 群は 2026-07 の拡張 — 旧 row には無いので publish 側は optional 扱いする。
 export interface Card {
-  kind: string;
   ja: string;
   phrase: string;
   en: string;

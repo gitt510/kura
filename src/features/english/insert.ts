@@ -32,7 +32,6 @@ export function parseEnglishGenerated(value: unknown): EnglishGenerated {
   const cards = expectJsonArray(root.cards, "english.cards").map((value, index) => {
     const card = expectJsonObject(value, `english.cards[${index}]`);
     const parsed: Card = {
-      kind: expectJsonString(card.kind, `english.cards[${index}].kind`),
       ja: expectJsonString(card.ja, `english.cards[${index}].ja`),
       phrase: expectJsonString(card.phrase, `english.cards[${index}].phrase`),
       en: expectJsonString(card.en, `english.cards[${index}].en`),

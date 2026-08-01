@@ -18,7 +18,7 @@ test("timeline thread の必須fieldをpath付きで検証する", () => {
 test("english card の必須fieldをpath付きで検証する", () => {
   expect(() =>
     parseEnglishGenerated({
-      cards: [{ kind: "🛠", ja: "日本語", phrase: "phrase" }],
+      cards: [{ ja: "日本語", phrase: "phrase" }],
     }),
   ).toThrow("english.cards[0].en must be a string");
 });
