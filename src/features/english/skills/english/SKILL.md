@@ -63,8 +63,9 @@ Discord では **ja / phrase / read が常時表示**、**syl / memo / alt が�
   例: `Pass·ing / the / da·ta·base / in·to / build·App`
 - **read**: en を**ネイティブの流れで読んだカタカナ**。単語ごとの棒読みではなく、
   連結・弱形・脱落を反映する（`swap in a` → `スワ ピナ`、`route handlers` → `ルー ハンドラーズ`）。
-- **memo**: read で起きている**連結・音変化の解説を 1〜2 点**、日本語 1〜2 文で。
-  例: `swap in a は /p/ と /n/ が後続母音に連結して スワ ピナ と流れる。`
+- **memo**: read で起きている**連結・音変化の解説**。**1 点 1 文の文字列配列**で 1〜2 点。
+  1 要素に複数の現象を詰めない — 現象が 2 つなら要素も 2 つに割る。Discord では 1 点 1 bullet で出る。
+  例: `["swap in a は /p/ が後続母音に連結して スワ ピ となる。", "さらに /n/ が連結して ピナ と流れる。"]`
   目立った連結の無い文では省略してよい（key ごと落とす）。
 - **alt**: 同じ意図を**別の S-V で言い直した 1 文**。en と主語・動詞を替えて組み立て直す
   （en が命令文なら主語を立てる: `Can you …?` / `Let's …` / `I want …` 等）。
@@ -89,7 +90,10 @@ step 2 で作るのはこれだけ（meta は含めない）:
       "en": "For now, cut a branch and take it all the way to a PR.",
       "syl": "For / now / cut / a / branch / and / take / it / all / the / way / to / a / P·R",
       "read": "フォナウ カッタ ブランチ アン テイキッ オール ザ ウェイ トゥア ピーアール",
-      "memo": "cut a は /t/ が母音に連結して カッタ。take it は /k/ と /ɪ/ がつながって テイキッ と流れる。",
+      "memo": [
+        "cut a は /t/ が母音に連結して カッタ。",
+        "take it は /k/ と /ɪ/ がつながって テイキッ と流れる。"
+      ],
       "alt": "Let's get this branch all the way to a PR."
     }
   ]

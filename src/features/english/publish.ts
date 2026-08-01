@@ -84,7 +84,12 @@ export async function publishEnglish(
     // spoiler の 1 行目は `||` に続くので行頭にならず bullet にできない (改行を挟むと空行が入る)。
     // 先頭の英文は無印のまま節の答えとして置き、注釈だけ bullet にする。
     const answer = [card.syl ?? card.en];
-    if (card.memo) answer.push(`- ${card.memo}`);
+    // memo は 1 点 1 bullet。旧 row の string 1 本もそのまま 1 点として扱う。
+    if (card.memo) {
+      for (const point of Array.isArray(card.memo) ? card.memo : [card.memo]) {
+        answer.push(`- ${point}`);
+      }
+    }
     if (card.alt) answer.push(`- ${card.alt}`);
 
     const description = cue.join("\n");

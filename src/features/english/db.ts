@@ -28,7 +28,8 @@ const SCHEMA_SQL = `${import.meta.dir}/schema.sql`;
 //            常時表示 — これだけを見て en を書き起こすのが主な使い方
 //   en     : 🇺🇸 その英訳 1 文 (casual / hedged)。書き取りの正解なので spoiler
 //   syl    : 🔤 en の音節分割。単語間 " / "・音節間 "·" (例 "Pass·ing / the / da·ta·base")
-//   memo   : 連結・音変化の解説 1〜2 点 (無い文では省略可)
+//   memo   : 連結・音変化の解説 1〜2 点の配列 (無い文では省略可)。publish が bullet に整形する。
+//            旧 row は string 1 本 (2026-08 に配列化) — publish 側で両方受ける
 //   alt    : ✨ 同じ意図の別の言い方 1 文 (en と構文を変える)
 // en/alt 以外の optional 群は 2026-07 の拡張 — 旧 row には無いので publish 側は optional 扱いする。
 export interface Card {
@@ -37,7 +38,7 @@ export interface Card {
   en: string;
   syl?: string;
   read?: string;
-  memo?: string;
+  memo?: string[] | string;
   alt?: string;
 }
 
