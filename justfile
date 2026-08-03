@@ -119,6 +119,11 @@ apply-github-ruleset:
 release-notes:
     @bunx git-cliff --unreleased --strip header
 
+# Render the full changelog from git history (read-only)
+[group('release')]
+changelog:
+    @bunx git-cliff --strip header
+
 # Version comes from `git-cliff --bumped-version` (breaking → major, feat → minor,
 # else patch) unless given explicitly; the tag push triggers the release workflow.
 # Cut a release: preview the notes to publish, confirm, tag vX.Y.Z, and push
