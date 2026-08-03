@@ -32,15 +32,23 @@ export function parseEnglishGenerated(value: unknown): EnglishGenerated {
   const cards = expectJsonArray(root.cards, "english.cards").map((value, index) => {
     const card = expectJsonObject(value, `english.cards[${index}]`);
     const parsed: Card = {
-      kind: expectJsonString(card.kind, `english.cards[${index}].kind`),
       ja: expectJsonString(card.ja, `english.cards[${index}].ja`),
       phrase: expectJsonString(card.phrase, `english.cards[${index}].phrase`),
       en: expectJsonString(card.en, `english.cards[${index}].en`),
     };
-    for (const key of ["syl", "read", "memo", "alt"] as const) {
+    for (const key of ["syl", "read", "alt"] as const) {
       if (card[key] !== undefined) {
         parsed[key] = expectJsonString(card[key], `english.cards[${index}].${key}`);
       }
+    }
+    // memo は解説 1〜2 点の配列。string 1 本で来ても配列に正規化して DB の形を揃える。
+    if (card.memo !== undefined) {
+      const path = `english.cards[${index}].memo`;
+      parsed.memo = Array.isArray(card.memo)
+        ? expectJsonArray(card.memo, path).map((point, i) =>
+            expectJsonString(point, `${path}[${i}]`),
+          )
+        : [expectJsonString(card.memo, path)];
     }
     return parsed;
   });
