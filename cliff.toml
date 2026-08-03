@@ -30,6 +30,11 @@ footer = ""
 conventional_commits = true
 filter_unconventional = true
 split_commits = false
+commit_preprocessors = [
+  # The first commit predates the conventional-commit rule; render it as the initial release
+  # instead of letting the catch-all skip leave 0.1.0 empty.
+  { pattern = '^init: kura$', replace = 'feat: initial public release' },
+]
 commit_parsers = [
   { message = "^feat", group = "Features" },
   { message = "^fix", group = "Bug Fixes" },
