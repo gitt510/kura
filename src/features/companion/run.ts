@@ -104,7 +104,7 @@ export async function runCompanion(args: string[]): Promise<number> {
       lang,
       input,
       english: generated.english,
-      note: generated.note,
+      note: generated.notes ? JSON.stringify(generated.notes) : null,
       model: generated.model,
       status: generated.status,
       created_at: createdAt,

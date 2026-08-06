@@ -124,7 +124,9 @@ const PAGE = `<!doctype html>
     white-space: pre-wrap; overflow-wrap: anywhere; margin-top: 8px;
     color: var(--en); font-size: 15px; font-weight: 550;
   }
-  .note { margin-top: 6px; font-size: 12.5px; color: var(--sub); }
+  .notes { margin: 8px 0 0; padding-left: 18px; font-size: 12.5px; color: var(--sub); }
+  .notes li { margin-top: 2px; }
+  .notes li::marker { color: var(--accent); }
   .pending .english { color: var(--sub); font-weight: 400; }
   .pending .english::after { content: " …"; animation: blink 1.2s infinite; }
   .error .english { color: var(--err); }
@@ -171,7 +173,20 @@ const PAGE = `<!doctype html>
       article.append(el("div", "english", "generation failed"));
     } else {
       article.append(el("div", "english", card.english));
-      if (card.note) article.append(el("div", "note", card.note));
+      let notes = [];
+      if (card.note) {
+        try {
+          const parsed = JSON.parse(card.note);
+          notes = Array.isArray(parsed) ? parsed : [card.note];
+        } catch {
+          notes = [card.note]; // JSON 配列化以前の plain string row
+        }
+      }
+      if (notes.length) {
+        const list = el("ul", "notes");
+        for (const item of notes) list.append(el("li", null, item));
+        article.append(list);
+      }
     }
   }
 

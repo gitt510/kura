@@ -15,7 +15,7 @@ export interface GenerateInput {
 
 export interface GenerateResult {
   english: string | null;
-  note: string | null;
+  notes: string[] | null;
   model: string | null;
   status: "ok" | "error";
 }
@@ -37,24 +37,27 @@ export function buildPrompt(job: GenerateInput): string {
     'If the input is Japanese: translate it into the natural, casual English the user could have typed instead.',
     "If the input is English: rewrite it as more natural English; if it is already natural, return it unchanged.",
     "Do not use any tools. Reply with JSON only, no code fences:",
-    '{"english": "...", "note": "..."}',
-    'note: one short Japanese sentence — for Japanese input, the one phrase worth remembering; for English input, what you changed and why, or "OK 👍" if unchanged.',
+    '{"english": "...", "notes": ["...", "..."]}',
+    'notes: 1-3 short Japanese bullets — for Japanese input, the phrases worth remembering; for English input, each change and why, or ["OK 👍"] if unchanged.',
     "",
     `<context>${context}</context>`,
     `<input lang="${job.lang}">${job.input}</input>`,
   ].join("\n");
 }
 
-// LLM の返答から card の中身を取り出す。code fence で包まれても受ける。
-export function parseCardJson(result: string): { english: string; note: string } | null {
+// LLM の返答から card の中身を取り出す。code fence で包まれても、
+// 契約前の単数形 note で返ってきても受ける。
+export function parseCardJson(result: string): { english: string; notes: string[] } | null {
   const body = result.replace(/^\s*```(?:json)?\s*/, "").replace(/\s*```\s*$/, "");
   try {
-    const parsed = JSON.parse(body) as { english?: unknown; note?: unknown };
+    const parsed = JSON.parse(body) as { english?: unknown; notes?: unknown; note?: unknown };
     if (typeof parsed.english !== "string" || !parsed.english.trim()) return null;
-    return {
-      english: parsed.english,
-      note: typeof parsed.note === "string" ? parsed.note : "",
-    };
+    const notes = Array.isArray(parsed.notes)
+      ? parsed.notes.filter((item): item is string => typeof item === "string" && item !== "")
+      : typeof parsed.note === "string" && parsed.note !== ""
+        ? [parsed.note]
+        : [];
+    return { english: parsed.english, notes };
   } catch {
     return null;
   }
@@ -83,6 +86,6 @@ export async function generateCard(job: GenerateInput): Promise<GenerateResult> 
 
   const parsed = parseClaudeJson(raw);
   const card = exitCode === 0 && !parsed.isError ? parseCardJson(parsed.result) : null;
-  if (!card) return { english: null, note: null, model: parsed.model ?? model, status: "error" };
-  return { english: card.english, note: card.note, model: parsed.model ?? model, status: "ok" };
+  if (!card) return { english: null, notes: null, model: parsed.model ?? model, status: "error" };
+  return { english: card.english, notes: card.notes, model: parsed.model ?? model, status: "ok" };
 }

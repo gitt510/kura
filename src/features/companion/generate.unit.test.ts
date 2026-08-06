@@ -5,7 +5,7 @@ test("prompt は lang / 入力 / 直前の assistant 文脈を含む", () => {
   const prompt = buildPrompt({ input: "これを直して", lang: "ja", context: "I fixed auth.ts" });
   expect(prompt).toContain('<input lang="ja">これを直して</input>');
   expect(prompt).toContain("<context>I fixed auth.ts</context>");
-  expect(prompt).toContain('{"english": "...", "note": "..."}');
+  expect(prompt).toContain('{"english": "...", "notes": ["...", "..."]}');
 });
 
 test("文脈なしでは空の context tag になり、長い文脈は切られる", () => {
@@ -17,16 +17,27 @@ test("文脈なしでは空の context tag になり、長い文脈は切られ�
 });
 
 test("card JSON は code fence 込みでも受け、english 欠落は null", () => {
-  expect(parseCardJson('{"english": "Fix this please", "note": "OK 👍"}')).toEqual({
+  expect(parseCardJson('{"english": "Fix this please", "notes": ["OK 👍"]}')).toEqual({
     english: "Fix this please",
-    note: "OK 👍",
+    notes: ["OK 👍"],
   });
-  expect(parseCardJson('```json\n{"english": "Fix this", "note": ""}\n```')).toEqual({
+  expect(parseCardJson('```json\n{"english": "Fix this", "notes": []}\n```')).toEqual({
     english: "Fix this",
-    note: "",
+    notes: [],
   });
-  expect(parseCardJson('{"note": "missing english"}')).toBeNull();
+  expect(parseCardJson('{"notes": ["missing english"]}')).toBeNull();
   expect(parseCardJson("not json at all")).toBeNull();
+});
+
+test("単数形 note や不正要素混じりの notes も配列に畳む", () => {
+  expect(parseCardJson('{"english": "Fix", "note": "旧契約の 1 文"}')).toEqual({
+    english: "Fix",
+    notes: ["旧契約の 1 文"],
+  });
+  expect(parseCardJson('{"english": "Fix", "notes": ["a", 1, "", "b"]}')).toEqual({
+    english: "Fix",
+    notes: ["a", "b"],
+  });
 });
 
 test("model は KURA_COMPANION_MODEL があればそれ、無ければ haiku", () => {
