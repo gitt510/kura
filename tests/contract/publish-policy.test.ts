@@ -33,7 +33,7 @@ test("publish は default-off で、status は policy file を作らない", () 
   const result = run("all", "status");
   expect(result.exitCode).toBe(0);
   expect(result.stdout.toString()).toBe(
-    "timeline: disabled\nenglish: disabled\nbriefing: disabled\n",
+    "timeline: disabled\nenglish: disabled\n",
   );
   expect(existsSync(join(home, "config", "kura", "publish.json"))).toBe(false);
 });

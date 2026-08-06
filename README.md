@@ -82,7 +82,6 @@ $EDITOR "${XDG_CONFIG_HOME:-$HOME/.config}/kura/env"
 | Codex reasoning effort for scheduled generation | `KURA_CODEX_EFFORT` |
 | English learning card | `KURA_DISCORD_WEBHOOK_ENGLISH` |
 | Activity timeline | `KURA_DISCORD_WEBHOOK_TIMELINE` |
-| Daily briefing | `KURA_DISCORD_WEBHOOK_BRIEFING` |
 | Claude-family Discord avatar | `KURA_DISCORD_AVATAR_CLAUDE` |
 | GPT-family Discord avatar | `KURA_DISCORD_AVATAR_GPT` |
 
@@ -120,7 +119,6 @@ kura decisions <repo>
 | --- | --- | --- |
 | `timeline` | Activity timeline | Hourly at `:00` |
 | `english` | English learning card | Hourly at `:05` |
-| `briefing` | Daily briefing | `09:10`, `09:40`, and `10:10` |
 | `decisions` | Code decisions per repo | Hourly at `:10` |
 
 ```bash

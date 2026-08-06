@@ -11,16 +11,16 @@ import {
 } from "node:fs";
 import { join } from "node:path";
 
-type Job = "timeline" | "english" | "briefing" | "decisions";
+type Job = "timeline" | "english" | "decisions";
 type Action = "enable" | "disable" | "status" | "check";
 
-const jobs = ["timeline", "english", "briefing", "decisions"] as const;
+const jobs = ["timeline", "english", "decisions"] as const;
 const actions = ["enable", "disable", "status", "check"] as const;
 const home = process.env.HOME;
 
 function usageError(): never {
   process.stderr.write(
-    "usage: bun jobs.ts <timeline|english|briefing|decisions> <enable|disable|status|check>\n" +
+    "usage: bun jobs.ts <timeline|english|decisions> <enable|disable|status|check>\n" +
       "       bun jobs.ts all <disable|status>\n",
   );
   process.exit(2);
