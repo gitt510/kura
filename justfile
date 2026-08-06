@@ -39,6 +39,11 @@ schedule action feature:
 publish action feature:
     @bun "{{repo}}/src/cli.ts" publish "{{action}}" "{{feature}}"
 
+# Watch live prompts and serve English feedback cards on a local page.
+[group('features')]
+companion *args:
+    @bun "{{repo}}/src/cli.ts" companion {{args}}
+
 # Disable history sources and features, then remove local entrypoints.
 [group('setup')]
 teardown:

@@ -1,6 +1,7 @@
 #!/usr/bin/env bun
 // cli.ts — kura command の薄い dispatcher。処理本体は src/cli/ と domain module が持つ。
 
+import { runCompanion } from "./cli/companion.ts";
 import { runConfig } from "./cli/config.ts";
 import { runDecisions } from "./cli/decisions.ts";
 import { runFeatures } from "./cli/features.ts";
@@ -21,6 +22,7 @@ const usage = `usage: kura setup
        kura search [--limit=N] <keyword...>
        kura show <session-id-or-prefix>
        kura decisions [--limit=N] <repo>
+       kura companion [--port=N] [--session=<prefix>]
        kura --help
 `;
 
@@ -54,6 +56,9 @@ async function main(): Promise<number> {
     }
     if (command === "decisions") {
       return await runDecisions(args);
+    }
+    if (command === "companion") {
+      return await runCompanion(args);
     }
     if (command === "schedule" || command === "publish") {
       return await runFeatures(command, args);
