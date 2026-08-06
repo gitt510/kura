@@ -143,6 +143,22 @@ kura companion [--port=N] [--session=<prefix>]
 - `companion` has no schedule and no Discord publish; it works only while the
   process is running
 
+```bash
+kura usage [--days=N]
+just usage --days=7
+```
+
+- Prints one row per feature and model, plus a `TOTAL` row: calls, input,
+  output, cache-read and cache-write tokens, and cost in USD
+- `--days=N` limits the table to calls from the last N days; the default
+  covers all recorded calls
+- Every LLM call kura makes records a row in `usage.db`, including failed
+  calls — the tokens are spent either way
+- Cost is reported by the Claude CLI; Codex calls have no cost in their public
+  output and show `-`
+- Recording is fail-open: a storage failure prints one line and never fails
+  the generation it was measuring
+
 | Feature | Stored output | Schedule |
 | --- | --- | --- |
 | `timeline` | Activity timeline | Hourly at `:00` |
@@ -205,6 +221,8 @@ just status
 - Stored data: user and assistant messages, Claude tool-use names and inputs,
   session IDs, working directories, timestamps, model metadata, and generated
   output
+- `usage.db` stores per-call token counts, model names, and cost — metering
+  only, no prompt or response content
 - The SQLite databases are not encrypted by kura
 - When a scheduled feature is enabled, relevant stored conversation content
   is processed through the configured agent and its LLM provider

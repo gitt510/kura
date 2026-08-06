@@ -157,7 +157,37 @@ test("Claude の単一 JSON から結果と model を読む", () => {
         modelUsage: { "claude-fixture": {} },
       }),
     ),
-  ).toEqual({ complete: true, isError: false, model: "claude-fixture", result: "generated" });
+  ).toEqual({
+    complete: true,
+    isError: false,
+    model: "claude-fixture",
+    result: "generated",
+    usage: null,
+  });
+});
+
+test("Claude の単一 JSON から token 消費と cost を読む", () => {
+  expect(
+    parseClaudeJson(
+      JSON.stringify({
+        is_error: false,
+        result: "generated",
+        total_cost_usd: 0.0126,
+        usage: {
+          input_tokens: 10,
+          cache_creation_input_tokens: 5297,
+          cache_read_input_tokens: 17900,
+          output_tokens: 42,
+        },
+      }),
+    ).usage,
+  ).toEqual({
+    inputTokens: 10,
+    cacheCreationTokens: 5297,
+    cacheReadTokens: 17900,
+    outputTokens: 42,
+    costUsd: 0.0126,
+  });
 });
 
 test("Codex の JSONL から完了と最終 message を読む", () => {
@@ -167,7 +197,10 @@ test("Codex の JSONL から完了と最終 message を読む", () => {
       type: "item.completed",
       item: { id: "item_1", type: "agent_message", text: "generated" },
     }),
-    JSON.stringify({ type: "turn.completed", usage: {} }),
+    JSON.stringify({
+      type: "turn.completed",
+      usage: { input_tokens: 120, cached_input_tokens: 45, output_tokens: 67 },
+    }),
   ].join("\n");
 
   expect(parseCodexJsonl(raw)).toEqual({
@@ -175,6 +208,13 @@ test("Codex の JSONL から完了と最終 message を読む", () => {
     isError: false,
     model: null,
     result: "generated",
+    usage: {
+      inputTokens: 120,
+      cacheCreationTokens: 0,
+      cacheReadTokens: 45,
+      outputTokens: 67,
+      costUsd: null,
+    },
   });
 });
 
@@ -184,11 +224,13 @@ test("Codex の失敗 event と壊れた JSONL は失敗に倒す", () => {
     isError: true,
     model: null,
     result: "",
+    usage: null,
   });
   expect(parseCodexJsonl("not-json")).toEqual({
     complete: false,
     isError: true,
     model: null,
     result: "",
+    usage: null,
   });
 });

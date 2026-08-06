@@ -6,6 +6,7 @@
 
 import { agentExecutable, parseClaudeJson } from "../../lib/agent.ts";
 import { resolveEnv } from "../../lib/config.ts";
+import { recordUsage } from "../../lib/usage.ts";
 
 export interface GenerateInput {
   input: string;
@@ -86,7 +87,7 @@ export async function generateCard(job: GenerateInput): Promise<GenerateResult> 
   try {
     executable = agentExecutable("claude");
   } catch {
-    return { english: null, note: null, model, status: "error" };
+    return { english: null, notes: null, model, status: "error" };
   }
 
   const child = Bun.spawn(
@@ -105,6 +106,15 @@ export async function generateCard(job: GenerateInput): Promise<GenerateResult> 
   const exitCode = await child.exited;
 
   const parsed = parseClaudeJson(raw);
+  if (parsed.usage) {
+    recordUsage({
+      feature: "companion",
+      agent: "claude",
+      model: parsed.model ?? model,
+      ok: exitCode === 0 && !parsed.isError,
+      usage: parsed.usage,
+    });
+  }
   const card = exitCode === 0 && !parsed.isError ? parseCardJson(parsed.result) : null;
   if (!card) {
     // card は "generation failed" のまま、原因は起動 terminal 側で診断できるようにする。

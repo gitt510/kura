@@ -1,6 +1,7 @@
 import { existsSync } from "node:fs";
 import { resolveEnv } from "./config.ts";
 import { KURA_ROOT } from "./storage.ts";
+import { recordUsage, type AgentUsage } from "./usage.ts";
 
 export type Generator = "claude" | "codex";
 // Claude CLI の --effort が受ける 5 段。Codex の 8 段とは語彙が別物なので enum を共有しない。
@@ -41,6 +42,7 @@ interface ParsedAgentOutput {
   isError: boolean;
   model: string | null;
   result: string;
+  usage: AgentUsage | null; // 出力に usage が無い / parse 失敗なら null
 }
 
 export function resolveGenerator(env: Environment = process.env): Generator {
@@ -105,6 +107,13 @@ export function parseClaudeJson(raw: string): ParsedAgentOutput {
       is_error?: boolean;
       result?: string;
       modelUsage?: Record<string, unknown>;
+      usage?: {
+        input_tokens?: number;
+        cache_creation_input_tokens?: number;
+        cache_read_input_tokens?: number;
+        output_tokens?: number;
+      };
+      total_cost_usd?: number;
     };
     const models = json.modelUsage ? Object.keys(json.modelUsage) : [];
     return {
@@ -112,9 +121,18 @@ export function parseClaudeJson(raw: string): ParsedAgentOutput {
       isError: json.is_error === true,
       model: models[0] ?? null,
       result: typeof json.result === "string" ? json.result : "",
+      usage: json.usage
+        ? {
+            inputTokens: json.usage.input_tokens ?? 0,
+            cacheCreationTokens: json.usage.cache_creation_input_tokens ?? 0,
+            cacheReadTokens: json.usage.cache_read_input_tokens ?? 0,
+            outputTokens: json.usage.output_tokens ?? 0,
+            costUsd: typeof json.total_cost_usd === "number" ? json.total_cost_usd : null,
+          }
+        : null,
     };
   } catch {
-    return { complete: false, isError: true, model: null, result: "" };
+    return { complete: false, isError: true, model: null, result: "", usage: null };
   }
 }
 
@@ -122,20 +140,37 @@ export function parseCodexJsonl(raw: string): ParsedAgentOutput {
   let complete = false;
   let isError = false;
   let result = "";
+  let usage: AgentUsage | null = null;
 
   for (const line of raw.split("\n")) {
     if (!line.trim()) continue;
     let event: {
       type?: string;
       item?: { type?: string; text?: string };
+      usage?: {
+        input_tokens?: number;
+        cached_input_tokens?: number;
+        output_tokens?: number;
+      };
     };
     try {
       event = JSON.parse(line);
     } catch {
-      return { complete: false, isError: true, model: null, result: "" };
+      return { complete: false, isError: true, model: null, result: "", usage: null };
     }
 
-    if (event.type === "turn.completed") complete = true;
+    if (event.type === "turn.completed") {
+      complete = true;
+      if (event.usage) {
+        usage = {
+          inputTokens: event.usage.input_tokens ?? 0,
+          cacheCreationTokens: 0, // Codex の公開 event は cache 生成を区別しない
+          cacheReadTokens: event.usage.cached_input_tokens ?? 0,
+          outputTokens: event.usage.output_tokens ?? 0,
+          costUsd: null,
+        };
+      }
+    }
     if (event.type === "turn.failed" || event.type === "error") isError = true;
     if (
       event.type === "item.completed" &&
@@ -147,7 +182,7 @@ export function parseCodexJsonl(raw: string): ParsedAgentOutput {
   }
 
   // Codex の公開 JSONL event は実行 model を含まない。内部 session file には依存しない。
-  return { complete, isError, model: null, result };
+  return { complete, isError, model: null, result, usage };
 }
 
 export function skillPrompt(agent: Generator, skill: string, args: string[]): string {
@@ -227,6 +262,16 @@ export function runSkillJson(skill: string, workDir: string, args: string[] = []
   const raw = child.stdout?.toString() ?? "";
   const parsed = agent === "claude" ? parseClaudeJson(raw) : parseCodexJsonl(raw);
   const exitCode = child.exitCode ?? 1;
+
+  if (parsed.usage) {
+    recordUsage({
+      feature: skill,
+      agent,
+      model: parsed.model ?? claudeOptions?.model ?? codexOptions?.model ?? null,
+      ok: exitCode === 0 && parsed.complete && !parsed.isError,
+      usage: parsed.usage,
+    });
+  }
 
   return {
     ok: exitCode === 0 && parsed.complete && !parsed.isError,

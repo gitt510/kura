@@ -64,6 +64,11 @@ status:
 view-db:
     @bun "{{repo}}/src/cli.ts" view-db
 
+# Show LLM token usage and cost per feature.
+[group('operations')]
+usage *args:
+    @bun "{{repo}}/src/cli.ts" usage {{args}}
+
 # Run the full Bun test suite.
 [group('development')]
 test:
