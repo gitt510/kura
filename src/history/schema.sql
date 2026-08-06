@@ -3,6 +3,9 @@
 
 CREATE TABLE IF NOT EXISTS messages (
   uuid         TEXT PRIMARY KEY,
+  -- Claude の UserPromptSubmit payload 由来の prompt id。仮 row は uuid = prompt_id で
+  -- 保存され、Stop の transcript scan が同じ promptId を持つ verbatim row に差し替える。
+  prompt_id    TEXT,
   session_id   TEXT,
   cwd          TEXT,
   role         TEXT,

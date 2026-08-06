@@ -21,6 +21,8 @@ const SCHEMA_SQL = `${import.meta.dir}/schema.sql`;
 
 export interface MessageRow {
   uuid: string;
+  // Claude の prompt id。仮 row は uuid === prompt_id、verbatim row は実 uuid + prompt_id を持つ。
+  prompt_id?: string | null;
   session_id: string;
   cwd: string | null;
   role: "user" | "assistant";
@@ -55,17 +57,26 @@ function migrateSchema(db: Database): void {
       db.exec(`ALTER TABLE ${table} DROP COLUMN is_sidechain`);
     }
   }
+  if (!tableColumns(db, "messages").has("prompt_id")) {
+    db.exec("ALTER TABLE messages ADD COLUMN prompt_id TEXT");
+  }
 }
 
 export function insertMessages(db: Database, rows: MessageRow[]): void {
   if (rows.length === 0) return;
   const stmt = db.prepare(
-    "INSERT OR IGNORE INTO messages (uuid, session_id, cwd, role, text, model, timestamp) VALUES (?, ?, ?, ?, ?, ?, ?)",
+    "INSERT OR IGNORE INTO messages (uuid, prompt_id, session_id, cwd, role, text, model, timestamp) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
   );
+  // verbatim row の insert 前に同じ prompt の仮 row (uuid = prompt_id) を消す。
+  // UPDATE での昇格は verbatim row が既に居ると PK 衝突するため DELETE + INSERT。
+  const supersede = db.prepare("DELETE FROM messages WHERE uuid = ?");
   db.transaction((rs: MessageRow[]) => {
     for (const r of rs) {
+      const promptId = r.prompt_id ?? null;
+      if (promptId && promptId !== r.uuid) supersede.run(promptId);
       stmt.run(
         r.uuid,
+        promptId,
         r.session_id,
         r.cwd,
         r.role,

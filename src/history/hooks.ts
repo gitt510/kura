@@ -1,5 +1,8 @@
 #!/usr/bin/env bun
-// hooks.ts — agent の Stop hook と kura history source の配線を管理する。
+// hooks.ts — agent の hook event と kura history source の配線を管理する。
+// Claude は Stop (verbatim scan) と UserPromptSubmit (仮 row) の両方、Codex は
+// 対応する submit event が無いため Stop のみ。enable は全 event を配線し、
+// 部分的に壊れた配線も張り直す。enabled は全 event が揃った状態のみを指す。
 
 import {
   existsSync,
@@ -16,7 +19,7 @@ type Action = "enable" | "disable" | "status" | "check";
 type Hook = { type?: string; command?: string; [key: string]: unknown };
 type HookGroup = { matcher?: string; hooks?: Hook[]; [key: string]: unknown };
 type Settings = {
-  hooks?: { Stop?: HookGroup[]; [key: string]: HookGroup[] | undefined };
+  hooks?: Record<string, HookGroup[] | undefined>;
   [key: string]: unknown;
 };
 
@@ -25,11 +28,15 @@ if (!home) throw new Error("HOME is required");
 
 const agents = ["claude", "codex"] as const;
 const actions = ["enable", "disable", "status", "check"] as const;
-const configs: Record<Agent, { label: string; path: string; command: string; owned: string[] }> = {
+const configs: Record<
+  Agent,
+  { label: string; path: string; command: string; events: string[]; owned: string[] }
+> = {
   claude: {
     label: "Claude",
     path: `${home}/.claude/settings.json`,
     command: '"$HOME/.local/bin/kura" hook claude',
+    events: ["Stop", "UserPromptSubmit"],
     owned: [
       '/.local/bin/kura" ingest claude',
       "/kura/src/history/ingest/claude.ts",
@@ -40,6 +47,7 @@ const configs: Record<Agent, { label: string; path: string; command: string; own
     label: "Codex",
     path: `${home}/.codex/hooks.json`,
     command: '"$HOME/.local/bin/kura" hook codex',
+    events: ["Stop"],
     owned: [
       '/.local/bin/kura" ingest codex',
       "/kura/src/history/ingest/codex.ts",
@@ -60,7 +68,7 @@ function isMember<T extends string>(values: readonly T[], value: string | undefi
   return value !== undefined && values.includes(value as T);
 }
 
-function load(settingsPath: string): Settings {
+function load(settingsPath: string, events: string[]): Settings {
   if (!existsSync(settingsPath)) return {};
   try {
     const parsed = JSON.parse(readFileSync(settingsPath, "utf-8"));
@@ -74,17 +82,19 @@ function load(settingsPath: string): Settings {
     ) {
       throw new Error("hooks must be an object");
     }
-    const stop = (hooks as { Stop?: unknown } | undefined)?.Stop;
-    if (stop !== undefined && !Array.isArray(stop)) {
-      throw new Error("hooks.Stop must be an array");
-    }
-    for (const [index, group] of (stop ?? []).entries()) {
-      if (!group || typeof group !== "object" || Array.isArray(group)) {
-        throw new Error(`hooks.Stop[${index}] must be an object`);
+    for (const event of events) {
+      const groups = (hooks as Record<string, unknown> | undefined)?.[event];
+      if (groups !== undefined && !Array.isArray(groups)) {
+        throw new Error(`hooks.${event} must be an array`);
       }
-      const groupHooks = (group as { hooks?: unknown }).hooks;
-      if (groupHooks !== undefined && !Array.isArray(groupHooks)) {
-        throw new Error(`hooks.Stop[${index}].hooks must be an array`);
+      for (const [index, group] of ((groups as unknown[]) ?? []).entries()) {
+        if (!group || typeof group !== "object" || Array.isArray(group)) {
+          throw new Error(`hooks.${event}[${index}] must be an object`);
+        }
+        const groupHooks = (group as { hooks?: unknown }).hooks;
+        if (groupHooks !== undefined && !Array.isArray(groupHooks)) {
+          throw new Error(`hooks.${event}[${index}].hooks must be an array`);
+        }
       }
     }
     return parsed as Settings;
@@ -98,11 +108,14 @@ function manage(agent: Agent, action: Action): number {
   const config = configs[agent];
   const configExists = existsSync(config.path);
   const settingsPath = configExists ? realpathSync(config.path) : config.path;
-  const settings = load(settingsPath);
-  const stops = settings.hooks?.Stop ?? [];
-  const directEnabled = stops.some((group) =>
-    (group.hooks ?? []).some((hook) => hook.command === config.command),
-  );
+  const settings = load(settingsPath, config.events);
+  const wired = (event: string): boolean =>
+    (settings.hooks?.[event] ?? []).some((group) =>
+      (group.hooks ?? []).some((hook) => hook.command === config.command),
+    );
+  // 全 event が揃って初めて enabled。部分配線 (旧版からの upgrade 途中など) は
+  // disabled として報告し、enable が張り直す。
+  const directEnabled = config.events.every(wired);
 
   if (action === "status" || action === "check") {
     process.stdout.write(`${agent}: ${directEnabled ? "enabled" : "disabled"}\n`);
@@ -125,18 +138,20 @@ function manage(agent: Agent, action: Action): number {
       config.owned.some((fragment) => hook.command!.includes(fragment)));
 
   settings.hooks ??= {};
-  const groups = settings.hooks.Stop ?? (settings.hooks.Stop = []);
-  for (const group of groups) {
-    if (group.hooks) group.hooks = group.hooks.filter((hook) => !isOurs(hook));
-  }
+  for (const event of config.events) {
+    const groups = settings.hooks[event] ?? (settings.hooks[event] = []);
+    for (const group of groups) {
+      if (group.hooks) group.hooks = group.hooks.filter((hook) => !isOurs(hook));
+    }
 
-  if (action === "enable") {
-    const group = groups.find((candidate) => !candidate.matcher) ?? { hooks: [] };
-    if (!groups.includes(group)) groups.push(group);
-    group.hooks ??= [];
-    group.hooks.push({ type: "command", command: config.command });
-  } else {
-    settings.hooks.Stop = groups.filter((group) => (group.hooks ?? []).length > 0);
+    if (action === "enable") {
+      const group = groups.find((candidate) => !candidate.matcher) ?? { hooks: [] };
+      if (!groups.includes(group)) groups.push(group);
+      group.hooks ??= [];
+      group.hooks.push({ type: "command", command: config.command });
+    } else {
+      settings.hooks[event] = groups.filter((group) => (group.hooks ?? []).length > 0);
+    }
   }
 
   mkdirSync(dirname(settingsPath), { recursive: true });

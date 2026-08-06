@@ -158,7 +158,7 @@ function renderStatus(): number {
       existsSync(historyDb) ? "PRESENT" : "NOT CREATED",
       displayPath(historyDb),
     ],
-    ["history/claude", managerState(hooks, "claude"), "Stop hook"],
+    ["history/claude", managerState(hooks, "claude"), "Stop + UserPromptSubmit hooks"],
     ["history/codex", managerState(hooks, "codex"), "Stop hook"],
   ];
 

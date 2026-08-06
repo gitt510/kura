@@ -24,12 +24,15 @@ function settingsPath(home: string, agent: "claude" | "codex"): string {
     : join(home, ".codex", "hooks.json");
 }
 
-function commands(path: string): string[] {
+function commands(path: string, event = "Stop"): string[] {
   const settings = JSON.parse(readFileSync(path, "utf-8"));
-  return settings.hooks.Stop.flatMap((group: { hooks?: { command?: string }[] }) =>
-    (group.hooks ?? []).map((hook) => hook.command ?? ""),
+  return (settings.hooks[event] ?? []).flatMap(
+    (group: { hooks?: { command?: string }[] }) =>
+      (group.hooks ?? []).map((hook) => hook.command ?? ""),
   );
 }
+
+const events = { claude: ["Stop", "UserPromptSubmit"], codex: ["Stop"] } as const;
 
 for (const agent of ["claude", "codex"] as const) {
   test(`${agent} hook を idempotent に enable / disable する`, () => {
@@ -38,12 +41,16 @@ for (const agent of ["claude", "codex"] as const) {
     try {
       expect(run(home, agent, "enable").exitCode).toBe(0);
       expect(run(home, agent, "enable").exitCode).toBe(0);
-      expect(commands(path)).toHaveLength(1);
-      expect(commands(path)[0]).toBe(`"$HOME/.local/bin/kura" hook ${agent}`);
+      for (const event of events[agent]) {
+        expect(commands(path, event)).toHaveLength(1);
+        expect(commands(path, event)[0]).toBe(`"$HOME/.local/bin/kura" hook ${agent}`);
+      }
       expect(run(home, agent, "check").exitCode).toBe(0);
       expect(run(home, agent, "status").stdout.toString()).toBe(`${agent}: enabled\n`);
       expect(run(home, agent, "disable").exitCode).toBe(0);
-      expect(commands(path)).toEqual([]);
+      for (const event of events[agent]) {
+        expect(commands(path, event)).toEqual([]);
+      }
       const disabled = run(home, agent, "status");
       expect(disabled.exitCode).toBe(0);
       expect(disabled.stdout.toString()).toBe(`${agent}: disabled\n`);
@@ -52,6 +59,45 @@ for (const agent of ["claude", "codex"] as const) {
     }
   });
 }
+
+test("codex には UserPromptSubmit を配線しない", () => {
+  const home = mkdtempSync(join(tmpdir(), "kura-hooks-codex-events-"));
+  const path = settingsPath(home, "codex");
+  try {
+    expect(run(home, "codex", "enable").exitCode).toBe(0);
+    const settings = JSON.parse(readFileSync(path, "utf-8"));
+    expect(settings.hooks.UserPromptSubmit).toBeUndefined();
+  } finally {
+    rmSync(home, { recursive: true, force: true });
+  }
+});
+
+test("Stop だけの部分配線は disabled と報告され、enable が全 event を張り直す", () => {
+  const home = mkdtempSync(join(tmpdir(), "kura-hooks-partial-"));
+  const path = settingsPath(home, "claude");
+  mkdirSync(dirname(path), { recursive: true });
+  writeFileSync(
+    path,
+    JSON.stringify({
+      hooks: {
+        Stop: [
+          { hooks: [{ type: "command", command: '"$HOME/.local/bin/kura" hook claude' }] },
+        ],
+      },
+    }),
+  );
+  try {
+    expect(run(home, "claude", "status").stdout.toString()).toBe("claude: disabled\n");
+    expect(run(home, "claude", "check").exitCode).toBe(1);
+    expect(run(home, "claude", "enable").exitCode).toBe(0);
+    for (const event of events.claude) {
+      expect(commands(path, event)).toEqual(['"$HOME/.local/bin/kura" hook claude']);
+    }
+    expect(run(home, "claude", "status").stdout.toString()).toBe("claude: enabled\n");
+  } finally {
+    rmSync(home, { recursive: true, force: true });
+  }
+});
 
 test("enable は旧 Claude hook を新 path へ置き換え、無関係な hook を残す", () => {
   const home = mkdtempSync(join(tmpdir(), "kura-hooks-legacy-"));
