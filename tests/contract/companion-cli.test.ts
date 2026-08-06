@@ -1,9 +1,10 @@
 import { expect, test } from "bun:test";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 const cli = join(import.meta.dir, "..", "..", "src", "cli.ts");
+const fixture = join(import.meta.dir, "..", "fixtures", "claude.jsonl");
 
 function run(args: string[], stateHome: string) {
   return Bun.spawnSync([process.execPath, cli, "companion", ...args], {
@@ -31,6 +32,51 @@ test("history.db が無ければ有効化の案内を出して終了する", () 
     expect(result.exitCode).toBe(1);
     expect(result.stderr.toString()).toContain("just history enable claude");
   } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+// blocker がこの test process 内に居るため、companion は spawnSync ではなく非同期に
+// 起動する — 同期待ちだと blocker が probe に応答できず deadlock する。
+test("port が使用中なら案内して終了する", async () => {
+  const root = mkdtempSync(join(tmpdir(), "kura-companion-port-"));
+  const blocker = Bun.serve({ port: 0, fetch: () => new Response("busy") });
+  try {
+    // history.db を fixture の Stop payload で用意する (無いと port 到達前に終了する)
+    const input = join(root, "hook-input.json");
+    writeFileSync(
+      input,
+      JSON.stringify({
+        session_id: "claude-fixture",
+        cwd: "/tmp/kura-fixture",
+        transcript_path: fixture,
+        hook_event_name: "Stop",
+      }),
+    );
+    Bun.spawnSync([process.execPath, cli, "hook", "claude"], {
+      stdin: Bun.file(input),
+      env: { ...process.env, XDG_STATE_HOME: root },
+    });
+
+    const child = Bun.spawn(
+      [process.execPath, cli, "companion", `--port=${blocker.port}`],
+      {
+        env: { ...process.env, XDG_STATE_HOME: root },
+        stdout: "ignore",
+        stderr: "pipe",
+      },
+    );
+    const exitCode = await Promise.race([
+      child.exited,
+      new Promise<null>((resolve) => setTimeout(() => resolve(null), 4000)),
+    ]);
+    if (exitCode === null) child.kill();
+    expect(exitCode).toBe(1);
+    expect(await new Response(child.stderr).text()).toContain(
+      `port ${blocker.port} is in use`,
+    );
+  } finally {
+    blocker.stop(true);
     rmSync(root, { recursive: true, force: true });
   }
 });

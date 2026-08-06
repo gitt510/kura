@@ -95,15 +95,25 @@ export async function generateCard(job: GenerateInput): Promise<GenerateResult> 
       env: { ...process.env, KURA_NO_HISTORY: "1" },
       stdin: "ignore",
       stdout: "pipe",
-      stderr: "ignore",
+      stderr: "pipe",
     },
   );
-  const raw = await new Response(child.stdout).text();
+  const [raw, errorText] = await Promise.all([
+    new Response(child.stdout).text(),
+    new Response(child.stderr).text(),
+  ]);
   const exitCode = await child.exited;
 
   const parsed = parseClaudeJson(raw);
   const card = exitCode === 0 && !parsed.isError ? parseCardJson(parsed.result) : null;
-  if (!card) return { english: null, notes: null, model: parsed.model ?? model, status: "error" };
+  if (!card) {
+    // card は "generation failed" のまま、原因は起動 terminal 側で診断できるようにする。
+    const reason = errorText.trim().split("\n").pop() ?? "";
+    process.stderr.write(
+      `companion generate failed (exit ${exitCode})${reason ? `: ${reason}` : ""}\n`,
+    );
+    return { english: null, notes: null, model: parsed.model ?? model, status: "error" };
+  }
   // ja は英訳のみが契約 — model が notes を返してきても落とす。
   const notes = job.lang === "ja" ? [] : card.notes;
   return { english: card.english, notes, model: parsed.model ?? model, status: "ok" };

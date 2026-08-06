@@ -51,6 +51,18 @@ export async function runCompanion(args: string[]): Promise<number> {
     return 1;
   }
 
+  // macOS の Bun.serve は同一 port への二重 bind が EADDRINUSE にならず成功するため、
+  // bind の失敗ではなく「先客が HTTP で応答するか」で検出する。
+  try {
+    await fetch(`http://127.0.0.1:${port}/`, { signal: AbortSignal.timeout(300) });
+    process.stderr.write(
+      `port ${port} is in use — companion already running? (--port=N to change)\n`,
+    );
+    return 1;
+  } catch {
+    /* 接続拒否 = 空いている */
+  }
+
   const history = new Database(HISTORY_DB, { readonly: true });
   const companion = openCompanionDb();
   const server = startServer(port, () =>
