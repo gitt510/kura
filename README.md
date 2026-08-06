@@ -85,6 +85,7 @@ $EDITOR "${XDG_CONFIG_HOME:-$HOME/.config}/kura/env"
 | Consumer | Environment variable |
 | --- | --- |
 | Scheduled generation agent | `KURA_GENERATOR` (`claude`, the default, or `codex`) |
+| Companion card model | `KURA_COMPANION_MODEL` (default `haiku`) |
 | Claude model for scheduled generation | `KURA_CLAUDE_MODEL` |
 | Claude effort for scheduled generation | `KURA_CLAUDE_EFFORT` |
 | Codex model for scheduled generation | `KURA_CODEX_MODEL` |
@@ -124,11 +125,30 @@ kura decisions <repo>
   matches `<repo>` by path suffix, one entry per title with the newest
   content, newest first
 
+```bash
+kura companion [--port=N] [--session=<prefix>]
+```
+
+- Watches history.db for user prompts submitted after startup and serves
+  English feedback cards at `http://127.0.0.1:4989` (opens the browser on
+  macOS; live updates over SSE)
+- One prompt = one card: Japanese input → the natural English it could have
+  been; English input → more natural English, unchanged when already natural
+- Cards are stored in `companion.db` before delivery; a restart replays the
+  latest 50 from storage
+- Requires an enabled history source; Claude prompts arrive at submit time,
+  Codex prompts at turn end
+- Card generation runs headless Claude with `KURA_NO_HISTORY=1`, so companion
+  runs are not recorded as history
+- `companion` has no schedule and no Discord publish; it works only while the
+  process is running
+
 | Feature | Stored output | Schedule |
 | --- | --- | --- |
 | `timeline` | Activity timeline | Hourly at `:00` |
 | `english` | English learning card | Hourly at `:05` |
 | `decisions` | Code decisions per repo | Hourly at `:10` |
+| `companion` | Live English feedback cards | None — ad-hoc `kura companion` |
 
 ```bash
 just schedule enable timeline

@@ -84,7 +84,7 @@ export function resolveCodexOptions(env: Environment = process.env): CodexOption
   return { model, effort: rawEffort as CodexEffort | null };
 }
 
-function agentExecutable(agent: Generator): string {
+export function agentExecutable(agent: Generator): string {
   const discovered = Bun.which(agent);
   if (discovered) return discovered;
 
