@@ -3,10 +3,20 @@
 //
 // transcript (JSONL) を読んで kura の history.db に保存する。
 // schema / 型 / DB アクセスは同居の ./db.ts が所有する。読み出しは query.ts。
-// Triggered from the Stop hook. Reads the JSON payload from stdin, scans
-// the transcript referenced by transcript_path, and UPSERTs:
+// Triggered from the Stop and UserPromptSubmit hooks; dispatches on
+// payload.hook_event_name.
+//
+// UserPromptSubmit: the payload carries the raw prompt and its prompt_id, and
+// the transcript file is not written yet at this point. Stores a provisional
+// row (uuid = prompt_id) so a prompt whose turn never completes (interrupt,
+// crash, quit) is still recorded. If provisional insertion itself fails, the
+// prompt is recovered only by a later Stop scan of the same session — hooks
+// stay fail-open by design and never retry.
+//
+// Stop: reads the JSON payload from stdin, scans the transcript referenced by
+// transcript_path, and UPSERTs:
 //   - every user / assistant message in the provided transcript into the `messages` table
-//     (PK = uuid)
+//     (PK = uuid); user entries carrying promptId supersede their provisional row
 //   - every assistant tool_use block into the `tool_uses` table
 //     (PK = tool_use id, e.g. toolu_xxx)
 // Both inserts use INSERT OR IGNORE so re-runs are idempotent.
@@ -36,12 +46,20 @@ type ContentBlock =
 interface TranscriptEntry {
   type?: string;
   uuid?: string;
+  promptId?: string;
   sessionId?: string;
   timestamp?: string;
   message?: {
     content?: string | ContentBlock[];
     model?: string;
   };
+}
+
+// slash command / bash mode の入力は transcript 側で保存対象にならない形を取るため、
+// 仮 row 側だけが残す非対称を作らないよう submit 時点で落とす。
+function isCommandPrompt(prompt: string): boolean {
+  const head = prompt.trimStart();
+  return head.startsWith("/") || head.startsWith("!");
 }
 
 try {
@@ -51,7 +69,14 @@ try {
   if (process.env.KURA_NO_HISTORY === "1") process.exit(0);
 
   const payload = await Bun.stdin.text();
-  let input: { session_id?: string; cwd?: string; transcript_path?: string };
+  let input: {
+    session_id?: string;
+    cwd?: string;
+    transcript_path?: string;
+    hook_event_name?: string;
+    prompt?: string;
+    prompt_id?: string;
+  };
   try {
     input = JSON.parse(payload);
   } catch {
@@ -61,6 +86,32 @@ try {
   const sessionId = input.session_id ?? "";
   const cwd = input.cwd ?? "";
   const transcriptPath = input.transcript_path ?? "";
+
+  if (input.hook_event_name === "UserPromptSubmit") {
+    const prompt = input.prompt ?? "";
+    const promptId = input.prompt_id ?? "";
+    if (!sessionId || !promptId || !prompt.trim() || isCommandPrompt(prompt)) {
+      process.exit(0);
+    }
+    const db = openHistory();
+    try {
+      insertMessages(db, [
+        {
+          uuid: promptId,
+          prompt_id: promptId,
+          session_id: sessionId,
+          cwd: nullable(cwd),
+          role: "user",
+          text: prompt,
+          model: null,
+          timestamp: new Date().toISOString(),
+        },
+      ]);
+    } finally {
+      db.close();
+    }
+    process.exit(0);
+  }
 
   if (!sessionId || !transcriptPath || !existsSync(transcriptPath)) {
     process.exit(0);
@@ -103,6 +154,7 @@ try {
     if (text && uuid) {
       messageRows.push({
         uuid,
+        prompt_id: entry.type === "user" ? nullable(entry.promptId) : null,
         session_id: sid,
         cwd: nullable(cwd),
         role: entry.type,

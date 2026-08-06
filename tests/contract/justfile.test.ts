@@ -225,7 +225,7 @@ test("status は setup と features を表形式で表示する", () => {
     expect(text).toMatch(/cli\s+│ READY\s+│/);
     expect(text).toMatch(/env\s+│ PRESENT\s+│ ~\/\.config\/kura\/env/);
     expect(text).toMatch(/history\.db\s+│ PRESENT\s+│/);
-    expect(text).toMatch(/history\/claude\s+│ ENABLED\s+│ Stop hook/);
+    expect(text).toMatch(/history\/claude\s+│ ENABLED\s+│ Stop \+ UserPromptSubmit hooks/);
     expect(text).toMatch(/history\/codex\s+│ DISABLED\s+│ Stop hook/);
     expect(text).toContain("Features  codex · gpt-test · high  (config)");
     expect(text).toMatch(/timeline\s+│ PRESENT\s+│ ENABLED\s+│ ENABLED/);

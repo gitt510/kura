@@ -11,8 +11,12 @@ quietly and *take them out* only when you need them.)
 
 - Memory layers like Mem0, Letta, or the MCP memory servers auto-inject
   extracted facts into the next session; kura never injects anything
-- Storage is verbatim: a Stop hook stores the conversation as-is — no
+- Storage is verbatim: a Stop hook stores the completed turn as-is — no
   extraction, no summarization, no LLM call at store time
+- For Claude, a UserPromptSubmit hook additionally records each prompt the
+  moment it is submitted, so a prompt whose turn never completes (interrupt,
+  crash, quit) is still kept; the Stop hook replaces that provisional record
+  with the verbatim transcript entry
 - Recall is deliberate: stored history enters a session only when
   `search-history` (or `kura search` / `kura show`) is invoked explicitly
 - Recall reads the history database without modifying it
@@ -49,6 +53,11 @@ just doctor
 ```
 
 - History storage is enabled per agent
+- `just history enable claude` wires both the Stop and UserPromptSubmit
+  hooks; re-run it after upgrading from a Stop-only version
+- Hooks are fail-open: a failed write is never retried and never blocks the
+  session, so a prompt is lost only when its provisional write fails and its
+  turn also never completes
 - For Codex, run `/hooks` once after `just history enable codex`
 
 ## Skill installation
