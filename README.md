@@ -154,8 +154,12 @@ just usage --days=7
   covers all recorded calls
 - Every LLM call kura makes records a row in `usage.db`, including failed
   calls — the tokens are spent either way
-- Cost is reported by the Claude CLI; Codex calls have no cost in their public
-  output and show `-`
+- Cost comes from the agent's own output: the Claude CLI reports it, Codex's
+  public events carry token counts only, so Codex rows show `-`
+- With `KURA_GENERATOR=codex`, every scheduled feature shows `-`; `companion`
+  always runs Claude and always reports cost
+- Claude's figure is what the API would charge for those tokens; under a
+  subscription plan it is not an additional charge
 - Recording is fail-open: a storage failure prints one line and never fails
   the generation it was measuring
 

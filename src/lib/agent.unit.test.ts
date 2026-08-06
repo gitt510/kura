@@ -199,7 +199,13 @@ test("Codex の JSONL から完了と最終 message を読む", () => {
     }),
     JSON.stringify({
       type: "turn.completed",
-      usage: { input_tokens: 120, cached_input_tokens: 45, output_tokens: 67 },
+      usage: {
+        input_tokens: 120,
+        cached_input_tokens: 45,
+        cache_write_input_tokens: 30,
+        output_tokens: 67,
+        reasoning_output_tokens: 0,
+      },
     }),
   ].join("\n");
 
@@ -210,7 +216,7 @@ test("Codex の JSONL から完了と最終 message を読む", () => {
     result: "generated",
     usage: {
       inputTokens: 120,
-      cacheCreationTokens: 0,
+      cacheCreationTokens: 30,
       cacheReadTokens: 45,
       outputTokens: 67,
       costUsd: null,

@@ -150,6 +150,7 @@ export function parseCodexJsonl(raw: string): ParsedAgentOutput {
       usage?: {
         input_tokens?: number;
         cached_input_tokens?: number;
+        cache_write_input_tokens?: number;
         output_tokens?: number;
       };
     };
@@ -162,9 +163,10 @@ export function parseCodexJsonl(raw: string): ParsedAgentOutput {
     if (event.type === "turn.completed") {
       complete = true;
       if (event.usage) {
+        // Codex の event は cost を持たない (token 数のみ)。
         usage = {
           inputTokens: event.usage.input_tokens ?? 0,
-          cacheCreationTokens: 0, // Codex の公開 event は cache 生成を区別しない
+          cacheCreationTokens: event.usage.cache_write_input_tokens ?? 0,
           cacheReadTokens: event.usage.cached_input_tokens ?? 0,
           outputTokens: event.usage.output_tokens ?? 0,
           costUsd: null,
