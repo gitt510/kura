@@ -5,7 +5,16 @@ test("prompt は lang / 入力 / 直前の assistant 文脈を含む", () => {
   const prompt = buildPrompt({ input: "これを直して", lang: "ja", context: "I fixed auth.ts" });
   expect(prompt).toContain('<input lang="ja">これを直して</input>');
   expect(prompt).toContain("<context>I fixed auth.ts</context>");
-  expect(prompt).toContain('{"english": "...", "notes": ["...", "..."]}');
+});
+
+test("ja の契約は英訳のみ、en の契約は文法 bullet を要求する", () => {
+  const ja = buildPrompt({ input: "これを直して", lang: "ja", context: null });
+  expect(ja).toContain('{"english": "..."}');
+  expect(ja).not.toContain("notes");
+
+  const en = buildPrompt({ input: "pls fix", lang: "en", context: null });
+  expect(en).toContain('{"english": "...", "notes": ["...", "..."]}');
+  expect(en).toContain("strictly about grammar");
 });
 
 test("文脈なしでは空の context tag になり、長い文脈は切られる", () => {

@@ -15,8 +15,9 @@ const SCHEMA_SQL = `${import.meta.dir}/schema.sql`;
 // 1 card = user が agent に打った 1 prompt への英語 feedback。
 //   lang    : 入力の判定結果 ("ja" | "en")
 //   english : ja → 自然な英訳 / en → より自然な英文 (十分なら原文のまま)
-//   note    : 短い日本語 bullet の JSON 配列文字列 (SQLite に配列型が無いため english
-//             feature の memo と同じ持ち方)。旧 row は plain string — page 側で両方受ける
+//   note    : en 入力への文法 feedback bullet (日本語) の JSON 配列文字列 (SQLite に
+//             配列型が無いため english feature の memo と同じ持ち方)。ja 入力は null。
+//             旧 row は plain string — page 側で両方受ける
 //   status  : "ok" | "error" (生成失敗。english / note は null)
 export interface CardRow {
   key: string;

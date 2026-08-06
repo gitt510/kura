@@ -29,16 +29,33 @@ export function resolveCompanionModel(
 
 const CONTEXT_CLIP = 1200;
 
+// ja と en で契約を分ける。ja は英訳だけ (note は要約にしかならず読む価値が無い)。
+// en は文法 feedback が主役 — 何をなぜ直したかを規則名つきの bullet で返させる。
 export function buildPrompt(job: GenerateInput): string {
   const context = (job.context ?? "").slice(0, CONTEXT_CLIP);
-  return [
+  const head = [
     "You are an English coach for a Japanese developer.",
     "The input below is a prompt the user typed to their coding agent mid-conversation.",
-    'If the input is Japanese: translate it into the natural, casual English the user could have typed instead.',
-    "If the input is English: rewrite it as more natural English; if it is already natural, return it unchanged.",
-    "Do not use any tools. Reply with JSON only, no code fences:",
-    '{"english": "...", "notes": ["...", "..."]}',
-    'notes: 1-3 short Japanese bullets — for Japanese input, the phrases worth remembering; for English input, each change and why, or ["OK 👍"] if unchanged.',
+  ];
+  const body =
+    job.lang === "ja"
+      ? [
+          "Translate the input into the natural, casual English the user could have typed instead.",
+          "Do not use any tools. Reply with JSON only, no code fences:",
+          '{"english": "..."}',
+        ]
+      : [
+          "Rewrite the input as more natural English; if it is already natural, return it unchanged.",
+          "Do not use any tools. Reply with JSON only, no code fences:",
+          '{"english": "...", "notes": ["...", "..."]}',
+          "notes: 1-3 short Japanese bullets, strictly about grammar.",
+          'Each bullet quotes the original fragment, gives the fix, and names the rule in Japanese — e.g. "What determine → What determines（三単現の -s）".',
+          "Cover grammar only (verb agreement, tense, articles, prepositions, word order) — not tone or word choice.",
+          'If the input needed no change, reply notes: ["OK 👍"].',
+        ];
+  return [
+    ...head,
+    ...body,
     "",
     `<context>${context}</context>`,
     `<input lang="${job.lang}">${job.input}</input>`,
@@ -87,5 +104,7 @@ export async function generateCard(job: GenerateInput): Promise<GenerateResult> 
   const parsed = parseClaudeJson(raw);
   const card = exitCode === 0 && !parsed.isError ? parseCardJson(parsed.result) : null;
   if (!card) return { english: null, notes: null, model: parsed.model ?? model, status: "error" };
-  return { english: card.english, notes: card.notes, model: parsed.model ?? model, status: "ok" };
+  // ja は英訳のみが契約 — model が notes を返してきても落とす。
+  const notes = job.lang === "ja" ? [] : card.notes;
+  return { english: card.english, notes, model: parsed.model ?? model, status: "ok" };
 }
