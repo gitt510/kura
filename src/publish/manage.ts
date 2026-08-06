@@ -15,7 +15,7 @@ const actions = ["enable", "disable", "status", "check"] as const;
 
 function usageError(): never {
   process.stderr.write(
-    "usage: bun manage.ts <timeline|english|briefing> <enable|disable|status|check>\n" +
+    "usage: bun manage.ts <timeline|english> <enable|disable|status|check>\n" +
       "       bun manage.ts all <disable|status>\n",
   );
   process.exit(2);

@@ -197,12 +197,6 @@ function renderStatus(): number {
       publishState("english"),
     ],
     [
-      "briefing",
-      databaseState(stateDir, "briefing"),
-      managerState(jobs, "briefing"),
-      publishState("briefing"),
-    ],
-    [
       "decisions",
       databaseState(stateDir, "decisions"),
       managerState(jobs, "decisions"),

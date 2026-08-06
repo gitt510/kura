@@ -12,13 +12,12 @@ import { dirname } from "node:path";
 
 type Environment = Readonly<Record<string, string | undefined>>;
 
-export const PUBLISH_FEATURES = ["timeline", "english", "briefing"] as const;
+export const PUBLISH_FEATURES = ["timeline", "english"] as const;
 export type PublishFeature = (typeof PUBLISH_FEATURES)[number];
 
 export const PUBLISH_WEBHOOKS: Record<PublishFeature, string> = {
   timeline: "KURA_DISCORD_WEBHOOK_TIMELINE",
   english: "KURA_DISCORD_WEBHOOK_ENGLISH",
-  briefing: "KURA_DISCORD_WEBHOOK_BRIEFING",
 };
 
 type PublishPolicy = { enabled: PublishFeature[] };

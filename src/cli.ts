@@ -12,8 +12,8 @@ const usage = `usage: kura setup
        kura init-env
        kura bake-env
        kura history <enable|disable> <claude|codex|all>
-       kura schedule <enable|disable> <timeline|english|briefing|decisions|all>
-       kura publish <enable|disable> <timeline|english|briefing|all>
+       kura schedule <enable|disable> <timeline|english|decisions|all>
+       kura publish <enable|disable> <timeline|english|all>
        kura teardown
        kura status
        kura doctor

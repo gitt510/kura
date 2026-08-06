@@ -160,7 +160,7 @@ export function skillPrompt(agent: Generator, skill: string, args: string[]): st
 //
 // 無人 Claude に許す tool は固定 allowlist のみで、permission bypass の経路は持たない。
 // 生成 skill の契約は「workDir の素材 JSON を Read し、workDir へ generated JSON を Write する」
-// だけ。KURA_ROOT の Read は skill 本体（briefing の assets/output-format.md 等）用。
+// だけ。KURA_ROOT の Read は skill 本体（SKILL.md 等）用。
 // rule の `//` prefix は filesystem 絶対 path を意味する。headless `-p` では
 // allowlist 外の tool は自動 deny されるため、prompt 待ちにはならない。
 export function buildClaudeCommand(
