@@ -4,7 +4,7 @@
 // この呼び出し自身の session は history にも companion にも入らない。
 // 失敗した呼び出しは error card として残し、retry しない。
 
-import { agentExecutable, parseClaudeJson } from "../../lib/agent.ts";
+import { runClaudePrompt } from "../../lib/agent.ts";
 import { resolveEnv } from "../../lib/config.ts";
 
 export interface GenerateInput {
@@ -82,39 +82,23 @@ export function parseCardJson(result: string): { english: string; notes: string[
 
 export async function generateCard(job: GenerateInput): Promise<GenerateResult> {
   const model = resolveCompanionModel();
-  let executable: string;
+  let run;
   try {
-    executable = agentExecutable("claude");
+    run = await runClaudePrompt("companion", buildPrompt(job), model);
   } catch {
-    return { english: null, note: null, model, status: "error" };
+    return { english: null, notes: null, model, status: "error" }; // claude CLI が無い
   }
 
-  const child = Bun.spawn(
-    [executable, "-p", buildPrompt(job), "--output-format", "json", "--model", model],
-    {
-      env: { ...process.env, KURA_NO_HISTORY: "1" },
-      stdin: "ignore",
-      stdout: "pipe",
-      stderr: "pipe",
-    },
-  );
-  const [raw, errorText] = await Promise.all([
-    new Response(child.stdout).text(),
-    new Response(child.stderr).text(),
-  ]);
-  const exitCode = await child.exited;
-
-  const parsed = parseClaudeJson(raw);
-  const card = exitCode === 0 && !parsed.isError ? parseCardJson(parsed.result) : null;
+  const card = run.ok ? parseCardJson(run.result) : null;
   if (!card) {
     // card は "generation failed" のまま、原因は起動 terminal 側で診断できるようにする。
-    const reason = errorText.trim().split("\n").pop() ?? "";
+    const reason = run.stderr.trim().split("\n").pop() ?? "";
     process.stderr.write(
-      `companion generate failed (exit ${exitCode})${reason ? `: ${reason}` : ""}\n`,
+      `companion generate failed (exit ${run.exitCode})${reason ? `: ${reason}` : ""}\n`,
     );
-    return { english: null, notes: null, model: parsed.model ?? model, status: "error" };
+    return { english: null, notes: null, model: run.model, status: "error" };
   }
   // ja は英訳のみが契約 — model が notes を返してきても落とす。
   const notes = job.lang === "ja" ? [] : card.notes;
-  return { english: card.english, notes, model: parsed.model ?? model, status: "ok" };
+  return { english: card.english, notes, model: run.model, status: "ok" };
 }

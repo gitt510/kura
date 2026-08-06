@@ -8,6 +8,7 @@ import { runFeatures } from "./cli/features.ts";
 import { runHistory } from "./cli/history.ts";
 import { runLifecycle } from "./cli/lifecycle.ts";
 import { runOperations } from "./cli/status.ts";
+import { runUsage } from "./cli/usage.ts";
 
 const usage = `usage: kura setup
        kura init-env
@@ -19,6 +20,7 @@ const usage = `usage: kura setup
        kura status
        kura doctor
        kura view-db
+       kura usage [--days=N]
        kura search [--limit=N] <keyword...>
        kura show <session-id-or-prefix>
        kura decisions [--limit=N] <repo>
@@ -65,6 +67,9 @@ async function main(): Promise<number> {
     }
     if (command === "status" || command === "doctor" || command === "view-db") {
       return await runOperations(command, args);
+    }
+    if (command === "usage") {
+      return await runUsage(args);
     }
     return usageError();
   } catch (error) {

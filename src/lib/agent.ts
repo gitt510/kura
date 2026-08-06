@@ -1,6 +1,7 @@
 import { existsSync } from "node:fs";
 import { resolveEnv } from "./config.ts";
 import { KURA_ROOT } from "./storage.ts";
+import { recordUsage, type AgentUsage } from "./usage.ts";
 
 export type Generator = "claude" | "codex";
 // Claude CLI の --effort が受ける 5 段。Codex の 8 段とは語彙が別物なので enum を共有しない。
@@ -26,6 +27,16 @@ export interface CodexOptions {
   effort: CodexEffort | null;
 }
 
+// tool を持たない 1 回きりの prompt 実行の結果。runSkillJson の skill 契約
+// (素材 JSON の交換) が過剰な呼び手向け。
+export interface ClaudePromptRun {
+  ok: boolean;
+  exitCode: number;
+  result: string; // agent の最終テキスト
+  model: string | null; // 実行結果を優先し、無ければ要求した model
+  stderr: string; // 失敗理由の提示は呼び手に委ねる
+}
+
 export interface AgentJsonRun {
   ok: boolean; // process が正常終了し、agent の出力が完了を示した
   exitCode: number;
@@ -41,6 +52,7 @@ interface ParsedAgentOutput {
   isError: boolean;
   model: string | null;
   result: string;
+  usage: AgentUsage | null; // 出力に usage が無い / parse 失敗なら null
 }
 
 export function resolveGenerator(env: Environment = process.env): Generator {
@@ -84,7 +96,9 @@ export function resolveCodexOptions(env: Environment = process.env): CodexOption
   return { model, effort: rawEffort as CodexEffort | null };
 }
 
-export function agentExecutable(agent: Generator): string {
+// agent の binary を知るのはこの module だけ — spawn 経路を 1 本に保ち、
+// usage 記録が呼び手の善意に依存しないようにする (tests/architecture.test.ts が強制)。
+function agentExecutable(agent: Generator): string {
   const discovered = Bun.which(agent);
   if (discovered) return discovered;
 
@@ -105,6 +119,13 @@ export function parseClaudeJson(raw: string): ParsedAgentOutput {
       is_error?: boolean;
       result?: string;
       modelUsage?: Record<string, unknown>;
+      usage?: {
+        input_tokens?: number;
+        cache_creation_input_tokens?: number;
+        cache_read_input_tokens?: number;
+        output_tokens?: number;
+      };
+      total_cost_usd?: number;
     };
     const models = json.modelUsage ? Object.keys(json.modelUsage) : [];
     return {
@@ -112,9 +133,18 @@ export function parseClaudeJson(raw: string): ParsedAgentOutput {
       isError: json.is_error === true,
       model: models[0] ?? null,
       result: typeof json.result === "string" ? json.result : "",
+      usage: json.usage
+        ? {
+            inputTokens: json.usage.input_tokens ?? 0,
+            cacheCreationTokens: json.usage.cache_creation_input_tokens ?? 0,
+            cacheReadTokens: json.usage.cache_read_input_tokens ?? 0,
+            outputTokens: json.usage.output_tokens ?? 0,
+            costUsd: typeof json.total_cost_usd === "number" ? json.total_cost_usd : null,
+          }
+        : null,
     };
   } catch {
-    return { complete: false, isError: true, model: null, result: "" };
+    return { complete: false, isError: true, model: null, result: "", usage: null };
   }
 }
 
@@ -122,20 +152,39 @@ export function parseCodexJsonl(raw: string): ParsedAgentOutput {
   let complete = false;
   let isError = false;
   let result = "";
+  let usage: AgentUsage | null = null;
 
   for (const line of raw.split("\n")) {
     if (!line.trim()) continue;
     let event: {
       type?: string;
       item?: { type?: string; text?: string };
+      usage?: {
+        input_tokens?: number;
+        cached_input_tokens?: number;
+        cache_write_input_tokens?: number;
+        output_tokens?: number;
+      };
     };
     try {
       event = JSON.parse(line);
     } catch {
-      return { complete: false, isError: true, model: null, result: "" };
+      return { complete: false, isError: true, model: null, result: "", usage: null };
     }
 
-    if (event.type === "turn.completed") complete = true;
+    if (event.type === "turn.completed") {
+      complete = true;
+      if (event.usage) {
+        // Codex の event は cost を持たない (token 数のみ)。
+        usage = {
+          inputTokens: event.usage.input_tokens ?? 0,
+          cacheCreationTokens: event.usage.cache_write_input_tokens ?? 0,
+          cacheReadTokens: event.usage.cached_input_tokens ?? 0,
+          outputTokens: event.usage.output_tokens ?? 0,
+          costUsd: null,
+        };
+      }
+    }
     if (event.type === "turn.failed" || event.type === "error") isError = true;
     if (
       event.type === "item.completed" &&
@@ -147,7 +196,7 @@ export function parseCodexJsonl(raw: string): ParsedAgentOutput {
   }
 
   // Codex の公開 JSONL event は実行 model を含まない。内部 session file には依存しない。
-  return { complete, isError, model: null, result };
+  return { complete, isError, model: null, result, usage };
 }
 
 export function skillPrompt(agent: Generator, skill: string, args: string[]): string {
@@ -204,6 +253,38 @@ export function buildCodexCommand(
   ];
 }
 
+// tool を一切許さない text→JSON 変換を Claude で 1 回実行する (非同期)。
+// skill 契約も generator 選択も持たない代わりに、model は呼び手が明示する。
+// live server から呼ばれるため spawnSync ではなく spawn を使う。
+export async function runClaudePrompt(
+  feature: string,
+  prompt: string,
+  model: string,
+): Promise<ClaudePromptRun> {
+  const child = Bun.spawn(
+    [agentExecutable("claude"), "-p", prompt, "--output-format", "json", "--model", model],
+    { env: agentEnv(), stdin: "ignore", stdout: "pipe", stderr: "pipe" },
+  );
+  const [raw, stderr] = await Promise.all([
+    new Response(child.stdout).text(),
+    new Response(child.stderr).text(),
+  ]);
+  const exitCode = await child.exited;
+
+  const parsed = parseClaudeJson(raw);
+  const ok = exitCode === 0 && parsed.complete && !parsed.isError;
+  if (parsed.usage) {
+    recordUsage({
+      feature,
+      agent: "claude",
+      model: parsed.model ?? model,
+      ok,
+      usage: parsed.usage,
+    });
+  }
+  return { ok, exitCode, result: parsed.result, model: parsed.model ?? model, stderr };
+}
+
 // repo-owned skill を選択した agent で非対話実行し、出力形式の差を共通結果へ畳む。
 // Claude は単一 JSON、Codex は JSONL。途中で接続断・不正出力になった場合は ok=false に倒し、
 // 呼び手が stamp を書かず次の trigger で再試行できるようにする。
@@ -227,6 +308,16 @@ export function runSkillJson(skill: string, workDir: string, args: string[] = []
   const raw = child.stdout?.toString() ?? "";
   const parsed = agent === "claude" ? parseClaudeJson(raw) : parseCodexJsonl(raw);
   const exitCode = child.exitCode ?? 1;
+
+  if (parsed.usage) {
+    recordUsage({
+      feature: skill,
+      agent,
+      model: parsed.model ?? claudeOptions?.model ?? codexOptions?.model ?? null,
+      ok: exitCode === 0 && parsed.complete && !parsed.isError,
+      usage: parsed.usage,
+    });
+  }
 
   return {
     ok: exitCode === 0 && parsed.complete && !parsed.isError,
