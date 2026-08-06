@@ -17,6 +17,36 @@ function cost(value: number | null): string {
   return value === null ? "-" : value.toFixed(4);
 }
 
+const HEADERS = [
+  "Feature",
+  "Model",
+  "Calls",
+  "Input",
+  "Output",
+  "Cache rd",
+  "Cache wr",
+  "Cost ($)",
+] as const;
+const MODEL_COLUMN = 1;
+const MODEL_MIN_WIDTH = 12;
+
+export function truncate(value: string, max: number): string {
+  return value.length > max ? `${value.slice(0, max - 1)}…` : value;
+}
+
+// 端末に収まらないときは Model 列だけを詰める。他の列は数値そのもので、
+// 削ると読み取れる事実が変わってしまうため。溢れた分だけ縮めるので、
+// 幅が足りている端末では model 名は full のまま出る。
+export function fitToWidth(body: Row[], plainWidth: number, columns: number | undefined): Row[] {
+  const overflow = columns ? plainWidth - columns : 0;
+  if (overflow <= 0) return body;
+  const longest = Math.max(...body.map((row) => row[MODEL_COLUMN]!.length));
+  const max = Math.max(MODEL_MIN_WIDTH, longest - overflow);
+  return body.map((row) =>
+    row.map((cell, index) => (index === MODEL_COLUMN ? truncate(cell, max) : cell)),
+  );
+}
+
 export async function runUsage(args: string[]): Promise<number> {
   let days: number | null = null;
   for (const arg of args) {
@@ -85,11 +115,14 @@ export async function runUsage(args: string[]): Promise<number> {
     cost(total.cost),
   ]);
 
+  // 幅の判定は色を付けない描画で行う — ANSI escape は表示幅に寄与しないため。
+  const plain = renderTable(HEADERS, body);
+  const plainWidth = Math.max(...plain.split("\n").map((line) => [...line].length));
+  const fitted = fitToWidth(body, plainWidth, process.stdout.columns);
+
   process.stdout.write(
-    `${renderTable(
-      ["Feature", "Model", "Calls", "Input", "Output", "Cache read", "Cache write", "Cost ($)"],
-      body,
-      (cell, _raw, rowIndex) => (rowIndex === body.length - 1 ? paint.bold(cell) : cell),
+    `${renderTable(HEADERS, fitted, (cell, _raw, rowIndex) =>
+      rowIndex === fitted.length - 1 ? paint.bold(cell) : cell,
     )}\n`,
   );
   return 0;
