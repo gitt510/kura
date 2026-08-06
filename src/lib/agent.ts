@@ -27,6 +27,16 @@ export interface CodexOptions {
   effort: CodexEffort | null;
 }
 
+// tool を持たない 1 回きりの prompt 実行の結果。runSkillJson の skill 契約
+// (素材 JSON の交換) が過剰な呼び手向け。
+export interface ClaudePromptRun {
+  ok: boolean;
+  exitCode: number;
+  result: string; // agent の最終テキスト
+  model: string | null; // 実行結果を優先し、無ければ要求した model
+  stderr: string; // 失敗理由の提示は呼び手に委ねる
+}
+
 export interface AgentJsonRun {
   ok: boolean; // process が正常終了し、agent の出力が完了を示した
   exitCode: number;
@@ -86,7 +96,9 @@ export function resolveCodexOptions(env: Environment = process.env): CodexOption
   return { model, effort: rawEffort as CodexEffort | null };
 }
 
-export function agentExecutable(agent: Generator): string {
+// agent の binary を知るのはこの module だけ — spawn 経路を 1 本に保ち、
+// usage 記録が呼び手の善意に依存しないようにする (tests/architecture.test.ts が強制)。
+function agentExecutable(agent: Generator): string {
   const discovered = Bun.which(agent);
   if (discovered) return discovered;
 
@@ -239,6 +251,38 @@ export function buildCodexCommand(
     "--json",
     prompt,
   ];
+}
+
+// tool を一切許さない text→JSON 変換を Claude で 1 回実行する (非同期)。
+// skill 契約も generator 選択も持たない代わりに、model は呼び手が明示する。
+// live server から呼ばれるため spawnSync ではなく spawn を使う。
+export async function runClaudePrompt(
+  feature: string,
+  prompt: string,
+  model: string,
+): Promise<ClaudePromptRun> {
+  const child = Bun.spawn(
+    [agentExecutable("claude"), "-p", prompt, "--output-format", "json", "--model", model],
+    { env: agentEnv(), stdin: "ignore", stdout: "pipe", stderr: "pipe" },
+  );
+  const [raw, stderr] = await Promise.all([
+    new Response(child.stdout).text(),
+    new Response(child.stderr).text(),
+  ]);
+  const exitCode = await child.exited;
+
+  const parsed = parseClaudeJson(raw);
+  const ok = exitCode === 0 && parsed.complete && !parsed.isError;
+  if (parsed.usage) {
+    recordUsage({
+      feature,
+      agent: "claude",
+      model: parsed.model ?? model,
+      ok,
+      usage: parsed.usage,
+    });
+  }
+  return { ok, exitCode, result: parsed.result, model: parsed.model ?? model, stderr };
 }
 
 // repo-owned skill を選択した agent で非対話実行し、出力形式の差を共通結果へ畳む。

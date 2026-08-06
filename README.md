@@ -152,7 +152,8 @@ just usage --days=7
   output, cache-read and cache-write tokens, and cost in USD
 - `--days=N` limits the table to calls from the last N days; the default
   covers all recorded calls
-- One row per call in `usage.db`, written by whichever code spawned the agent
+- One row per call in `usage.db`, written by the agent runner
+  (`src/lib/agent.ts`) — features never touch usage themselves
 - Calls the agent reported as errors are recorded too — the tokens are spent
   either way — but a call that produced no parseable output (crash, dropped
   connection) reports no token counts and records nothing
