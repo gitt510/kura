@@ -66,8 +66,14 @@ just doctor
   public skill is `search-history`
 - `src/features/*/skills/` are used at project scope by the scheduled jobs;
   do not install them at user scope
+- Install through exactly one channel; installing through both defines the
+  same skill twice (`kura:search-history` and `search-history`)
 
 ```bash
+# Claude Code plugin (namespaced as /kura:search-history)
+/plugin marketplace add gitt510/kura
+/plugin install kura@kura
+
 # GitHub CLI (public preview)
 gh skill install gitt510/kura search-history --scope user --agent claude-code
 
