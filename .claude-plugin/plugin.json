@@ -1,0 +1,5 @@
+{
+  "name": "kura",
+  "description": "Search locally stored Claude Code and Codex conversations recorded by kura.",
+  "author": { "name": "gitt510" }
+}

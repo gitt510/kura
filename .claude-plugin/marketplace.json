@@ -1,0 +1,12 @@
+{
+  "name": "kura",
+  "description": "Skills for kura, a personal knowledge pipeline over Claude Code / Codex conversations.",
+  "owner": { "name": "gitt510" },
+  "plugins": [
+    {
+      "name": "kura",
+      "source": "./",
+      "description": "Search locally stored Claude Code and Codex conversations recorded by kura."
+    }
+  ]
+}
