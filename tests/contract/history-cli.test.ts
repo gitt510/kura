@@ -108,6 +108,25 @@ test("show は未知の session を runtime error にする", () => {
   expect(result.stderr.toString()).toBe("session not found: missing\n");
 });
 
+test("subcommand の --help / -h は詳細な help を stdout に出す", () => {
+  for (const args of [
+    ["search", "--help"],
+    ["search", "-h"],
+    ["show", "-h"],
+    ["usage", "--help"],
+  ]) {
+    const result = run(...args);
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout.toString()).toContain(`usage: kura ${args[0]}`);
+  }
+  expect(run("search", "--help").stdout.toString()).toContain("OR-matched");
+});
+
+test("未知の subcommand への --help は usage error のまま", () => {
+  const result = run("nonsense", "--help");
+  expect(result.exitCode).toBe(2);
+});
+
 test("search / show の不正な引数は usage error にする", () => {
   for (const args of [
     ["search"],
