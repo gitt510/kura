@@ -2,6 +2,7 @@
 // cli.ts — kura command の薄い dispatcher。処理本体は src/cli/ と domain module が持つ。
 
 import { runCompanion } from "./cli/companion.ts";
+import { helpText } from "./cli/help.ts";
 import { runConfig } from "./cli/config.ts";
 import { runDecisions } from "./cli/decisions.ts";
 import { runFeatures } from "./cli/features.ts";
@@ -35,9 +36,16 @@ function usageError(): number {
 
 async function main(): Promise<number> {
   const [command, ...args] = process.argv.slice(2);
-  if (command === "--help" && args.length === 0) {
+  if ((command === "--help" || command === "-h") && args.length === 0) {
     process.stdout.write(usage);
     return 0;
+  }
+  if (command !== undefined && (args.includes("--help") || args.includes("-h"))) {
+    const text = helpText(command);
+    if (text) {
+      process.stdout.write(text);
+      return 0;
+    }
   }
 
   try {
