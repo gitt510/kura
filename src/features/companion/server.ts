@@ -22,6 +22,8 @@ export function startServer(port: number, replay: () => unknown[]): ServerHandle
   const server = Bun.serve({
     port,
     hostname: "127.0.0.1",
+    idleTimeout: 0, // 既定 (~10s) だと SSE が切られて再接続を繰り返す
+
     fetch(request: Request): Response {
       const path = new URL(request.url).pathname;
       if (path === "/events") {
@@ -115,7 +117,6 @@ const PAGE = `<!doctype html>
     --color-primitive-red-50: light-dark(#fdeeee, #3d1414);
     --color-primitive-red-900: light-dark(#ce0000, #e06666);
     --color-primitive-red-1000: light-dark(#a90000, #ff9696);
-    --color-key-900: light-dark(#0017c1, #7096f8);
   }
   * { box-sizing: border-box; }
   /* DADS typography: 本文 16px / line-height 1.75 / letter-spacing 0.02em */
@@ -142,28 +143,6 @@ const PAGE = `<!doctype html>
     font-size: calc(20 / 16 * 1rem);
     line-height: 1.5;
     letter-spacing: 0.02em;
-  }
-  .dads-heading[data-chip] {
-    position: relative;
-    padding-left: calc(1em / 3 + 0.5em);
-  }
-  .dads-heading[data-chip]::before {
-    position: absolute;
-    top: 0.2em;
-    bottom: 0.1em;
-    left: 0;
-    width: calc(1em / 3);
-    background-color: var(--color-key-900);
-    content: "";
-  }
-  @supports (top: 1lh) {
-    .dads-heading[data-chip]::before {
-      top: calc(0.5lh - 0.45em);
-      bottom: calc(0.5lh - 0.55em);
-    }
-  }
-  @media (forced-colors: active) {
-    .dads-heading[data-chip]::before { background-color: CanvasText; }
   }
   .dads-heading__heading { margin: 0; font: inherit; }
 
@@ -216,9 +195,7 @@ const PAGE = `<!doctype html>
     background: var(--color-neutral-white);
     border-bottom: 1px solid var(--color-neutral-solid-gray-100);
     padding: 12px 24px;
-    display: flex; justify-content: space-between; align-items: center;
   }
-  header .state { font-size: calc(14 / 16 * 1rem); color: var(--color-neutral-solid-gray-536); }
   main { max-width: 44rem; margin: 0 auto; padding: 24px 24px 64px; }
   .empty { color: var(--color-neutral-solid-gray-536); padding: 8px 0; }
   article {
@@ -247,15 +224,13 @@ const PAGE = `<!doctype html>
   }
 </style>
 <header>
-  <div class="dads-heading" data-size="20" data-chip><h1 class="dads-heading__heading">蔵 companion</h1></div>
-  <span class="state" id="state">connecting…</span>
+  <div class="dads-heading" data-size="20"><h1 class="dads-heading__heading">kura companion</h1></div>
 </header>
 <main><div class="empty" id="empty">prompt を打つとここに card が届きます</div><div id="log"></div></main>
 <footer>デジタル庁デザインシステム (DADS) の tokens / components (MIT) を使用。ダークテーマ配色は DADS 準拠の独自拡張。</footer>
 <script>
   const log = document.getElementById("log");
   const empty = document.getElementById("empty");
-  const state = document.getElementById("state");
 
   function el(tag, className, text) {
     const node = document.createElement(tag);
@@ -316,9 +291,8 @@ const PAGE = `<!doctype html>
     }
   }
 
+  // EventSource は切れても自動で再接続し、replay は key 単位で冪等に上書きされる。
   const source = new EventSource("/events");
-  source.onopen = () => { state.textContent = "live"; };
-  source.onerror = () => { state.textContent = "reconnecting…"; };
   source.onmessage = (message) => render(JSON.parse(message.data));
 </script>
 `;
