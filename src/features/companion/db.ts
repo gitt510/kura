@@ -4,7 +4,7 @@
 // writer / reader は run.ts のみ。読み出し元の会話 raw は別 DB (history/history.db)。
 
 import { Database } from "bun:sqlite";
-import { legacyDbPath, openStateDatabase, stateDbPath } from "../../lib/storage.ts";
+import { legacyDbPath, openStateDatabase, stateDbPath, tableColumns } from "../../lib/storage.ts";
 
 export const COMPANION_DB = stateDbPath(
   "companion.db",
@@ -14,18 +14,18 @@ const SCHEMA_SQL = `${import.meta.dir}/schema.sql`;
 
 // 1 card = user が agent に打った 1 prompt への英語 feedback。
 //   lang    : 入力の判定結果 ("ja" | "en")
-//   english : ja → 自然な英訳 / en → より自然な英文 (十分なら原文のまま)
+//   output  : ja → 自然な英訳 / en → より自然な英文 (十分なら原文のまま)
 //   note    : en 入力への文法 feedback bullet (日本語) の JSON 配列文字列 (SQLite に
 //             配列型が無いため english feature の memo と同じ持ち方)。ja 入力は null。
 //             旧 row は plain string — page 側で両方受ける
-//   status  : "ok" | "error" (生成失敗。english / note は null)
+//   status  : "ok" | "error" (生成失敗。output / note は null)
 export interface CardRow {
   key: string;
   session_id: string;
   cwd: string | null;
   lang: "ja" | "en";
   input: string;
-  english: string | null;
+  output: string | null;
   note: string | null;
   model: string | null;
   status: "ok" | "error";
@@ -34,23 +34,28 @@ export interface CardRow {
 
 // DB を開き schema を最新化して返す (冪等)。存在しなければ作成する。
 export function openCompanionDb(): Database {
-  return openStateDatabase(COMPANION_DB, SCHEMA_SQL);
+  const db = openStateDatabase(COMPANION_DB, SCHEMA_SQL);
+  // 旧 schema の english 列は output へ rename する (CREATE IF NOT EXISTS では変わらない)。
+  if (tableColumns(db, "cards").has("english")) {
+    db.exec("ALTER TABLE cards RENAME COLUMN english TO output");
+  }
+  return db;
 }
 
 // key 先着を正とする — 仮 row で card 化済みの prompt が verbatim 化で再度届いても無視。
 export function insertCard(db: Database, row: CardRow): void {
   db.query(
     `INSERT OR IGNORE INTO cards
-       (key, session_id, cwd, lang, input, english, note, model, status, created_at)
+       (key, session_id, cwd, lang, input, output, note, model, status, created_at)
      VALUES
-       ($key, $session_id, $cwd, $lang, $input, $english, $note, $model, $status, $created_at)`,
+       ($key, $session_id, $cwd, $lang, $input, $output, $note, $model, $status, $created_at)`,
   ).run({
     $key: row.key,
     $session_id: row.session_id,
     $cwd: row.cwd,
     $lang: row.lang,
     $input: row.input,
-    $english: row.english,
+    $output: row.output,
     $note: row.note,
     $model: row.model,
     $status: row.status,

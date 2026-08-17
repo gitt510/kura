@@ -1,7 +1,8 @@
 // run.ts — companion の adhoc entrypoint。
 //
 // history.db (messages) を rowid cursor で polling し、起動以降に届いた user prompt を
-// 英語 feedback card に変換して companion.db へ保存し、local page へ SSE 配信する。
+// 英語 feedback card に変換して companion.db へ保存し、local page へ SSE 配信する
+// (--tui なら server を立てず terminal へ描画する)。
 // schedule / publish は持たない — 起動している間だけ動く。
 //
 // 重複排除は card の key (COALESCE(prompt_id, uuid))。仮 row → verbatim row の
@@ -15,8 +16,9 @@ import { hasCard, insertCard, openCompanionDb, recentCards, type CardRow } from 
 import { clipInput, detectLang, shouldSkip } from "./detect.ts";
 import { generateCard, resolveCompanionModel } from "./generate.ts";
 import { startServer } from "./server.ts";
+import { startTui } from "./tui.ts";
 
-const USAGE = "usage: kura companion [--port=N] [--session=<prefix>]\n";
+const USAGE = "usage: kura companion [--tui] [--port=N] [--session=<prefix>]\n";
 const POLL_MS = 1000;
 const REPLAY_LIMIT = 50;
 
@@ -33,11 +35,13 @@ interface PromptRow {
 export async function runCompanion(args: string[]): Promise<number> {
   let port = 4989;
   let sessionPrefix: string | null = null;
+  let tui = false;
   for (const arg of args) {
     const portMatch = arg.match(/^--port=(\d+)$/);
     const sessionMatch = arg.match(/^--session=(.+)$/);
     if (portMatch) port = Number.parseInt(portMatch[1]!, 10);
     else if (sessionMatch) sessionPrefix = sessionMatch[1]!;
+    else if (arg === "--tui") tui = true;
     else {
       process.stderr.write(USAGE);
       return 2;
@@ -53,23 +57,45 @@ export async function runCompanion(args: string[]): Promise<number> {
 
   // macOS の Bun.serve は同一 port への二重 bind が EADDRINUSE にならず成功するため、
   // bind の失敗ではなく「先客が HTTP で応答するか」で検出する。
-  try {
-    await fetch(`http://127.0.0.1:${port}/`, { signal: AbortSignal.timeout(300) });
-    process.stderr.write(
-      `port ${port} is in use — companion already running? (--port=N to change)\n`,
-    );
-    return 1;
-  } catch {
-    /* 接続拒否 = 空いている */
+  if (!tui) {
+    try {
+      await fetch(`http://127.0.0.1:${port}/`, { signal: AbortSignal.timeout(300) });
+      process.stderr.write(
+        `port ${port} is in use — companion already running? (--port=N to change)\n`,
+      );
+      return 1;
+    } catch {
+      /* 接続拒否 = 空いている */
+    }
   }
 
   const history = new Database(HISTORY_DB, { readonly: true });
   const companion = openCompanionDb();
-  const server = startServer(port, () =>
-    recentCards(companion, REPLAY_LIMIT)
-      .reverse()
-      .map((card) => ({ type: "card", card })),
-  );
+
+  process.stdout.write(`kura companion\n`);
+  process.stdout.write(`  watching : ${HISTORY_DB}${sessionPrefix ? ` (session ${sessionPrefix}*)` : ""}\n`);
+  process.stdout.write(`  model    : ${resolveCompanionModel()}\n`);
+
+  let sink: { broadcast(event: unknown): void };
+  if (tui) {
+    process.stdout.write("\n");
+    sink = startTui();
+  } else {
+    const server = startServer(port, () =>
+      recentCards(companion, REPLAY_LIMIT)
+        .reverse()
+        .map((card) => ({ type: "card", card })),
+    );
+    process.stdout.write(`  page     : ${server.url}\n`);
+    if (process.platform === "darwin") {
+      try {
+        Bun.spawn(["open", server.url], { stdout: "ignore", stderr: "ignore" });
+      } catch {
+        /* page は手で開けばよい */
+      }
+    }
+    sink = server;
+  }
 
   const sessionFilter = sessionPrefix ? " AND session_id LIKE $session || '%'" : "";
   const pollQuery = history.query(
@@ -96,7 +122,7 @@ export async function runCompanion(args: string[]): Promise<number> {
     const { text: input } = clipInput(row.text);
     const lang = detectLang(input);
     const createdAt = new Date().toISOString();
-    server.broadcast({
+    sink.broadcast({
       type: "pending",
       key,
       input,
@@ -115,14 +141,14 @@ export async function runCompanion(args: string[]): Promise<number> {
       cwd: row.cwd,
       lang,
       input,
-      english: generated.english,
+      output: generated.output,
       note: generated.notes?.length ? JSON.stringify(generated.notes) : null,
       model: generated.model,
       status: generated.status,
       created_at: createdAt,
     };
     insertCard(companion, card);
-    server.broadcast({ type: "card", card });
+    sink.broadcast({ type: "card", card });
   }
 
   let busy = false;
@@ -143,18 +169,6 @@ export async function runCompanion(args: string[]): Promise<number> {
       busy = false;
     }
   }, POLL_MS);
-
-  process.stdout.write(`kura companion\n`);
-  process.stdout.write(`  watching : ${HISTORY_DB}${sessionPrefix ? ` (session ${sessionPrefix}*)` : ""}\n`);
-  process.stdout.write(`  model    : ${resolveCompanionModel()}\n`);
-  process.stdout.write(`  page     : ${server.url}\n`);
-  if (process.platform === "darwin") {
-    try {
-      Bun.spawn(["open", server.url], { stdout: "ignore", stderr: "ignore" });
-    } catch {
-      /* page は手で開けばよい */
-    }
-  }
 
   await new Promise(() => {}); // SIGINT で終了するまで常駐
   return 0;
