@@ -80,62 +80,180 @@ export function startServer(port: number, replay: () => unknown[]): ServerHandle
   };
 }
 
+
+// tui.ts の log 形式 ([input] / [output] / [note]) を DADS (デジタル庁デザインシステム)
+// 準拠で描く page。skills/candidate/dads-artifact.md の 3 層モデルに従う:
+//   tokens     — @digital-go-jp/design-tokens (unpkg) から必要変数のみ inline
+//   components — dads-chip-label / dads-heading を公式 CSS のクラス名ごと移植
+//   逸脱       — CSP のため外部 asset なし (Google Fonts は fallback stack に置換)。
+//                ダークテーマは公式に無いので、構造は無改変のまま primitive 変数の
+//                値だけ light-dark() で差し替えた「DADS 準拠の拡張」(footer に明示)。
+// 新しい entry を一番上に積む (replay は oldest-first で届くので prepend で最新が最上部)。
 const PAGE = `<!doctype html>
 <html lang="ja">
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
 <title>kura companion</title>
 <style>
+  /* === DADS design-tokens (抜粋、dist/tokens.css より)。dark 値は独自拡張 === */
   :root {
-    --bg: #faf9f6; --card: #ffffff; --ink: #1c1b1a; --sub: #6b675f;
-    --line: #e5e2da; --accent: #8a6d3b; --en: #1f5c46; --err: #a04040;
-  }
-  @media (prefers-color-scheme: dark) {
-    :root {
-      --bg: #16181d; --card: #1e2128; --ink: #e8e6e1; --sub: #98938a;
-      --line: #2c303a; --accent: #c9a86a; --en: #7fc8a9; --err: #d98a8a;
-    }
+    color-scheme: light dark;
+    --font-family-sans: "Noto Sans JP", "Hiragino Sans", -apple-system, BlinkMacSystemFont, sans-serif;
+    --color-neutral-white: light-dark(#ffffff, #1a1a1a);
+    --color-neutral-solid-gray-50: light-dark(#f2f2f2, #262626);
+    --color-neutral-solid-gray-100: light-dark(#e6e6e6, #333333);
+    --color-neutral-solid-gray-536: light-dark(#767676, #9e9e9e);
+    --color-neutral-solid-gray-700: light-dark(#4d4d4d, #a6a6a6);
+    --color-neutral-solid-gray-800: light-dark(#333333, #cccccc);
+    --color-primitive-blue-50: light-dark(#e8f1fe, #16264d);
+    --color-primitive-blue-700: light-dark(#264af4, #7096f8);
+    --color-primitive-blue-800: light-dark(#0031d8, #a8bffb);
+    --color-primitive-green-50: light-dark(#e6f5ec, #123523);
+    --color-primitive-green-800: light-dark(#197a4b, #2cac6e);
+    --color-primitive-green-900: light-dark(#115a36, #71c598);
+    --color-primitive-red-50: light-dark(#fdeeee, #3d1414);
+    --color-primitive-red-900: light-dark(#ce0000, #e06666);
+    --color-primitive-red-1000: light-dark(#a90000, #ff9696);
+    --color-key-900: light-dark(#0017c1, #7096f8);
   }
   * { box-sizing: border-box; }
+  /* DADS typography: 本文 16px / line-height 1.75 / letter-spacing 0.02em */
   body {
-    margin: 0; background: var(--bg); color: var(--ink);
-    font: 15px/1.65 -apple-system, "Hiragino Sans", "Noto Sans JP", sans-serif;
+    margin: 0;
+    background: var(--color-neutral-white);
+    color: var(--color-neutral-solid-gray-800);
+    font-family: var(--font-family-sans);
+    font-size: 1rem;
+    line-height: 1.75;
+    letter-spacing: 0.02em;
   }
+
+  /* === dads-heading (公式 heading.css より、使用分のみ) === */
+  .dads-heading {
+    color: var(--color-neutral-solid-gray-800);
+    font-family: var(--font-family-sans);
+  }
+  .dads-heading[data-size="20"] {
+    --_shoulder-size: calc(16 / 16 * 1rem);
+    --_shoulder-line-height: 1.7;
+    --_shoulder-letter-spacing: 0.02em;
+    font-weight: bold;
+    font-size: calc(20 / 16 * 1rem);
+    line-height: 1.5;
+    letter-spacing: 0.02em;
+  }
+  .dads-heading[data-chip] {
+    position: relative;
+    padding-left: calc(1em / 3 + 0.5em);
+  }
+  .dads-heading[data-chip]::before {
+    position: absolute;
+    top: 0.2em;
+    bottom: 0.1em;
+    left: 0;
+    width: calc(1em / 3);
+    background-color: var(--color-key-900);
+    content: "";
+  }
+  @supports (top: 1lh) {
+    .dads-heading[data-chip]::before {
+      top: calc(0.5lh - 0.45em);
+      bottom: calc(0.5lh - 0.55em);
+    }
+  }
+  @media (forced-colors: active) {
+    .dads-heading[data-chip]::before { background-color: CanvasText; }
+  }
+  .dads-heading__heading { margin: 0; font: inherit; }
+
+  /* === dads-chip-label (公式 chip-label.css より、使用分のみ) === */
+  .dads-chip-label {
+    display: inline-grid;
+    grid-template-columns: auto auto;
+    align-items: baseline;
+    align-content: center;
+    box-sizing: border-box;
+    min-height: calc(32 / 16 * 1rem);
+    border-radius: calc(8 / 16 * 1rem);
+    padding: calc(3 / 16 * 1rem) calc(7 / 16 * 1rem);
+    font-weight: normal;
+    font-size: calc(16 / 16 * 1rem);
+    line-height: 1;
+    font-family: var(--font-family-sans);
+    letter-spacing: 0.02em;
+    overflow-wrap: anywhere;
+  }
+  .dads-chip-label[data-style="filled-1"] {
+    border: 1px solid var(--_non-text, #000);
+    background-color: var(--_bg, #eee);
+    color: var(--_text-dark, #000);
+  }
+  .dads-chip-label[data-color="gray"] {
+    --_non-text: var(--color-neutral-solid-gray-700);
+    --_bg: var(--color-neutral-solid-gray-50);
+    --_text-dark: var(--color-neutral-solid-gray-800);
+  }
+  .dads-chip-label[data-color="blue"] {
+    --_non-text: var(--color-primitive-blue-700);
+    --_bg: var(--color-primitive-blue-50);
+    --_text-dark: var(--color-primitive-blue-800);
+  }
+  .dads-chip-label[data-color="green"] {
+    --_non-text: var(--color-primitive-green-800);
+    --_bg: var(--color-primitive-green-50);
+    --_text-dark: var(--color-primitive-green-900);
+  }
+  .dads-chip-label[data-color="red"] {
+    --_non-text: var(--color-primitive-red-900);
+    --_bg: var(--color-primitive-red-50);
+    --_text-dark: var(--color-primitive-red-1000);
+  }
+
+  /* === page 固有 (log の構造) === */
   header {
-    padding: 14px 20px; border-bottom: 1px solid var(--line);
-    display: flex; align-items: baseline; gap: 10px;
+    position: sticky; top: 0;
+    background: var(--color-neutral-white);
+    border-bottom: 1px solid var(--color-neutral-solid-gray-100);
+    padding: 12px 24px;
+    display: flex; justify-content: space-between; align-items: center;
   }
-  header h1 { font-size: 15px; margin: 0; letter-spacing: .04em; }
-  header .state { font-size: 12px; color: var(--sub); }
-  main { max-width: 720px; margin: 0 auto; padding: 20px 16px 60px; }
-  .empty { color: var(--sub); text-align: center; padding: 48px 0; font-size: 13px; }
+  header .state { font-size: calc(14 / 16 * 1rem); color: var(--color-neutral-solid-gray-536); }
+  main { max-width: 44rem; margin: 0 auto; padding: 24px 24px 64px; }
+  .empty { color: var(--color-neutral-solid-gray-536); padding: 8px 0; }
   article {
-    background: var(--card); border: 1px solid var(--line); border-radius: 10px;
-    padding: 14px 16px; margin-bottom: 14px;
+    padding: 16px 0;
+    border-bottom: 1px solid var(--color-neutral-solid-gray-100);
   }
-  .meta { display: flex; gap: 8px; align-items: center; font-size: 11px; color: var(--sub); margin-bottom: 8px; }
-  .badge {
-    border: 1px solid var(--line); border-radius: 4px; padding: 0 6px;
-    font-family: ui-monospace, monospace; font-size: 10px;
+  .row {
+    display: grid;
+    grid-template-columns: calc(88 / 16 * 1rem) 1fr;
+    gap: 0 12px;
+    align-items: start;
   }
-  .badge.ja { color: var(--accent); border-color: var(--accent); }
-  .input { white-space: pre-wrap; overflow-wrap: anywhere; color: var(--sub); font-size: 13px; }
-  .english {
-    white-space: pre-wrap; overflow-wrap: anywhere; margin-top: 8px;
-    color: var(--en); font-size: 15px; font-weight: 550;
+  .row + .row { margin-top: 8px; }
+  .row .dads-chip-label { justify-self: start; }
+  .row .text { padding-top: calc(2 / 16 * 1rem); overflow-wrap: anywhere; }
+  .input .text { color: var(--color-neutral-solid-gray-536); }
+  .output .text { font-weight: 500; }
+  .error .text { color: var(--color-primitive-red-900); }
+  .processing .text { color: var(--color-neutral-solid-gray-536); }
+  .processing .text::after { content: " …"; animation: blink 1.1s steps(1) infinite; }
+  @keyframes blink { 50% { opacity: 0; } }
+  @media (prefers-reduced-motion: reduce) { .processing .text::after { animation: none; } }
+  footer {
+    max-width: 44rem; margin: 0 auto; padding: 0 24px 32px;
+    font-size: calc(12 / 16 * 1rem); color: var(--color-neutral-solid-gray-536);
   }
-  .notes { margin: 8px 0 0; padding-left: 18px; font-size: 12.5px; color: var(--sub); }
-  .notes li { margin-top: 2px; }
-  .notes li::marker { color: var(--accent); }
-  .pending .english { color: var(--sub); font-weight: 400; }
-  .pending .english::after { content: " …"; animation: blink 1.2s infinite; }
-  .error .english { color: var(--err); }
-  @keyframes blink { 50% { opacity: .2; } }
 </style>
-<header><h1>蔵 companion</h1><span class="state" id="state">connecting…</span></header>
-<main><div class="empty" id="empty">prompt を打つとここに card が届きます</div><div id="cards"></div></main>
+<header>
+  <div class="dads-heading" data-size="20" data-chip><h1 class="dads-heading__heading">蔵 companion</h1></div>
+  <span class="state" id="state">connecting…</span>
+</header>
+<main><div class="empty" id="empty">prompt を打つとここに card が届きます</div><div id="log"></div></main>
+<footer>デジタル庁デザインシステム (DADS) の tokens / components (MIT) を使用。ダークテーマ配色は DADS 準拠の独自拡張。</footer>
 <script>
-  const cards = document.getElementById("cards");
+  const log = document.getElementById("log");
   const empty = document.getElementById("empty");
   const state = document.getElementById("state");
 
@@ -146,46 +264,54 @@ const PAGE = `<!doctype html>
     return node;
   }
 
+  // tui.ts の oneLine と同じ — 1 field = 1 段落、改行と連続空白は 1 空白に潰す。
+  function oneLine(text) {
+    return String(text == null ? "" : text).replace(/\\s+/g, " ").trim();
+  }
+
+  const CHIP_COLOR = { input: "gray", output: "green", note: "blue", error: "red", processing: "gray" };
+
+  function line(label, kind, text) {
+    const row = el("div", "row " + kind);
+    const chip = el("span", "dads-chip-label", label);
+    chip.setAttribute("data-style", "filled-1");
+    chip.setAttribute("data-color", CHIP_COLOR[kind]);
+    row.append(chip);
+    row.append(el("div", "text", text));
+    return row;
+  }
+
   function render(data) {
-    empty.style.display = "none";
+    empty.hidden = true;
     const key = data.key || (data.card && data.card.key);
-    let article = document.getElementById("k-" + key);
-    if (!article) {
-      article = el("article");
-      article.id = "k-" + key;
-      cards.prepend(article);
+    let entry = document.getElementById("k-" + key);
+    if (!entry) {
+      entry = el("article");
+      entry.id = "k-" + key;
+      log.prepend(entry);
     }
-    article.textContent = "";
-    const isPending = data.type === "pending";
-    const card = isPending ? data : data.card;
-    article.className = isPending ? "pending" : card.status === "error" ? "error" : "";
+    entry.textContent = "";
 
-    const meta = el("div", "meta");
-    meta.append(el("span", "badge" + (card.lang === "ja" ? " ja" : ""), card.lang));
-    if (card.cwd) meta.append(el("span", "badge", card.cwd.split("/").pop()));
-    meta.append(el("span", null, new Date(card.created_at).toLocaleTimeString()));
-    article.append(meta);
-
-    article.append(el("div", "input", card.input));
-    if (isPending) {
-      article.append(el("div", "english", "generating"));
-    } else if (card.status === "error") {
-      article.append(el("div", "english", "generation failed"));
+    if (data.type === "pending") {
+      entry.append(line("input", "input", oneLine(data.input)));
+      entry.append(line("output", "processing", "processing"));
     } else {
-      article.append(el("div", "english", card.english));
-      let notes = [];
-      if (card.note) {
-        try {
-          const parsed = JSON.parse(card.note);
-          notes = Array.isArray(parsed) ? parsed : [card.note];
-        } catch {
-          notes = [card.note]; // JSON 配列化以前の plain string row
+      const card = data.card;
+      entry.append(line("input", "input", oneLine(card.input)));
+      if (card.status === "error") {
+        entry.append(line("output", "error", "generation failed"));
+      } else {
+        entry.append(line("output", "output", oneLine(card.output)));
+        let notes = [];
+        if (card.note) {
+          try {
+            const parsed = JSON.parse(card.note);
+            notes = Array.isArray(parsed) ? parsed : [card.note];
+          } catch {
+            notes = [card.note]; // JSON 配列化以前の plain string row
+          }
         }
-      }
-      if (notes.length) {
-        const list = el("ul", "notes");
-        for (const item of notes) list.append(el("li", null, item));
-        article.append(list);
+        for (const item of notes) entry.append(line("note", "note", oneLine(item)));
       }
     }
   }

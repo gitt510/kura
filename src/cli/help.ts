@@ -100,13 +100,14 @@ options:
   --limit=N   max decisions to return (default 50, range 1-200)
   -h, --help  show this help
 `,
-  companion: `usage: kura companion [--port=N] [--session=<prefix>]
+  companion: `usage: kura companion [--tui] [--port=N] [--session=<prefix>]
 
 Serve live English feedback cards for user prompts on a local page,
 polling history.db while running. No schedule, no publishing.
 
 options:
-  --port=N            listen port (default 4989)
+  --tui               log cards to the terminal instead of serving a page
+  --port=N            listen port (default 4989; page mode only)
   --session=<prefix>  follow one session instead of all new prompts
   -h, --help          show this help
 `,

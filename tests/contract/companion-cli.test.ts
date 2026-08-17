@@ -18,7 +18,7 @@ test("companion は不明な引数を usage で拒否する", () => {
     const result = run(["--bogus"], root);
     expect(result.exitCode).toBe(2);
     expect(result.stderr.toString()).toContain(
-      "usage: kura companion [--port=N] [--session=<prefix>]",
+      "usage: kura companion [--tui] [--port=N] [--session=<prefix>]",
     );
   } finally {
     rmSync(root, { recursive: true, force: true });
@@ -84,5 +84,7 @@ test("port が使用中なら案内して終了する", async () => {
 test("kura --help が companion を載せる", () => {
   const result = Bun.spawnSync([process.execPath, cli, "--help"], { env: process.env });
   expect(result.exitCode).toBe(0);
-  expect(result.stdout.toString()).toContain("kura companion [--port=N] [--session=<prefix>]");
+  expect(result.stdout.toString()).toContain(
+    "kura companion [--tui] [--port=N] [--session=<prefix>]",
+  );
 });

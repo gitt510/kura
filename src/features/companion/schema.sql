@@ -9,7 +9,7 @@ CREATE TABLE IF NOT EXISTS cards (
   cwd         TEXT,
   lang        TEXT,
   input       TEXT,
-  english     TEXT,
+  output      TEXT,
   note        TEXT,
   model       TEXT,
   status      TEXT,

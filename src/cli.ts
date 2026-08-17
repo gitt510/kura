@@ -25,7 +25,7 @@ const usage = `usage: kura setup
        kura search [--limit=N] <keyword...>
        kura show <session-id-or-prefix>
        kura decisions [--limit=N] <repo>
-       kura companion [--port=N] [--session=<prefix>]
+       kura companion [--tui] [--port=N] [--session=<prefix>]
        kura --help
 `;
 

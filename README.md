@@ -132,16 +132,19 @@ kura decisions <repo>
   content, newest first
 
 ```bash
-kura companion [--port=N] [--session=<prefix>]
+kura companion [--tui] [--port=N] [--session=<prefix>]
 ```
 
 - Watches history.db for user prompts submitted after startup and serves
   English feedback cards at `http://127.0.0.1:4989` (opens the browser on
   macOS; live updates over SSE)
+- `--tui` logs cards to the terminal instead of starting a server: `[input]`
+  and a `[output] processing …` placeholder when a prompt arrives, replaced
+  in place by the `[output]` / `[note]` lines once generated
 - One prompt = one card: Japanese input → the natural English it could have
   been; English input → more natural English, unchanged when already natural
-- Cards are stored in `companion.db` before delivery; a restart replays the
-  latest 50 from storage
+- Cards are stored in `companion.db` before delivery; a page restart replays
+  the latest 50 from storage (the TUI starts empty)
 - Requires an enabled history source; Claude prompts arrive at submit time,
   Codex prompts at turn end
 - Card generation runs headless Claude with `KURA_NO_HISTORY=1`, so companion

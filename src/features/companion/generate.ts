@@ -13,8 +13,10 @@ export interface GenerateInput {
   context: string | null; // 同 session の直前の assistant 出力 (無ければ null)
 }
 
+// output: 入力への英語 feedback 本文。LLM との JSON 契約上の key は "english" の
+// まま (そこでは実際に英語そのものを指す) — 境界のここで output に読み替える。
 export interface GenerateResult {
-  english: string | null;
+  output: string | null;
   notes: string[] | null;
   model: string | null;
   status: "ok" | "error";
@@ -86,7 +88,7 @@ export async function generateCard(job: GenerateInput): Promise<GenerateResult> 
   try {
     run = await runClaudePrompt("companion", buildPrompt(job), model);
   } catch {
-    return { english: null, notes: null, model, status: "error" }; // claude CLI が無い
+    return { output: null, notes: null, model, status: "error" }; // claude CLI が無い
   }
 
   const card = run.ok ? parseCardJson(run.result) : null;
@@ -96,9 +98,9 @@ export async function generateCard(job: GenerateInput): Promise<GenerateResult> 
     process.stderr.write(
       `companion generate failed (exit ${run.exitCode})${reason ? `: ${reason}` : ""}\n`,
     );
-    return { english: null, notes: null, model: run.model, status: "error" };
+    return { output: null, notes: null, model: run.model, status: "error" };
   }
   // ja は英訳のみが契約 — model が notes を返してきても落とす。
   const notes = job.lang === "ja" ? [] : card.notes;
-  return { english: card.english, notes, model: run.model, status: "ok" };
+  return { output: card.english, notes, model: run.model, status: "ok" };
 }
