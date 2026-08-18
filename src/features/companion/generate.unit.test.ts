@@ -14,7 +14,8 @@ test("ja の契約は英訳のみ、en の契約は文法 bullet を要求する
 
   const en = buildPrompt({ input: "pls fix", lang: "en", context: null });
   expect(en).toContain('{"english": "...", "notes": ["...", "..."]}');
-  expect(en).toContain("strictly about grammar");
+  expect(en).toContain("grammar mistakes in the original that affect meaning");
+  expect(en).toContain("Never note articles, spelling, punctuation, tone, or word choice.");
 });
 
 test("文脈なしでは空の context tag になり、長い文脈は切られる", () => {
