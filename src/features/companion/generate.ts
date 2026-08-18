@@ -32,7 +32,8 @@ export function resolveCompanionModel(
 const CONTEXT_CLIP = 1200;
 
 // ja と en で契約を分ける。ja は英訳だけ (note は要約にしかならず読む価値が無い)。
-// en は文法 feedback が主役 — 何をなぜ直したかを規則名つきの bullet で返させる。
+// en は文法 feedback が主役 — ただし note は意味が変わるミスに絞る。冠詞・綴りは
+// output との diff で見えるので note にしない (毎回発火して他の指摘を埋める)。
 export function buildPrompt(job: GenerateInput): string {
   const context = (job.context ?? "").slice(0, CONTEXT_CLIP);
   const head = [
@@ -43,17 +44,18 @@ export function buildPrompt(job: GenerateInput): string {
     job.lang === "ja"
       ? [
           "Translate the input into the natural, casual English the user could have typed instead.",
+          "Prefer idiomatic phrasing over a literal rendering — do not mirror the Japanese structure.",
           "Do not use any tools. Reply with JSON only, no code fences:",
           '{"english": "..."}',
         ]
       : [
-          "Rewrite the input as more natural English; if it is already natural, return it unchanged.",
+          "Rewrite the input as the natural English a native developer would type — do not mirror the original sentence structure. If it is already natural, return it unchanged.",
           "Do not use any tools. Reply with JSON only, no code fences:",
           '{"english": "...", "notes": ["...", "..."]}',
-          "notes: 1-3 short Japanese bullets, strictly about grammar.",
-          'Each bullet quotes the original fragment, gives the fix, and names the rule in Japanese — e.g. "What determine → What determines（三単現の -s）".',
-          "Cover grammar only (verb agreement, tense, articles, prepositions, word order) — not tone or word choice.",
-          'If the input needed no change, reply notes: ["OK 👍"].',
+          "notes: at most 2 short Japanese bullets about grammar mistakes in the original that affect meaning (verb agreement, tense, prepositions, word order).",
+          'Format each bullet exactly as 原文の断片 → 修正（規則名は日本語）, e.g. "What determine → What determines（三単現の -s）".',
+          "Never note articles, spelling, punctuation, tone, or word choice.",
+          'If the original has no such grammar mistakes, reply notes: ["文法は OK 👍"].',
         ];
   return [
     ...head,
