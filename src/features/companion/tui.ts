@@ -2,12 +2,15 @@
 // 同じ broadcast/stop 形を持ち、card を log として stdout へ逐次 append する。
 // 画面制御はしない — 履歴は terminal の scrollback がそのまま持つ。
 //
-// pending で [input] と仮の「[output] processing …」(改行なし) を書き、生成完了で
-// その行を \r + 行クリアで本物の [output] / [note] に差し替える。handle() は
-// poll loop 内で 1 件ずつ await されるため、この差し替えの間に別 prompt の行が
-// 割り込むことはない。
+// 1 card = [meta] → [input] → item 行 → separator。全行が [label] 始まりで本文の桁を
+// 揃える (label rail)。pending で [meta] / [input] と仮の「[status] processing …」
+// (改行なし) を書き、生成完了でその行を \r + 行クリアで本物の item 行に差し替え、
+// 末尾に separator を引いて card を閉じる。
+// handle() は poll loop 内で 1 件ずつ await されるため、この差し替えの間に別 prompt の
+// 行が割り込むことはない。
 
 import type { CardRow } from "./db.ts";
+import { type CardItem, type ItemKind, toCardItem } from "./generate.ts";
 
 const RESET = "\x1b[0m";
 const DIM = "\x1b[2m";
@@ -15,21 +18,37 @@ const BOLD = "\x1b[1m";
 const GREEN = "\x1b[32m";
 const RED = "\x1b[31m";
 const CYAN = "\x1b[36m";
+const YELLOW = "\x1b[33m";
 
 export interface TuiHandle {
   broadcast(event: unknown): void;
   stop(): void;
 }
 
-// note は JSON 配列文字列だが、配列化以前の plain string row も受ける (page と同じ)。
-function parseNotes(note: string | null): string[] {
-  if (!note) return [];
+// note 列を item に戻す。旧 row (string 配列 / plain string / 全文訳) は "note" 扱いの
+// 1 行にして捨てずに見せる。
+export type LogItem = CardItem | { kind: "note"; text: string };
+
+export function parseItems(card: Pick<CardRow, "note" | "output">): LogItem[] {
+  const items: LogItem[] = [];
+  if (card.output) items.push({ kind: "note", text: card.output });
+  if (!card.note) return items;
+  let parsed: unknown;
   try {
-    const parsed = JSON.parse(note);
-    return Array.isArray(parsed) ? parsed.map(String) : [note];
+    parsed = JSON.parse(card.note);
   } catch {
-    return [note];
+    return [...items, { kind: "note", text: card.note }];
   }
+  if (!Array.isArray(parsed)) return [...items, { kind: "note", text: card.note }];
+  for (const raw of parsed) {
+    if (typeof raw === "string") {
+      if (raw) items.push({ kind: "note", text: raw });
+      continue;
+    }
+    const item = toCardItem(raw);
+    if (item) items.push(item);
+  }
+  return items;
 }
 
 // 1 field = 1 行の log にする — 改行と連続空白は 1 空白に潰す。
@@ -37,7 +56,7 @@ function oneLine(text: string): string {
   return text.replace(/\s+/g, " ").trim();
 }
 
-// board の主役は output — 自分が打った input は先頭だけ見えれば十分なので切り詰める。
+// board の主役は item — 自分が打った input は先頭だけ見えれば十分なので切り詰める。
 // code point 単位 (全角も 1) の粗い上限で、表示幅までは追わない。
 const INPUT_CLIP = 80;
 function clipLine(text: string): string {
@@ -45,25 +64,46 @@ function clipLine(text: string): string {
   return chars.length > INPUT_CLIP ? `${chars.slice(0, INPUT_CLIP).join("")}…` : chars.join("");
 }
 
-// created_at (ISO) を local の HH:MM に。読めない値は stamp なし。
+// created_at (ISO) を local の yyyy-mm-dd hh:mm:ss に (log の慣習)。読めない値は空。
 function stamp(iso: unknown): string {
   const date = new Date(String(iso));
   if (Number.isNaN(date.getTime())) return "";
   const pad = (n: number) => String(n).padStart(2, "0");
-  return `${pad(date.getHours())}:${pad(date.getMinutes())}`;
+  const ymd = `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+  return `${ymd} ${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
 }
 
-// card 先頭の meta 行 — 時刻と project (cwd の basename)。[input] 行を内容専用に
-// 保つための行で、出せる要素が無ければ行ごと省く。
-function metaLine(createdAt: unknown, cwd: unknown): string {
+// 全行を [label] で始め、本文の開始桁を揃える。最長の [natural] / [status] に合わせる。
+const LABEL_WIDTH = 10;
+function label(name: string, color: string): string {
+  return `${color}${`[${name}]`.padEnd(LABEL_WIDTH)}${RESET}`;
+}
+
+const SEPARATOR = `${DIM}${"─".repeat(64)}${RESET}`;
+
+// card 先頭の meta 行 — 時刻 · project (cwd の basename) · branch。無い要素は省く。
+function metaLine(createdAt: unknown, cwd: unknown, branch: unknown): string {
   const dir = typeof cwd === "string" ? (cwd.split("/").filter(Boolean).pop() ?? "") : "";
-  const parts = [stamp(createdAt), dir].filter(Boolean);
-  return parts.length ? `${DIM}${parts.join(" · ")}${RESET}\n` : "";
+  const parts = [stamp(createdAt), dir, typeof branch === "string" ? branch : ""].filter(Boolean);
+  return `${label("meta", DIM)}${DIM}${parts.join(" · ")}${RESET}`;
 }
 
 // pending が出しておく仮の行。card 側の CLEAR が \r + 行クリアで上書きする。
-const PROCESSING = `${DIM}[output] processing …${RESET}`;
+const PROCESSING = `${label("status", YELLOW)}${DIM}processing …${RESET}`;
 const CLEAR = "\r\x1b[K";
+
+const KIND_COLOR: Record<ItemKind | "note", string> = {
+  romaji: GREEN,
+  grammar: RED,
+  natural: YELLOW,
+  note: CYAN,
+};
+
+// label に kind の色、from は dim、→ の右の to だけ bold — 修正後を縦に拾えるように。
+function itemLine(item: LogItem): string {
+  if (item.kind === "note") return `${label("note", CYAN)}${oneLine(item.text)}`;
+  return `${label(item.kind, KIND_COLOR[item.kind])}${DIM}${oneLine(item.from)}${RESET} → ${BOLD}${oneLine(item.to)}${RESET}`;
+}
 
 // broadcast event 1 件を log 出力に変換する。知らない event は null (書かない)。
 export function formatEvent(event: unknown): string | null {
@@ -73,21 +113,23 @@ export function formatEvent(event: unknown): string | null {
     input?: unknown;
     created_at?: unknown;
     cwd?: unknown;
+    branch?: unknown;
   };
   if (data?.type === "pending") {
-    const meta = metaLine(data.created_at, data.cwd);
-    return `${meta}${DIM}[input]${RESET} ${DIM}${clipLine(String(data.input))}${RESET}\n${PROCESSING}`;
+    const meta = metaLine(data.created_at, data.cwd, data.branch);
+    const input = `${label("input", DIM)}${DIM}${clipLine(String(data.input))}${RESET}`;
+    return `${meta}\n${input}\n${PROCESSING}`;
   }
   if (data?.type === "card" && data.card) {
     const card = data.card;
-    if (card.status === "error") return `${CLEAR}${RED}[output] generation failed${RESET}\n\n`;
-    const lines = [`${GREEN}[output]${RESET} ${GREEN}${BOLD}${oneLine(card.output ?? "")}${RESET}`];
-    // note は学習 feedback の本体 — dim の input と混ざらないよう label だけ色を付け、
-    // 本文は通常輝度で読ませる。
-    for (const note of parseNotes(card.note)) {
-      lines.push(`${CYAN}[note]${RESET} ${oneLine(note)}`);
-    }
-    return `${CLEAR}${lines.join("\n")}\n\n`;
+    const items = parseItems(card);
+    const lines =
+      card.status === "error"
+        ? [`${label("error", RED)}${RED}generation failed${RESET}`]
+        : items.length
+          ? items.map(itemLine)
+          : [`${label("done", GREEN)}${GREEN}nothing to flag${RESET}`]; // 指摘ゼロも 1 行 — 失敗と区別する
+    return `${CLEAR}${lines.join("\n")}\n${SEPARATOR}\n`;
   }
   return null;
 }

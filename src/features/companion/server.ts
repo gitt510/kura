@@ -83,7 +83,7 @@ export function startServer(port: number, replay: () => unknown[]): ServerHandle
 }
 
 
-// tui.ts の log 形式 ([input] / [output] / [note]) を DADS (デジタル庁デザインシステム)
+// tui.ts の log 形式 ([input] / [romaji] / [grammar] / [natural]) を DADS (デジタル庁デザインシステム)
 // 準拠で描く page。skills/candidate/dads-artifact.md の 3 層モデルに従う:
 //   tokens     — @digital-go-jp/design-tokens (unpkg) から必要変数のみ inline
 //   components — dads-chip-label / dads-heading を公式 CSS のクラス名ごと移植
@@ -117,6 +117,9 @@ const PAGE = `<!doctype html>
     --color-primitive-red-50: light-dark(#fdeeee, #3d1414);
     --color-primitive-red-900: light-dark(#ce0000, #e06666);
     --color-primitive-red-1000: light-dark(#a90000, #ff9696);
+    --color-primitive-yellow-50: light-dark(#fbf5e0, #3d3414);
+    --color-primitive-yellow-900: light-dark(#8a6c00, #d4b94a);
+    --color-primitive-yellow-1000: light-dark(#6e5700, #e3cc6b);
   }
   * { box-sizing: border-box; }
   /* DADS typography: 本文 16px / line-height 1.75 / letter-spacing 0.02em */
@@ -188,6 +191,11 @@ const PAGE = `<!doctype html>
     --_bg: var(--color-primitive-red-50);
     --_text-dark: var(--color-primitive-red-1000);
   }
+  .dads-chip-label[data-color="yellow"] {
+    --_non-text: var(--color-primitive-yellow-900);
+    --_bg: var(--color-primitive-yellow-50);
+    --_text-dark: var(--color-primitive-yellow-1000);
+  }
 
   /* === page 固有 (log の構造) === */
   header {
@@ -212,7 +220,7 @@ const PAGE = `<!doctype html>
   .row .dads-chip-label { justify-self: start; }
   .row .text { padding-top: calc(2 / 16 * 1rem); overflow-wrap: anywhere; }
   .input .text { color: var(--color-neutral-solid-gray-536); }
-  .output .text { font-weight: 500; }
+  .romaji .text, .grammar .text, .natural .text { font-weight: 500; }
   .error .text { color: var(--color-primitive-red-900); }
   .processing .text { color: var(--color-neutral-solid-gray-536); }
   .processing .text::after { content: " …"; animation: blink 1.1s steps(1) infinite; }
@@ -244,7 +252,11 @@ const PAGE = `<!doctype html>
     return String(text == null ? "" : text).replace(/\\s+/g, " ").trim();
   }
 
-  const CHIP_COLOR = { input: "gray", output: "green", note: "blue", error: "red", processing: "gray" };
+  const ITEM_KINDS = ["romaji", "grammar", "natural"]; // generate.ts の ITEM_KINDS と同じ
+  const CHIP_COLOR = {
+    input: "gray", processing: "gray", error: "red",
+    romaji: "green", grammar: "red", natural: "yellow", note: "blue",
+  };
 
   function line(label, kind, text) {
     const row = el("div", "row " + kind);
@@ -269,24 +281,35 @@ const PAGE = `<!doctype html>
 
     if (data.type === "pending") {
       entry.append(line("input", "input", oneLine(data.input)));
-      entry.append(line("output", "processing", "processing"));
+      entry.append(line("processing", "processing", "processing"));
     } else {
       const card = data.card;
       entry.append(line("input", "input", oneLine(card.input)));
       if (card.status === "error") {
-        entry.append(line("output", "error", "generation failed"));
+        entry.append(line("error", "error", "generation failed"));
       } else {
-        entry.append(line("output", "output", oneLine(card.output)));
-        let notes = [];
+        // tui.ts の parseItems / generate.ts の toCardItem と同じ基準 — items JSON を
+        // [kind] from → to に。旧 row (全文訳の output / string 配列 / plain string の
+        // note) は note 行に畳む。
+        const items = [];
+        if (card.output) items.push({ kind: "note", text: card.output });
         if (card.note) {
-          try {
-            const parsed = JSON.parse(card.note);
-            notes = Array.isArray(parsed) ? parsed : [card.note];
-          } catch {
-            notes = [card.note]; // JSON 配列化以前の plain string row
+          let parsed = null;
+          try { parsed = JSON.parse(card.note); } catch {}
+          if (!Array.isArray(parsed)) items.push({ kind: "note", text: card.note });
+          else for (const raw of parsed) {
+            if (typeof raw === "string") { if (raw) items.push({ kind: "note", text: raw }); continue; }
+            if (!raw || typeof raw !== "object" || !ITEM_KINDS.includes(raw.kind)) continue;
+            if (typeof raw.from !== "string" || !raw.from.trim()) continue;
+            if (typeof raw.to !== "string" || !raw.to.trim()) continue;
+            items.push(raw);
           }
         }
-        for (const item of notes) entry.append(line("note", "note", oneLine(item)));
+        // 指摘ゼロは input 行だけの card (pure 日本語の prompt はこれが普通)。
+        for (const item of items) {
+          const text = item.kind === "note" ? oneLine(item.text) : oneLine(item.from) + " → " + oneLine(item.to);
+          entry.append(line(item.kind, item.kind, text));
+        }
       }
     }
   }

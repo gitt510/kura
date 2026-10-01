@@ -13,10 +13,25 @@ import { Database } from "bun:sqlite";
 import { existsSync } from "node:fs";
 import { HISTORY_DB } from "../../history/db.ts";
 import { hasCard, insertCard, openCompanionDb, recentCards, type CardRow } from "./db.ts";
-import { clipInput, detectLang, shouldSkip } from "./detect.ts";
+import { clipInput, shouldSkip } from "./detect.ts";
 import { generateCard, resolveCompanionModel } from "./generate.ts";
 import { startServer } from "./server.ts";
 import { startTui } from "./tui.ts";
+
+// cwd の current branch。git 外 / detached / git 無しは null (表示を省くだけ)。
+function currentBranch(cwd: string | null): string | null {
+  if (!cwd) return null;
+  try {
+    const run = Bun.spawnSync(["git", "-C", cwd, "symbolic-ref", "--short", "-q", "HEAD"], {
+      stdout: "pipe",
+      stderr: "ignore",
+    });
+    const branch = run.stdout.toString().trim();
+    return run.exitCode === 0 && branch ? branch : null;
+  } catch {
+    return null;
+  }
+}
 
 const USAGE = "usage: kura companion [--tui] [--port=N] [--session=<prefix>]\n";
 const POLL_MS = 1000;
@@ -120,29 +135,28 @@ export async function runCompanion(args: string[]): Promise<number> {
     if (hasCard(companion, key) || shouldSkip(row.text)) return;
 
     const { text: input } = clipInput(row.text);
-    const lang = detectLang(input);
     const createdAt = new Date().toISOString();
     sink.broadcast({
       type: "pending",
       key,
       input,
-      lang,
       cwd: row.cwd,
+      branch: currentBranch(row.cwd),
       created_at: createdAt,
     });
 
     const context = contextQuery.get({ $session: row.session_id, $rowid: row.rowid }) as {
       text: string;
     } | null;
-    const generated = await generateCard({ input, lang, context: context?.text ?? null });
+    const generated = await generateCard({ input, context: context?.text ?? null });
     const card: CardRow = {
       key,
       session_id: row.session_id,
       cwd: row.cwd,
-      lang,
+      lang: null,
       input,
-      output: generated.output,
-      note: generated.notes?.length ? JSON.stringify(generated.notes) : null,
+      output: null,
+      note: generated.items ? JSON.stringify(generated.items) : null,
       model: generated.model,
       status: generated.status,
       created_at: createdAt,

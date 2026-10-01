@@ -91,7 +91,7 @@ $EDITOR "${XDG_CONFIG_HOME:-$HOME/.config}/kura/env"
 | Consumer | Environment variable |
 | --- | --- |
 | Scheduled generation agent | `KURA_GENERATOR` (`claude`, the default, or `codex`) |
-| Companion card model | `KURA_COMPANION_MODEL` (default `haiku`) |
+| Companion card model | `KURA_COMPANION_MODEL` (default `opus`) |
 | Claude model for scheduled generation | `KURA_CLAUDE_MODEL` |
 | Claude effort for scheduled generation | `KURA_CLAUDE_EFFORT` |
 | Codex model for scheduled generation | `KURA_CODEX_MODEL` |
@@ -138,11 +138,16 @@ kura companion [--tui] [--port=N] [--session=<prefix>]
 - Watches history.db for user prompts submitted after startup and serves
   English feedback cards at `http://127.0.0.1:4989` (opens the browser on
   macOS; live updates over SSE)
-- `--tui` logs cards to the terminal instead of starting a server: `[input]`
-  and a `[output] processing …` placeholder when a prompt arrives, replaced
-  in place by the `[output]` / `[note]` lines once generated
-- One prompt = one card: Japanese input → the natural English it could have
-  been; English input → more natural English, unchanged when already natural
+- `--tui` logs cards to the terminal instead of starting a server: every line
+  starts with a label — `[meta]` (`yyyy-mm-dd hh:mm:ss · project · branch`),
+  `[input]`, then a `[status] processing …` placeholder replaced in place by
+  the item lines, `[done] nothing to flag`, or `[error]` once generated
+- One prompt = one card of `from → to` items, at most 5, no full translation
+  or rewrite: `[romaji]` Japanese written in Latin letters → English,
+  `[grammar]` a meaning-changing grammar mistake → the fix, `[natural]`
+  grammatical but unnatural English → how a native developer says it
+- Japanese written in kana / kanji, typos, spelling, and articles are never
+  items; a prompt with nothing to report shows only its `[input]` line
 - Cards are stored in `companion.db` before delivery; a page restart replays
   the latest 50 from storage (the TUI starts empty)
 - Requires an enabled history source; Claude prompts arrive at submit time,

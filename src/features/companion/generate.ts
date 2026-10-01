@@ -3,82 +3,98 @@
 // tool は使わせない純粋な text→JSON 変換。KURA_NO_HISTORY=1 で走るので、
 // この呼び出し自身の session は history にも companion にも入らない。
 // 失敗した呼び出しは error card として残し、retry しない。
+//
+// 契約は 1 つ — 入力の言語は判定しない。LLM が入力を断片に分けて種類を付けて返す。
+// 全文の英訳 / 書き換えは出さない (文字が多くて読まれなくなる)。欲しいのは自分で
+// 英文を組み立てる時の parts — だから kana / 漢字の日本語も対象外。romaji は
+// 「英文を組もうとして単語が出てこず挫折した跡」なので、そこだけ拾う。
 
 import { runClaudePrompt } from "../../lib/agent.ts";
 import { resolveEnv } from "../../lib/config.ts";
 
 export interface GenerateInput {
   input: string;
-  lang: "ja" | "en";
   context: string | null; // 同 session の直前の assistant 出力 (無ければ null)
 }
 
-// output: 入力への英語 feedback 本文。LLM との JSON 契約上の key は "english" の
-// まま (そこでは実際に英語そのものを指す) — 境界のここで output に読み替える。
+// item の種類:
+//   romaji  : romaji で書かれた日本語 → 英語
+//   grammar : 意味が変わる文法ミス → 修正 (規則名は日本語)
+//   natural : 文法は合っているが不自然な英語 → native の言い方
+// typo は意図的に無い — 指が滑っただけで学習価値が無く、毎回発火して他を埋める。
+export const ITEM_KINDS = ["romaji", "grammar", "natural"] as const;
+export type ItemKind = (typeof ITEM_KINDS)[number];
+
+export interface CardItem {
+  kind: ItemKind;
+  from: string;
+  to: string;
+}
+
 export interface GenerateResult {
-  output: string | null;
-  notes: string[] | null;
+  items: CardItem[] | null; // ok なら配列 (指摘ゼロは [])。error なら null
   model: string | null;
   status: "ok" | "error";
 }
 
-// 頻度が高く軽いタスクなので既定は haiku。
+// 速さより質 — parts の切り方と訳語の自然さが価値なので既定は opus。
 export function resolveCompanionModel(
   env: Readonly<Record<string, string | undefined>> = process.env,
 ): string {
-  return resolveEnv("KURA_COMPANION_MODEL", env)?.trim() || "haiku";
+  return resolveEnv("KURA_COMPANION_MODEL", env)?.trim() || "opus";
 }
 
 const CONTEXT_CLIP = 1200;
+const MAX_ITEMS = 5;
 
-// ja と en で契約を分ける。ja は英訳だけ (note は要約にしかならず読む価値が無い)。
-// en は文法 feedback が主役 — ただし note は意味が変わるミスに絞る。冠詞・綴りは
-// output との diff で見えるので note にしない (毎回発火して他の指摘を埋める)。
 export function buildPrompt(job: GenerateInput): string {
   const context = (job.context ?? "").slice(0, CONTEXT_CLIP);
-  const head = [
-    "You are an English coach for a Japanese developer.",
-    "The input below is a prompt the user typed to their coding agent mid-conversation.",
-  ];
-  const body =
-    job.lang === "ja"
-      ? [
-          "Translate the input into the natural, casual English the user could have typed instead.",
-          "Prefer idiomatic phrasing over a literal rendering — do not mirror the Japanese structure.",
-          "Do not use any tools. Reply with JSON only, no code fences:",
-          '{"english": "..."}',
-        ]
-      : [
-          "Rewrite the input as the natural English a native developer would type — do not mirror the original sentence structure. If it is already natural, return it unchanged.",
-          "Do not use any tools. Reply with JSON only, no code fences:",
-          '{"english": "...", "notes": ["...", "..."]}',
-          "notes: at most 2 short Japanese bullets about grammar mistakes in the original that affect meaning (verb agreement, tense, prepositions, word order).",
-          'Format each bullet exactly as 原文の断片 → 修正（規則名は日本語）, e.g. "What determine → What determines（三単現の -s）".',
-          "Never note articles, spelling, punctuation, tone, or word choice.",
-          'If the original has no such grammar mistakes, reply notes: ["文法は OK 👍"].',
-        ];
   return [
-    ...head,
-    ...body,
+    "You are an English coach for a Japanese developer.",
+    "The input below is a prompt the user typed to their coding agent mid-conversation. It may be Japanese, English, or a mix.",
+    "Do NOT translate or rewrite the whole input. Pick out only the fragments worth feedback and return them as items. The user assembles English by themselves from these parts.",
+    "Item kinds:",
+    '- "romaji": Japanese written in Latin letters (e.g. "housin", "taiou suru") — the user tried to write English and fell back to romaji for a word they did not know → the natural, casual English a native developer would type.',
+    '- "grammar": an English grammar mistake that changes or obscures the meaning (tense, prepositions, word order, missing auxiliaries) → the fix, with the rule name in Japanese in full-width parentheses, e.g. "I\'m working on it since Monday" → "I\'ve been working on it since Monday（現在完了進行形）".',
+    '- "natural": grammatical but unnatural English → how a native developer would say it, keeping the original intent.',
+    "Japanese written in kana or kanji is NOT feedback material — ignore it entirely, even when it is the whole input.",
+    "Never make items for: spelling, typos, punctuation, articles, tone, code, file names, commands, or English that is already natural.",
+    '"from" must be a verbatim fragment of <input>. <context> is reference only, to resolve what the user is talking about — never make items from it.',
+    "One item per fragment — never report the same fragment under two kinds.",
+    `At most ${MAX_ITEMS} items, in the order they appear in the input.`,
+    'Do not use any tools. Reply with JSON only, no code fences, in this shape (kind is one of "romaji", "grammar", "natural"):',
+    '{"items": [{"kind": "romaji", "from": "...", "to": "..."}]}',
+    'If nothing is worth feedback, reply exactly {"items": []}.',
     "",
     `<context>${context}</context>`,
-    `<input lang="${job.lang}">${job.input}</input>`,
+    `<input>${job.input}</input>`,
   ].join("\n");
 }
 
-// LLM の返答から card の中身を取り出す。code fence で包まれても、
-// 契約前の単数形 note で返ってきても受ける。
-export function parseCardJson(result: string): { english: string; notes: string[] } | null {
+function isKind(value: unknown): value is ItemKind {
+  return typeof value === "string" && (ITEM_KINDS as readonly string[]).includes(value);
+}
+
+// 1 要素を item に正規化する。null / 非 object / kind 不明 / from・to 欠落は null。
+// LLM の返答 (generate) と DB の note 列 (tui / page) の両方がこれで検証する。
+export function toCardItem(raw: unknown): CardItem | null {
+  if (!raw || typeof raw !== "object") return null;
+  const item = raw as { kind?: unknown; from?: unknown; to?: unknown };
+  if (!isKind(item.kind)) return null;
+  if (typeof item.from !== "string" || !item.from.trim()) return null;
+  if (typeof item.to !== "string" || !item.to.trim()) return null;
+  return { kind: item.kind, from: item.from.trim(), to: item.to.trim() };
+}
+
+// LLM の返答から items を取り出す。code fence で包まれても受ける。
+// 不正な要素は落とし、items が配列でなければ null。
+export function parseCardJson(result: string): CardItem[] | null {
   const body = result.replace(/^\s*```(?:json)?\s*/, "").replace(/\s*```\s*$/, "");
   try {
-    const parsed = JSON.parse(body) as { english?: unknown; notes?: unknown; note?: unknown };
-    if (typeof parsed.english !== "string" || !parsed.english.trim()) return null;
-    const notes = Array.isArray(parsed.notes)
-      ? parsed.notes.filter((item): item is string => typeof item === "string" && item !== "")
-      : typeof parsed.note === "string" && parsed.note !== ""
-        ? [parsed.note]
-        : [];
-    return { english: parsed.english, notes };
+    const parsed = JSON.parse(body) as { items?: unknown } | null;
+    if (!parsed || !Array.isArray(parsed.items)) return null;
+    const items = parsed.items.map(toCardItem).filter((item): item is CardItem => item !== null);
+    return items.slice(0, MAX_ITEMS);
   } catch {
     return null;
   }
@@ -90,19 +106,17 @@ export async function generateCard(job: GenerateInput): Promise<GenerateResult> 
   try {
     run = await runClaudePrompt("companion", buildPrompt(job), model);
   } catch {
-    return { output: null, notes: null, model, status: "error" }; // claude CLI が無い
+    return { items: null, model, status: "error" }; // claude CLI が無い
   }
 
-  const card = run.ok ? parseCardJson(run.result) : null;
-  if (!card) {
+  const items = run.ok ? parseCardJson(run.result) : null;
+  if (!items) {
     // card は "generation failed" のまま、原因は起動 terminal 側で診断できるようにする。
     const reason = run.stderr.trim().split("\n").pop() ?? "";
     process.stderr.write(
       `companion generate failed (exit ${run.exitCode})${reason ? `: ${reason}` : ""}\n`,
     );
-    return { output: null, notes: null, model: run.model, status: "error" };
+    return { items: null, model: run.model, status: "error" };
   }
-  // ja は英訳のみが契約 — model が notes を返してきても落とす。
-  const notes = job.lang === "ja" ? [] : card.notes;
-  return { output: card.english, notes, model: run.model, status: "ok" };
+  return { items, model: run.model, status: "ok" };
 }
