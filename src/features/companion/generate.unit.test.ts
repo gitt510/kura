@@ -1,57 +1,57 @@
 import { expect, test } from "bun:test";
 import { buildPrompt, parseCardJson, resolveCompanionModel } from "./generate.ts";
 
-test("prompt は lang / 入力 / 直前の assistant 文脈を含む", () => {
-  const prompt = buildPrompt({ input: "これを直して", lang: "ja", context: "I fixed auth.ts" });
-  expect(prompt).toContain('<input lang="ja">これを直して</input>');
+test("prompt は入力 / 直前の assistant 文脈 / 3 種類の item 契約を含み、言語は指定しない", () => {
+  const prompt = buildPrompt({ input: "これを直して", context: "I fixed auth.ts" });
+  expect(prompt).toContain("<input>これを直して</input>");
   expect(prompt).toContain("<context>I fixed auth.ts</context>");
-});
-
-test("ja の契約は英訳のみ、en の契約は文法 bullet を要求する", () => {
-  const ja = buildPrompt({ input: "これを直して", lang: "ja", context: null });
-  expect(ja).toContain('{"english": "..."}');
-  expect(ja).not.toContain("notes");
-
-  const en = buildPrompt({ input: "pls fix", lang: "en", context: null });
-  expect(en).toContain('{"english": "...", "notes": ["...", "..."]}');
-  expect(en).toContain("grammar mistakes in the original that affect meaning");
-  expect(en).toContain("Never note articles, spelling, punctuation, tone, or word choice.");
+  expect(prompt).toContain('{"items": [{"kind": "romaji", "from": "...", "to": "..."}]}');
+  expect(prompt).toContain('reply exactly {"items": []}');
+  expect(prompt).toContain('"from" must be a verbatim fragment of <input>');
+  expect(prompt).toContain("Do NOT translate or rewrite the whole input.");
+  expect(prompt).toContain("Japanese written in kana or kanji is NOT feedback material");
+  expect(prompt).toContain("Never make items for: spelling, typos");
+  expect(prompt).toContain("One item per fragment");
+  expect(prompt).not.toContain("lang=");
 });
 
 test("文脈なしでは空の context tag になり、長い文脈は切られる", () => {
-  expect(buildPrompt({ input: "x y z", lang: "en", context: null })).toContain(
-    "<context></context>",
-  );
-  const clipped = buildPrompt({ input: "x y z", lang: "en", context: "c".repeat(5000) });
+  expect(buildPrompt({ input: "x y z", context: null })).toContain("<context></context>");
+  const clipped = buildPrompt({ input: "x y z", context: "c".repeat(5000) });
   expect(clipped).toContain(`<context>${"c".repeat(1200)}</context>`);
 });
 
-test("card JSON は code fence 込みでも受け、english 欠落は null", () => {
-  expect(parseCardJson('{"english": "Fix this please", "notes": ["OK 👍"]}')).toEqual({
-    english: "Fix this please",
-    notes: ["OK 👍"],
-  });
-  expect(parseCardJson('```json\n{"english": "Fix this", "notes": []}\n```')).toEqual({
-    english: "Fix this",
-    notes: [],
-  });
-  expect(parseCardJson('{"notes": ["missing english"]}')).toBeNull();
+test("items JSON は code fence 込みでも受け、空配列は空配列、items 欠落は null", () => {
+  expect(
+    parseCardJson('{"items": [{"kind": "romaji", "from": "housin", "to": "the approach"}]}'),
+  ).toEqual([{ kind: "romaji", from: "housin", to: "the approach" }]);
+  expect(parseCardJson('```json\n{"items": []}\n```')).toEqual([]);
+  expect(parseCardJson('{"english": "old contract"}')).toBeNull();
   expect(parseCardJson("not json at all")).toBeNull();
+  expect(parseCardJson("null")).toBeNull();
 });
 
-test("単数形 note や不正要素混じりの notes も配列に畳む", () => {
-  expect(parseCardJson('{"english": "Fix", "note": "旧契約の 1 文"}')).toEqual({
-    english: "Fix",
-    notes: ["旧契約の 1 文"],
-  });
-  expect(parseCardJson('{"english": "Fix", "notes": ["a", 1, "", "b"]}')).toEqual({
-    english: "Fix",
-    notes: ["a", "b"],
-  });
+test("kind 不明や from / to 欠落の要素は落とし、5 件で切る", () => {
+  const items = [
+    null,
+    "a string",
+    { kind: "typo", from: "breifing", to: "briefing" },
+    { kind: "romaji", from: 1, to: "x" },
+    { kind: "grammar", from: "What determine", to: "What determines（三単現の -s）" },
+    { kind: "natural", from: "", to: "x" },
+    { kind: "ja", from: "こうやって", to: "like this" },
+    { kind: "romaji", from: "taiou", to: " handle " },
+  ];
+  expect(parseCardJson(JSON.stringify({ items }))).toEqual([
+    { kind: "grammar", from: "What determine", to: "What determines（三単現の -s）" },
+    { kind: "romaji", from: "taiou", to: "handle" },
+  ]);
+  const many = Array.from({ length: 10 }, (_, i) => ({ kind: "romaji", from: `f${i}`, to: `t${i}` }));
+  expect(parseCardJson(JSON.stringify({ items: many }))).toHaveLength(5);
 });
 
-test("model は KURA_COMPANION_MODEL があればそれ、無ければ haiku", () => {
-  expect(resolveCompanionModel({})).toBe("haiku");
+test("model は KURA_COMPANION_MODEL があればそれ、無ければ opus", () => {
+  expect(resolveCompanionModel({})).toBe("opus");
   expect(resolveCompanionModel({ KURA_COMPANION_MODEL: "sonnet" })).toBe("sonnet");
-  expect(resolveCompanionModel({ KURA_COMPANION_MODEL: "  " })).toBe("haiku");
+  expect(resolveCompanionModel({ KURA_COMPANION_MODEL: "  " })).toBe("opus");
 });

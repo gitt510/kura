@@ -1,12 +1,5 @@
 import { expect, test } from "bun:test";
-import { clipInput, detectLang, shouldSkip } from "./detect.ts";
-
-test("ひらがな / カタカナを含めば ja、含まなければ en", () => {
-  expect(detectLang("これを直して")).toBe("ja");
-  expect(detectLang("バグ fix して")).toBe("ja");
-  expect(detectLang("fix the bug in auth.ts")).toBe("en");
-  expect(detectLang("検証")).toBe("en"); // 漢字のみは en に倒す
-});
+import { clipInput, shouldSkip } from "./detect.ts";
 
 test("相槌・合成 message・command 入力を skip する", () => {
   expect(shouldSkip("y")).toBe(true);

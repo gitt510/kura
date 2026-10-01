@@ -13,17 +13,17 @@ export const COMPANION_DB = stateDbPath(
 const SCHEMA_SQL = `${import.meta.dir}/schema.sql`;
 
 // 1 card = user が agent に打った 1 prompt への英語 feedback。
-//   lang    : 入力の判定結果 ("ja" | "en")
-//   output  : ja → 自然な英訳 / en → より自然な英文 (十分なら原文のまま)
-//   note    : en 入力への文法 feedback bullet (日本語) の JSON 配列文字列 (SQLite に
-//             配列型が無いため english feature の memo と同じ持ち方)。ja 入力は null。
-//             旧 row は plain string — page 側で両方受ける
-//   status  : "ok" | "error" (生成失敗。output / note は null)
+//   note    : items の JSON 配列文字列 [{kind, from, to}] (SQLite に配列型が無いため
+//             english feature の memo と同じ持ち方)。指摘ゼロは "[]"。
+//             旧 row は string の配列 / plain string で、output に全文訳が入る —
+//             読み手は旧形も受ける
+//   lang / output : 旧契約の列。今は書かない (null)。schema は触らず残す
+//   status  : "ok" | "error" (生成失敗。note は null)
 export interface CardRow {
   key: string;
   session_id: string;
   cwd: string | null;
-  lang: "ja" | "en";
+  lang: string | null;
   input: string;
   output: string | null;
   note: string | null;

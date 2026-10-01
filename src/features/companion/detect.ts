@@ -1,10 +1,5 @@
-// detect.ts — companion の入力判定 (pure)。card 化する prompt の選別と ja/en 判定。
-
-// ひらがな / カタカナが 1 文字でもあれば ja。漢字のみの短文は稀なので en に倒す
-// (誤判定しても「より自然な en」が返るだけで壊れない)。
-export function detectLang(text: string): "ja" | "en" {
-  return /[぀-ヿ]/.test(text) ? "ja" : "en";
-}
+// detect.ts — companion の入力選別 (pure)。card 化する prompt を選ぶ。
+// 言語判定は持たない — ja / en / 混合の区別は LLM が断片ごとに付ける。
 
 // card 化しない入力:
 //   - 3 文字未満 (y / ok などの相槌)
