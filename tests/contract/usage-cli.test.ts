@@ -65,7 +65,9 @@ test("feature ごとの合計と TOTAL を表で出す", () => {
     const text = result.stdout.toString();
     expect(result.exitCode).toBe(0);
     expect(text).toContain("Usage");
-    expect(text).toMatch(/companion\s+│ claude-haiku-4-5\s+│ 2\s+│ 20\s+│ 80\s+│ 2,000\s+│ 200\s+│ 0\.0252/);
+    expect(text).toMatch(
+      /companion\s+│ claude-haiku-4-5\s+│ 2\s+│ 20\s+│ 80\s+│ 2,000\s+│ 200\s+│ 0\.0252/,
+    );
     expect(text).toMatch(/timeline\s+│ claude-haiku-4-5\s+│ 1\s+│/);
     expect(text).toMatch(/TOTAL\s+│ -\s+│ 3\s+│ 30\s+│ 120\s+│ 3,000\s+│ 300\s+│ 0\.0378/);
   } finally {

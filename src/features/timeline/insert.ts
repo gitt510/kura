@@ -10,15 +10,15 @@
 // schema / 型 / DB アクセスは同居の ./db.ts が所有する。
 
 import { getHourWindow } from "../../history/query.ts";
-import { hourTarget, type HourTarget } from "../../lib/clock.ts";
+import { type HourTarget, hourTarget } from "../../lib/clock.ts";
 import {
   expectJsonArray,
   expectJsonObject,
   expectJsonString,
   jsonArrayOrNull,
 } from "../../lib/json.ts";
-import { selfProvenance, type Provenance } from "../../lib/provenance.ts";
-import { openTimeline, upsertTimeline, type TimelineRow } from "./db.ts";
+import { type Provenance, selfProvenance } from "../../lib/provenance.ts";
+import { openTimeline, type TimelineRow, upsertTimeline } from "./db.ts";
 
 export interface TimelineGenerated {
   title?: string;
@@ -31,11 +31,7 @@ export function parseTimelineGenerated(value: unknown): TimelineGenerated {
   if (root.title !== undefined && typeof root.title !== "string") {
     throw new Error("timeline.title must be a string");
   }
-  if (
-    root.summary !== undefined &&
-    root.summary !== null &&
-    typeof root.summary !== "string"
-  ) {
+  if (root.summary !== undefined && root.summary !== null && typeof root.summary !== "string") {
     throw new Error("timeline.summary must be a string or null");
   }
 
@@ -47,14 +43,9 @@ export function parseTimelineGenerated(value: unknown): TimelineGenerated {
       const thread = expectJsonObject(value, `timeline.threads[${index}]`);
       return {
         label: expectJsonString(thread.label, `timeline.threads[${index}].label`),
-        bullets: expectJsonArray(
-          thread.bullets,
-          `timeline.threads[${index}].bullets`,
-        ).map((bullet, bulletIndex) =>
-          expectJsonString(
-            bullet,
-            `timeline.threads[${index}].bullets[${bulletIndex}]`,
-          ),
+        bullets: expectJsonArray(thread.bullets, `timeline.threads[${index}].bullets`).map(
+          (bullet, bulletIndex) =>
+            expectJsonString(bullet, `timeline.threads[${index}].bullets[${bulletIndex}]`),
         ),
       };
     });

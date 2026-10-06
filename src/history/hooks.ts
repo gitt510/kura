@@ -76,10 +76,7 @@ function load(settingsPath: string, events: string[]): Settings {
       throw new Error("root is not an object");
     }
     const hooks = (parsed as { hooks?: unknown }).hooks;
-    if (
-      hooks !== undefined &&
-      (!hooks || typeof hooks !== "object" || Array.isArray(hooks))
-    ) {
+    if (hooks !== undefined && (!hooks || typeof hooks !== "object" || Array.isArray(hooks))) {
       throw new Error("hooks must be an object");
     }
     for (const event of events) {
@@ -139,7 +136,8 @@ function manage(agent: Agent, action: Action): number {
 
   settings.hooks ??= {};
   for (const event of config.events) {
-    const groups = settings.hooks[event] ?? (settings.hooks[event] = []);
+    settings.hooks[event] ??= [];
+    const groups = settings.hooks[event];
     for (const group of groups) {
       if (group.hooks) group.hooks = group.hooks.filter((hook) => !isOurs(hook));
     }

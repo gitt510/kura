@@ -1,9 +1,9 @@
 import { describe, expect, test } from "bun:test";
+import { stripVTControlCharacters } from "node:util";
 import type { CardRow } from "./db.ts";
 import { formatEvent, parseItems } from "./tui.ts";
 
-const strip = (text: string | null) =>
-  text?.replace(/\x1b\[[0-9;]*[mK]/g, "").replace(/\r/g, "");
+const strip = (text: string | null) => text && stripVTControlCharacters(text).replace(/\r/g, "");
 
 const SEP = "─".repeat(64);
 
@@ -50,7 +50,9 @@ describe("parseItems", () => {
       { kind: "romaji", from: 1, to: "x" },
       { kind: "romaji", from: "taiou", to: "handle" },
     ]);
-    expect(parseItems({ output: null, note })).toEqual([{ kind: "romaji", from: "taiou", to: "handle" }]);
+    expect(parseItems({ output: null, note })).toEqual([
+      { kind: "romaji", from: "taiou", to: "handle" },
+    ]);
   });
 });
 
@@ -70,7 +72,12 @@ describe("formatEvent", () => {
   });
 
   test("meta 要素が欠けたら残りだけ、全部無ければ [meta] の label だけ", () => {
-    const noBranch = formatEvent({ type: "pending", input: "x", created_at: "broken", cwd: "/a/b" });
+    const noBranch = formatEvent({
+      type: "pending",
+      input: "x",
+      created_at: "broken",
+      cwd: "/a/b",
+    });
     expect(strip(noBranch)).toStartWith("[meta]    b\n");
     const nothing = formatEvent({ type: "pending", input: "x", created_at: "broken", cwd: null });
     expect(strip(nothing)).toStartWith("[meta]    \n");
@@ -92,7 +99,11 @@ describe("formatEvent", () => {
         note: JSON.stringify([
           { kind: "romaji", from: "taiou", to: "handle" },
           { kind: "grammar", from: "What determine", to: "What determines（三単現の -s）" },
-          { kind: "natural", from: "change companion behavior", to: "change how companion behaves" },
+          {
+            kind: "natural",
+            from: "change companion behavior",
+            to: "change how companion behaves",
+          },
         ]),
       }),
     });

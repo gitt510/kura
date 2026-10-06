@@ -17,4 +17,5 @@ jobs:
         with:
           bun-version-file: .bun-version
       - uses: extractions/setup-just@v3
+      - run: just check
       - run: just test

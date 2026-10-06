@@ -2,10 +2,10 @@
 // cli.ts — kura command の薄い dispatcher。処理本体は src/cli/ と domain module が持つ。
 
 import { runCompanion } from "./cli/companion.ts";
-import { helpText } from "./cli/help.ts";
 import { runConfig } from "./cli/config.ts";
 import { runDecisions } from "./cli/decisions.ts";
 import { runFeatures } from "./cli/features.ts";
+import { helpText } from "./cli/help.ts";
 import { runHistory } from "./cli/history.ts";
 import { runLifecycle } from "./cli/lifecycle.ts";
 import { runOperations } from "./cli/status.ts";

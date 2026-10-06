@@ -1,7 +1,7 @@
-import { expect, test } from "bun:test";
 import { Database } from "bun:sqlite";
+import { expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
-import { insertCall, usageSummary, type UsageRecord } from "./usage.ts";
+import { insertCall, type UsageRecord, usageSummary } from "./usage.ts";
 
 const schema = readFileSync(`${import.meta.dir}/usage-schema.sql`, "utf-8");
 

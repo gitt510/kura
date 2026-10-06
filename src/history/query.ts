@@ -12,7 +12,7 @@
 //            messages: [ { role, text, timestamp }, ... ] }
 //   meta は DB で計算済み — 要約側が目視で数えなくて済むようにする。
 
-import { openHistory, type MessageRow } from "./db.ts";
+import { type MessageRow, openHistory } from "./db.ts";
 import { HISTORY_NOISE_PREDICATE } from "./noise.ts";
 
 export interface SessionMeta {
@@ -51,9 +51,7 @@ export function latestSessionForCwd(cwd: string): string | null {
 export function resolveSessionId(idOrPrefix: string): string | null {
   const db = openHistory();
   try {
-    const exact = db
-      .query("SELECT 1 FROM messages WHERE session_id = ? LIMIT 1")
-      .get(idOrPrefix);
+    const exact = db.query("SELECT 1 FROM messages WHERE session_id = ? LIMIT 1").get(idOrPrefix);
     if (exact) return idOrPrefix;
     const like = idOrPrefix.replace(/[%_\\]/g, "\\$&") + "%";
     const row = db
@@ -99,8 +97,7 @@ export function getSession(sessionId: string): Session | null {
 
     const messages = db
       .query(
-        "SELECT role, text, timestamp FROM messages " +
-          "WHERE session_id = ? ORDER BY timestamp",
+        "SELECT role, text, timestamp FROM messages " + "WHERE session_id = ? ORDER BY timestamp",
       )
       .all(sessionId) as SessionMessage[];
 
@@ -165,10 +162,7 @@ export function getHourWindow(date: string, hour: number): HourWindow {
       .get({ $start: start }) as { msgs: number; user: number };
 
     const cwdRows = db
-      .query(
-        "SELECT DISTINCT cwd FROM messages " +
-          `WHERE cwd IS NOT NULL AND ${WINDOW_PREDICATE}`,
-      )
+      .query("SELECT DISTINCT cwd FROM messages " + `WHERE cwd IS NOT NULL AND ${WINDOW_PREDICATE}`)
       .all({ $start: start }) as { cwd: string }[];
 
     const messages = db

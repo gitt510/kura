@@ -23,9 +23,7 @@ export function latestAssistantModel(transcriptPath: string): string | null {
       try {
         const entry = JSON.parse(lines[i]) as { type?: string; message?: { model?: string } };
         if (entry.type === "assistant" && entry.message?.model) return entry.message.model;
-      } catch {
-        continue;
-      }
+      } catch {}
     }
   } catch {
     /* transcript が読めない → null */

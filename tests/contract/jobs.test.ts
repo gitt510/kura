@@ -88,9 +88,7 @@ test("job は未知の action と job を拒否する", () => {
   ]) {
     const result = run(args[0]!, args[1]!);
     expect(result.exitCode).toBe(2);
-    expect(result.stderr.toString()).toContain(
-      "jobs.ts <timeline|english|decisions>",
-    );
+    expect(result.stderr.toString()).toContain("jobs.ts <timeline|english|decisions>");
   }
 });
 
@@ -107,9 +105,7 @@ test("all は全 job を status / disable し、enable は拒否する", () => {
   expect(run("all", "enable").exitCode).toBe(2);
   expect(run("all", "disable").exitCode).toBe(0);
   for (const job of ["timeline", "english"]) {
-    expect(() =>
-      lstatSync(join(home, "Library", "LaunchAgents", `kura.${job}.plist`)),
-    ).toThrow();
+    expect(() => lstatSync(join(home, "Library", "LaunchAgents", `kura.${job}.plist`))).toThrow();
   }
 });
 

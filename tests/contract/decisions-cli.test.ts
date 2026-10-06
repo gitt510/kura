@@ -4,11 +4,11 @@
 //   同一 title は 1 件に畳み、最新 window の内容を採用して新しい順に返す。
 //   repo は cwd の末尾一致。別 repo の decision は混ざらない。
 
+import { Database } from "bun:sqlite";
 import { afterEach, beforeEach, expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { Database } from "bun:sqlite";
 
 const cli = join(import.meta.dir, "..", "..", "src", "cli.ts");
 const schema = join(import.meta.dir, "..", "..", "src", "features", "decisions", "schema.sql");

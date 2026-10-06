@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
-import { fitToWidth, truncate } from "./usage.ts";
 import type { Row } from "./terminal.ts";
+import { fitToWidth, truncate } from "./usage.ts";
 
 const body: Row[] = [
   ["companion", "claude-haiku-4-5-20251001", "17", "170", "15,982"],

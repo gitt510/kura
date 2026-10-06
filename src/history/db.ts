@@ -4,19 +4,11 @@
 // 旧 DB の廃止列は migrateSchema() が除去する。writer / reader 双方が
 // ここを import して同じ table 形・同じ型を共有する。
 
-import { Database } from "bun:sqlite";
-import {
-  legacyDbPath,
-  openStateDatabase,
-  stateDbPath,
-  tableColumns,
-} from "../lib/storage.ts";
+import type { Database } from "bun:sqlite";
+import { legacyDbPath, openStateDatabase, stateDbPath, tableColumns } from "../lib/storage.ts";
 
 // schema は code と同居、DB は runtime state に置く。旧 checkout 内 DB は初回 import 時に移行する。
-export const HISTORY_DB = stateDbPath(
-  "history.db",
-  legacyDbPath("history", "history.db"),
-);
+export const HISTORY_DB = stateDbPath("history.db", legacyDbPath("history", "history.db"));
 const SCHEMA_SQL = `${import.meta.dir}/schema.sql`;
 
 export interface MessageRow {
@@ -74,16 +66,7 @@ export function insertMessages(db: Database, rows: MessageRow[]): void {
     for (const r of rs) {
       const promptId = r.prompt_id ?? null;
       if (promptId && promptId !== r.uuid) supersede.run(promptId);
-      stmt.run(
-        r.uuid,
-        promptId,
-        r.session_id,
-        r.cwd,
-        r.role,
-        r.text,
-        r.model,
-        r.timestamp,
-      );
+      stmt.run(r.uuid, promptId, r.session_id, r.cwd, r.role, r.text, r.model, r.timestamp);
     }
   })(rows);
 }
@@ -95,15 +78,7 @@ export function insertToolUses(db: Database, rows: ToolUseRow[]): void {
   );
   db.transaction((rs: ToolUseRow[]) => {
     for (const r of rs) {
-      stmt.run(
-        r.id,
-        r.message_uuid,
-        r.session_id,
-        r.cwd,
-        r.tool_name,
-        r.input,
-        r.timestamp,
-      );
+      stmt.run(r.id, r.message_uuid, r.session_id, r.cwd, r.tool_name, r.input, r.timestamp);
     }
   })(rows);
 }

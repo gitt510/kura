@@ -1,12 +1,6 @@
 // lifecycle.ts — local entrypoint と kura-owned integration の setup / teardown。
 
-import {
-  lstatSync,
-  mkdirSync,
-  readlinkSync,
-  symlinkSync,
-  unlinkSync,
-} from "node:fs";
+import { lstatSync, mkdirSync, readlinkSync, symlinkSync, unlinkSync } from "node:fs";
 import { join, resolve } from "node:path";
 
 type LifecycleCommand = "setup" | "teardown";
@@ -36,11 +30,7 @@ function assertOwnedSymlink(target: string, expected: string, operation: string)
   }
 }
 
-function runManager(
-  script: string,
-  args: string[],
-  quiet = false,
-): void {
+function runManager(script: string, args: string[], quiet = false): void {
   const result = Bun.spawnSync([process.execPath, script, ...args], {
     env: process.env,
     stdin: quiet ? "ignore" : "inherit",
@@ -100,23 +90,14 @@ function teardown(): void {
   if (lstatOrNull(cli)) unlinkSync(cli);
   if (lstatOrNull(runtime)) unlinkSync(runtime);
 
-  const stateDir = join(
-    process.env.XDG_STATE_HOME || join(userHome, ".local", "state"),
-    "kura",
-  );
-  const configDir = join(
-    process.env.XDG_CONFIG_HOME || join(userHome, ".config"),
-    "kura",
-  );
+  const stateDir = join(process.env.XDG_STATE_HOME || join(userHome, ".local", "state"), "kura");
+  const configDir = join(process.env.XDG_CONFIG_HOME || join(userHome, ".config"), "kura");
   process.stdout.write("kura history sources, features, and local entrypoints removed\n");
   process.stdout.write(`retained state: ${stateDir}\n`);
   process.stdout.write(`retained config: ${configDir}\n`);
 }
 
-export async function runLifecycle(
-  command: LifecycleCommand,
-  args: string[],
-): Promise<number> {
+export async function runLifecycle(command: LifecycleCommand, args: string[]): Promise<number> {
   if (args.length !== 0) {
     process.stderr.write(`usage: kura ${command}\n`);
     return 2;

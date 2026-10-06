@@ -82,7 +82,6 @@ export function startServer(port: number, replay: () => unknown[]): ServerHandle
   };
 }
 
-
 // tui.ts の log 形式 ([input] / [romaji] / [grammar] / [natural]) を DADS (デジタル庁デザインシステム)
 // 準拠で描く page。skills/candidate/dads-artifact.md の 3 層モデルに従う:
 //   tokens     — @digital-go-jp/design-tokens (unpkg) から必要変数のみ inline

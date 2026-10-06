@@ -5,13 +5,9 @@
 // 配信先は未定（第 2 段）なので publish stage は持たない。
 // 冪等 skip は「この hour が蒸留済みか」= 行の存在で判定する。
 
-import { runHourlyJob, type HourlyFeature } from "../../lib/hourly-job.ts";
+import { type HourlyFeature, runHourlyJob } from "../../lib/hourly-job.ts";
 import { openDecisionsDb, recentTitles } from "./db.ts";
-import {
-  insertDecisions,
-  parseDecisionsGenerated,
-  type DecisionsGenerated,
-} from "./insert.ts";
+import { type DecisionsGenerated, insertDecisions, parseDecisionsGenerated } from "./insert.ts";
 
 const isGenerated = (windowStart: string): boolean => {
   const db = openDecisionsDb();

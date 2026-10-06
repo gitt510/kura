@@ -13,9 +13,9 @@
 
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { getHourWindow, type HourWindow } from "../history/query.ts";
-import { resolveHourArgs, type HourTarget } from "./clock.ts";
 import { runSkillJson } from "./agent.ts";
-import { runProvenance, type Provenance } from "./provenance.ts";
+import { type HourTarget, resolveHourArgs } from "./clock.ts";
+import { type Provenance, runProvenance } from "./provenance.ts";
 
 // publish の結果。skipped は正常系（空生成物・配信済み）で、失敗は throw で表す。
 export type PublishResult =
@@ -51,10 +51,7 @@ export function hourlyPlan(
   };
 }
 
-export async function runHourlyJob<T>(
-  feature: HourlyFeature<T>,
-  args: string[],
-): Promise<number> {
+export async function runHourlyJob<T>(feature: HourlyFeature<T>, args: string[]): Promise<number> {
   let target: HourTarget;
   try {
     target = resolveHourArgs(args);
@@ -67,9 +64,7 @@ export async function runHourlyJob<T>(
   const generated = feature.isGenerated(target.windowStart);
   const publishEnabled = feature.publish?.enabled() ?? false;
   const published =
-    publishEnabled && feature.publish
-      ? feature.publish.isPublished(target.windowStart)
-      : false;
+    publishEnabled && feature.publish ? feature.publish.isPublished(target.windowStart) : false;
   const plan = hourlyPlan(generated, publishEnabled, published);
 
   if (!plan.generate && !plan.publish) {

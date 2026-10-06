@@ -10,7 +10,7 @@
 //             span:{start,end}, matched:[kw...], hits, size, snippets:[...]} ] }
 //   ランキング: 一致キーワード種類数 → 新しさ → ヒット数 (降順)。
 
-import { openHistory, type MessageRow } from "./db.ts";
+import { type MessageRow, openHistory } from "./db.ts";
 import { HISTORY_NOISE_PREDICATE } from "./noise.ts";
 
 export interface SearchSnippet {

@@ -7,7 +7,7 @@
 // repo は cwd の完全一致か path 末尾一致 ("kura" は ".../gitt510/kura" に一致)。
 // 別 repo の同名 title を混ぜないため、集約は (cwd, title) 単位。
 
-import { openDecisionsDb, type Decision } from "./db.ts";
+import { type Decision, openDecisionsDb } from "./db.ts";
 
 export interface RecalledDecision extends Decision {
   cwd: string;

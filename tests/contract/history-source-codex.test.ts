@@ -1,15 +1,8 @@
+import { Database } from "bun:sqlite";
 import { afterEach, expect, test } from "bun:test";
-import {
-  existsSync,
-  mkdirSync,
-  mkdtempSync,
-  readFileSync,
-  rmSync,
-  writeFileSync,
-} from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { Database } from "bun:sqlite";
 
 const root = mkdtempSync(join(tmpdir(), "kura-history-source-codex-"));
 const fixture = join(import.meta.dir, "..", "fixtures", "codex.jsonl");
@@ -17,11 +10,7 @@ const cli = join(import.meta.dir, "..", "..", "src", "cli.ts");
 
 afterEach(() => rmSync(root, { recursive: true, force: true }));
 
-function runHook(
-  sessionId: string,
-  extraEnv: Record<string, string> = {},
-  transcript = fixture,
-) {
+function runHook(sessionId: string, extraEnv: Record<string, string> = {}, transcript = fixture) {
   mkdirSync(root, { recursive: true });
   const input = join(root, "hook-input.json");
   writeFileSync(

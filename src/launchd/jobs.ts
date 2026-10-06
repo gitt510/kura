@@ -1,14 +1,7 @@
 #!/usr/bin/env bun
 // jobs.ts — kura の scheduled job と launchd plist の配線を個別に管理する。
 
-import {
-  existsSync,
-  lstatSync,
-  mkdirSync,
-  readlinkSync,
-  symlinkSync,
-  unlinkSync,
-} from "node:fs";
+import { existsSync, lstatSync, mkdirSync, readlinkSync, symlinkSync, unlinkSync } from "node:fs";
 import { join } from "node:path";
 
 type Job = "timeline" | "english" | "decisions";

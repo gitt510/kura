@@ -1,24 +1,11 @@
 // status.ts — setup / feature state の収集、rich 表示、doctor、DB viewer。
 
-import {
-  existsSync,
-  lstatSync,
-  readFileSync,
-  readdirSync,
-  readlinkSync,
-} from "node:fs";
+import { existsSync, lstatSync, readdirSync, readFileSync, readlinkSync } from "node:fs";
 import { join, resolve } from "node:path";
-import {
-  resolveClaudeOptions,
-  resolveCodexOptions,
-  resolveGenerator,
-} from "../lib/agent.ts";
+import { resolveClaudeOptions, resolveCodexOptions, resolveGenerator } from "../lib/agent.ts";
 import { envFilePath } from "../lib/config.ts";
-import {
-  isPublishEnabled,
-  type PublishFeature,
-} from "../lib/publish-policy.ts";
-import { paint, renderTable, stateColor, type Row } from "./terminal.ts";
+import { isPublishEnabled, type PublishFeature } from "../lib/publish-policy.ts";
+import { paint, type Row, renderTable, stateColor } from "./terminal.ts";
 
 type OperationsCommand = "status" | "doctor" | "view-db";
 type State =
@@ -61,9 +48,7 @@ function lstatOrNull(target: string): ReturnType<typeof lstatSync> | null {
 function symlinkState(target: string, expected: string): State {
   const stat = lstatOrNull(target);
   if (!stat) return "MISSING";
-  return stat.isSymbolicLink() && readlinkSync(target) === expected
-    ? "READY"
-    : "UNEXPECTED";
+  return stat.isSymbolicLink() && readlinkSync(target) === expected ? "READY" : "UNEXPECTED";
 }
 
 function managerState(script: string, target: string): State {
@@ -71,9 +56,7 @@ function managerState(script: string, target: string): State {
     env: process.env,
   });
   if (result.exitCode !== 0) return "ERROR";
-  const match = result.stdout.toString().match(
-    new RegExp(`^${target}: (enabled|disabled)$`, "m"),
-  );
+  const match = result.stdout.toString().match(new RegExp(`^${target}: (enabled|disabled)$`, "m"));
   if (match?.[1] === "enabled") return "ENABLED";
   if (match?.[1] === "disabled") return "DISABLED";
   return "ERROR";
@@ -106,8 +89,7 @@ function runtimeSummary(): {
   source: string;
 } {
   const generator = resolveGenerator();
-  const options =
-    generator === "claude" ? resolveClaudeOptions() : resolveCodexOptions();
+  const options = generator === "claude" ? resolveClaudeOptions() : resolveCodexOptions();
   const prefix = generator === "claude" ? "KURA_CLAUDE" : "KURA_CODEX";
   const sources = new Set<Source>([
     sourceOf("KURA_GENERATOR"),
@@ -122,22 +104,14 @@ function runtimeSummary(): {
   };
 }
 
-function tableCell(
-  padded: string,
-  raw: string,
-  _rowIndex: number,
-  columnIndex: number,
-): string {
+function tableCell(padded: string, raw: string, _rowIndex: number, columnIndex: number): string {
   if (columnIndex > 0) return stateColor(raw, padded);
   return padded;
 }
 
 function renderStatus(): number {
   const userHome = home();
-  const stateDir = join(
-    process.env.XDG_STATE_HOME || join(userHome, ".local", "state"),
-    "kura",
-  );
+  const stateDir = join(process.env.XDG_STATE_HOME || join(userHome, ".local", "state"), "kura");
   const runtime = join(userHome, ".local", "share", "kura");
   const cli = join(userHome, ".local", "bin", "kura");
   const cliTarget = join(runtime, "src", "cli.ts");
@@ -148,16 +122,8 @@ function renderStatus(): number {
 
   const setupRows: Row[] = [
     ["cli", symlinkState(cli, cliTarget), displayPath(cli)],
-    [
-      "env",
-      existsSync(environment) ? "PRESENT" : "MISSING",
-      displayPath(environment),
-    ],
-    [
-      "history.db",
-      existsSync(historyDb) ? "PRESENT" : "NOT CREATED",
-      displayPath(historyDb),
-    ],
+    ["env", existsSync(environment) ? "PRESENT" : "MISSING", displayPath(environment)],
+    ["history.db", existsSync(historyDb) ? "PRESENT" : "NOT CREATED", displayPath(historyDb)],
     ["history/claude", managerState(hooks, "claude"), "Stop + UserPromptSubmit hooks"],
     ["history/codex", managerState(hooks, "codex"), "Stop hook"],
   ];
@@ -196,19 +162,10 @@ function renderStatus(): number {
       managerState(jobs, "english"),
       publishState("english"),
     ],
-    [
-      "decisions",
-      databaseState(stateDir, "decisions"),
-      managerState(jobs, "decisions"),
-      "-",
-    ],
+    ["decisions", databaseState(stateDir, "decisions"), managerState(jobs, "decisions"), "-"],
   ];
   process.stdout.write(
-    `${renderTable(
-      ["Feature", "Database", "Schedule", "Publish"],
-      featureRows,
-      tableCell,
-    )}\n`,
+    `${renderTable(["Feature", "Database", "Schedule", "Publish"], featureRows, tableCell)}\n`,
   );
   return 0;
 }
@@ -217,10 +174,7 @@ function renderDoctor(): number {
   const userHome = home();
   const runtime = join(userHome, ".local", "share", "kura");
   const cli = join(userHome, ".local", "bin", "kura");
-  const stateDir = join(
-    process.env.XDG_STATE_HOME || join(userHome, ".local", "state"),
-    "kura",
-  );
+  const stateDir = join(process.env.XDG_STATE_HOME || join(userHome, ".local", "state"), "kura");
   const rows: Row[] = [
     ["bun", "READY", process.execPath],
     ["runtime", symlinkState(runtime, repo), displayPath(runtime)],
@@ -243,10 +197,7 @@ function renderDoctor(): number {
 async function viewDatabase(): Promise<number> {
   const executable = Bun.which("uvx");
   if (!executable) throw new Error("uvx not found — install uv: https://docs.astral.sh/uv/");
-  const stateDir = join(
-    process.env.XDG_STATE_HOME || join(home(), ".local", "state"),
-    "kura",
-  );
+  const stateDir = join(process.env.XDG_STATE_HOME || join(home(), ".local", "state"), "kura");
   const databases = existsSync(stateDir)
     ? readdirSync(stateDir)
         .filter((name) => name.endsWith(".db"))
@@ -254,9 +205,7 @@ async function viewDatabase(): Promise<number> {
         .map((name) => join(stateDir, name))
     : [];
   if (databases.length === 0) throw new Error(`no DB found in ${stateDir}`);
-  process.stdout.write(
-    `opening ${databases.length} db(s) in Datasette (Ctrl-C to stop)\n`,
-  );
+  process.stdout.write(`opening ${databases.length} db(s) in Datasette (Ctrl-C to stop)\n`);
   const child = Bun.spawn([executable, "datasette", "--open", ...databases], {
     env: process.env,
     stdin: "inherit",
@@ -266,10 +215,7 @@ async function viewDatabase(): Promise<number> {
   return await child.exited;
 }
 
-export async function runOperations(
-  command: OperationsCommand,
-  args: string[],
-): Promise<number> {
+export async function runOperations(command: OperationsCommand, args: string[]): Promise<number> {
   if (args.length !== 0) {
     process.stderr.write(`usage: kura ${command}\n`);
     return 2;

@@ -4,19 +4,11 @@
 // writer (insert.ts) / publisher (publish.ts) がここを import して同じ table 形・型を共有する。
 // 読み出し元の会話 raw は別 DB (history/history.db, reader: history/query.ts)。
 
-import { Database } from "bun:sqlite";
-import {
-  legacyDbPath,
-  openStateDatabase,
-  stateDbPath,
-  tableColumns,
-} from "../../lib/storage.ts";
+import type { Database } from "bun:sqlite";
+import { legacyDbPath, openStateDatabase, stateDbPath, tableColumns } from "../../lib/storage.ts";
 
 // schema は code と同居、DB は runtime state に置く。旧 checkout 内 DB は初回 import 時に移行する。
-export const TIMELINE_DB = stateDbPath(
-  "timeline.db",
-  legacyDbPath("timeline", "timeline.db"),
-);
+export const TIMELINE_DB = stateDbPath("timeline.db", legacyDbPath("timeline", "timeline.db"));
 const SCHEMA_SQL = `${import.meta.dir}/schema.sql`;
 
 // timeline 1 件 = ある 1 時間 (JST hour bucket) の 1 行。

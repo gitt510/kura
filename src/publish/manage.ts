@@ -6,8 +6,8 @@ import {
   isPublishEnabled,
   PUBLISH_FEATURES,
   PUBLISH_WEBHOOKS,
-  setPublishEnabled,
   type PublishFeature,
+  setPublishEnabled,
 } from "../lib/publish-policy.ts";
 
 type Action = "enable" | "disable" | "status" | "check";
@@ -38,8 +38,7 @@ if (targetArg === "all") {
   usageError();
 }
 
-const targets: readonly PublishFeature[] =
-  targetArg === "all" ? PUBLISH_FEATURES : [targetArg];
+const targets: readonly PublishFeature[] = targetArg === "all" ? PUBLISH_FEATURES : [targetArg];
 
 if (actionArg === "status" || actionArg === "check") {
   let exitCode = 0;

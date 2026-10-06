@@ -1,7 +1,7 @@
 import { existsSync } from "node:fs";
 import { resolveEnv } from "./config.ts";
 import { KURA_ROOT } from "./storage.ts";
-import { recordUsage, type AgentUsage } from "./usage.ts";
+import { type AgentUsage, recordUsage } from "./usage.ts";
 
 export type Generator = "claude" | "codex";
 // Claude CLI の --effort が受ける 5 段。Codex の 8 段とは語彙が別物なので enum を共有しない。
@@ -245,9 +245,7 @@ export function buildCodexCommand(
     "--sandbox",
     "workspace-write",
     ...(options.model ? ["--model", options.model] : []),
-    ...(options.effort
-      ? ["--config", `model_reasoning_effort="${options.effort}"`]
-      : []),
+    ...(options.effort ? ["--config", `model_reasoning_effort="${options.effort}"`] : []),
     "--json",
     prompt,
   ];
