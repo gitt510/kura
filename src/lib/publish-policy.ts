@@ -1,13 +1,6 @@
 // publish-policy.ts — external publish の明示 opt-in を XDG config で管理する。
 
-import {
-  chmodSync,
-  existsSync,
-  mkdirSync,
-  readFileSync,
-  renameSync,
-  writeFileSync,
-} from "node:fs";
+import { chmodSync, existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 
 type Environment = Readonly<Record<string, string | undefined>>;
@@ -57,10 +50,7 @@ function loadPolicy(env: Environment): PublishPolicy {
   };
 }
 
-export function isPublishEnabled(
-  feature: PublishFeature,
-  env: Environment = process.env,
-): boolean {
+export function isPublishEnabled(feature: PublishFeature, env: Environment = process.env): boolean {
   return loadPolicy(env).enabled.includes(feature);
 }
 

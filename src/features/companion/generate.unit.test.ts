@@ -46,7 +46,11 @@ test("kind 不明や from / to 欠落の要素は落とし、5 件で切る", ()
     { kind: "grammar", from: "What determine", to: "What determines（三単現の -s）" },
     { kind: "romaji", from: "taiou", to: "handle" },
   ]);
-  const many = Array.from({ length: 10 }, (_, i) => ({ kind: "romaji", from: `f${i}`, to: `t${i}` }));
+  const many = Array.from({ length: 10 }, (_, i) => ({
+    kind: "romaji",
+    from: `f${i}`,
+    to: `t${i}`,
+  }));
   expect(parseCardJson(JSON.stringify({ items: many }))).toHaveLength(5);
 });
 

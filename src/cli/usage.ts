@@ -2,7 +2,7 @@
 
 import { existsSync } from "node:fs";
 import { openUsageDb, usageDbPath, usageSummary } from "../lib/usage.ts";
-import { paint, renderTable, type Row } from "./terminal.ts";
+import { paint, type Row, renderTable } from "./terminal.ts";
 
 function usageError(): number {
   process.stderr.write("usage: kura usage [--days=N]\n");

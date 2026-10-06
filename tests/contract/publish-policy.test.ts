@@ -1,11 +1,5 @@
 import { afterEach, beforeEach, expect, test } from "bun:test";
-import {
-  existsSync,
-  mkdtempSync,
-  readFileSync,
-  rmSync,
-  statSync,
-} from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -32,9 +26,7 @@ function run(target: string, action: string, webhook = "") {
 test("publish は default-off で、status は policy file を作らない", () => {
   const result = run("all", "status");
   expect(result.exitCode).toBe(0);
-  expect(result.stdout.toString()).toBe(
-    "timeline: disabled\nenglish: disabled\n",
-  );
+  expect(result.stdout.toString()).toBe("timeline: disabled\nenglish: disabled\n");
   expect(existsSync(join(home, "config", "kura", "publish.json"))).toBe(false);
 });
 

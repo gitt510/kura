@@ -30,8 +30,8 @@ import { existsSync, readFileSync } from "node:fs";
 import {
   insertMessages,
   insertToolUses,
-  openHistory,
   type MessageRow,
+  openHistory,
   type ToolUseRow,
 } from "../db.ts";
 

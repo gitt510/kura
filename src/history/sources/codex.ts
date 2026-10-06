@@ -7,7 +7,7 @@
 
 import { createHash } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
-import { insertMessages, openHistory, type MessageRow } from "../db.ts";
+import { insertMessages, type MessageRow, openHistory } from "../db.ts";
 
 type CodexEvent = {
   type?: string;

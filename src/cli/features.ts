@@ -15,10 +15,7 @@ function usage(command: FeatureCommand): number {
   return 2;
 }
 
-export async function runFeatures(
-  command: FeatureCommand,
-  args: string[],
-): Promise<number> {
+export async function runFeatures(command: FeatureCommand, args: string[]): Promise<number> {
   const [action, feature, extra] = args;
   if (
     (action !== "enable" && action !== "disable") ||

@@ -2,14 +2,10 @@
 // run.ts — english 自動配信の entrypoint。
 // orchestrator (hourly-job) に素材取得・DB 書き込み・配信を委ね、LLM には生成だけ任せる。
 
-import { runHourlyJob, type HourlyFeature } from "../../lib/hourly-job.ts";
+import { type HourlyFeature, runHourlyJob } from "../../lib/hourly-job.ts";
 import { isPublishEnabled } from "../../lib/publish-policy.ts";
 import { openEnglishDb } from "./db.ts";
-import {
-  insertEnglish,
-  parseEnglishGenerated,
-  type EnglishGenerated,
-} from "./insert.ts";
+import { type EnglishGenerated, insertEnglish, parseEnglishGenerated } from "./insert.ts";
 import { publishEnglish } from "./publish.ts";
 
 const isGenerated = (windowStart: string): boolean => {

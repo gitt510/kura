@@ -59,6 +59,8 @@ export function openStateDatabase(path: string, schemaPath: string): Database {
 
 export function tableColumns(db: Database, table: string): Set<string> {
   return new Set(
-    (db.query(`PRAGMA table_info(${table})`).all() as { name: string }[]).map((column) => column.name),
+    (db.query(`PRAGMA table_info(${table})`).all() as { name: string }[]).map(
+      (column) => column.name,
+    ),
   );
 }

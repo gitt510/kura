@@ -12,7 +12,7 @@
 import { Database } from "bun:sqlite";
 import { existsSync } from "node:fs";
 import { HISTORY_DB } from "../../history/db.ts";
-import { hasCard, insertCard, openCompanionDb, recentCards, type CardRow } from "./db.ts";
+import { type CardRow, hasCard, insertCard, openCompanionDb, recentCards } from "./db.ts";
 import { clipInput, shouldSkip } from "./detect.ts";
 import { generateCard, resolveCompanionModel } from "./generate.ts";
 import { startServer } from "./server.ts";
@@ -88,7 +88,9 @@ export async function runCompanion(args: string[]): Promise<number> {
   const companion = openCompanionDb();
 
   process.stdout.write(`kura companion\n`);
-  process.stdout.write(`  watching : ${HISTORY_DB}${sessionPrefix ? ` (session ${sessionPrefix}*)` : ""}\n`);
+  process.stdout.write(
+    `  watching : ${HISTORY_DB}${sessionPrefix ? ` (session ${sessionPrefix}*)` : ""}\n`,
+  );
   process.stdout.write(`  model    : ${resolveCompanionModel()}\n`);
 
   let sink: { broadcast(event: unknown): void };

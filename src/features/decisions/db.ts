@@ -4,7 +4,7 @@
 // writer (insert.ts) と orchestrator (run.ts) がここを import して同じ table 形・型を共有する。
 // 読み出し元の会話 raw は別 DB (history/history.db, reader: history/query.ts)。
 
-import { Database } from "bun:sqlite";
+import type { Database } from "bun:sqlite";
 import { legacyDbPath, openStateDatabase, stateDbPath } from "../../lib/storage.ts";
 
 // schema は code と同居、DB は runtime state に置く。

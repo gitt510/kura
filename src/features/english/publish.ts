@@ -20,13 +20,13 @@
 //
 // schema / 型 / 接続は同居の ./db.ts が所有する。webhook URL は出力に絶対出さない。
 
-import { hourTarget, type HourTarget } from "../../lib/clock.ts";
-import { discordIdentity } from "../../lib/discord-identity.ts";
+import { type HourTarget, hourTarget } from "../../lib/clock.ts";
 import { postDiscord } from "../../lib/discord.ts";
+import { discordIdentity } from "../../lib/discord-identity.ts";
 import { fitDiscordFields } from "../../lib/discord-payload.ts";
 import type { PublishResult } from "../../lib/hourly-job.ts";
 import { parseJsonArray } from "../../lib/json.ts";
-import { markPublished, openEnglishDb, type Card } from "./db.ts";
+import { type Card, markPublished, openEnglishDb } from "./db.ts";
 
 interface Row {
   window_start: string;

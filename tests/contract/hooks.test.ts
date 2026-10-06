@@ -1,12 +1,5 @@
 import { expect, test } from "bun:test";
-import {
-  existsSync,
-  mkdirSync,
-  mkdtempSync,
-  readFileSync,
-  rmSync,
-  writeFileSync,
-} from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 
@@ -26,9 +19,8 @@ function settingsPath(home: string, agent: "claude" | "codex"): string {
 
 function commands(path: string, event = "Stop"): string[] {
   const settings = JSON.parse(readFileSync(path, "utf-8"));
-  return (settings.hooks[event] ?? []).flatMap(
-    (group: { hooks?: { command?: string }[] }) =>
-      (group.hooks ?? []).map((hook) => hook.command ?? ""),
+  return (settings.hooks[event] ?? []).flatMap((group: { hooks?: { command?: string }[] }) =>
+    (group.hooks ?? []).map((hook) => hook.command ?? ""),
   );
 }
 
@@ -80,9 +72,7 @@ test("Stop だけの部分配線は disabled と報告され、enable が全 eve
     path,
     JSON.stringify({
       hooks: {
-        Stop: [
-          { hooks: [{ type: "command", command: '"$HOME/.local/bin/kura" hook claude' }] },
-        ],
+        Stop: [{ hooks: [{ type: "command", command: '"$HOME/.local/bin/kura" hook claude' }] }],
       },
     }),
   );
@@ -121,10 +111,7 @@ test("enable は旧 Claude hook を新 path へ置き換え、無関係な hook 
   );
   try {
     expect(run(home, "claude", "enable").exitCode).toBe(0);
-    expect(commands(path)).toEqual([
-      "echo keep-me",
-      '"$HOME/.local/bin/kura" hook claude',
-    ]);
+    expect(commands(path)).toEqual(["echo keep-me", '"$HOME/.local/bin/kura" hook claude']);
   } finally {
     rmSync(home, { recursive: true, force: true });
   }
@@ -139,9 +126,7 @@ test("all は両方の history hook を status / disable し、enable は拒否�
 
     expect(run(home, "claude", "enable").exitCode).toBe(0);
     expect(run(home, "codex", "enable").exitCode).toBe(0);
-    expect(run(home, "all", "status").stdout.toString()).toBe(
-      "claude: enabled\ncodex: enabled\n",
-    );
+    expect(run(home, "all", "status").stdout.toString()).toBe("claude: enabled\ncodex: enabled\n");
 
     expect(run(home, "all", "enable").exitCode).toBe(2);
     expect(run(home, "all", "disable").exitCode).toBe(0);

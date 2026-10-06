@@ -5,6 +5,8 @@ repo := justfile_directory()
 # Canonical GitHub repo for the maintainer-only apply-github-* recipes. Forks: change this.
 github_repo := "gitt510/kura"
 
+biome := "bunx @biomejs/biome@2.5.15"
+
 # List available recipes.
 _default:
     @just --list --unsorted
@@ -68,6 +70,16 @@ view-db:
 [group('operations')]
 usage *args:
     @bun "{{repo}}/src/cli.ts" usage {{args}}
+
+# Check formatting, import order, and lint rules with Biome (read-only).
+[group('development')]
+check:
+    @{{biome}} check "{{repo}}"
+
+# Apply Biome formatting and safe lint fixes.
+[group('development')]
+fmt:
+    @{{biome}} check --write "{{repo}}"
 
 # Run the full Bun test suite.
 [group('development')]

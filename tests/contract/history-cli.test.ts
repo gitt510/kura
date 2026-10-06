@@ -1,8 +1,8 @@
+import { Database } from "bun:sqlite";
 import { afterEach, beforeEach, expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { Database } from "bun:sqlite";
 
 const cli = join(import.meta.dir, "..", "..", "src", "cli.ts");
 const queryHour = join(import.meta.dir, "..", "..", "src", "history", "query-hour.ts");

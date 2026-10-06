@@ -11,15 +11,15 @@
 // schema / 型 / DB アクセスは同居の ./db.ts が所有する。
 
 import { getHourWindow } from "../../history/query.ts";
-import { hourTarget, type HourTarget } from "../../lib/clock.ts";
+import { type HourTarget, hourTarget } from "../../lib/clock.ts";
 import {
   expectJsonArray,
   expectJsonObject,
   expectJsonString,
   jsonArrayOrNull,
 } from "../../lib/json.ts";
-import { selfProvenance, type Provenance } from "../../lib/provenance.ts";
-import { openDecisionsDb, upsertDecisionsEntry, type Decision } from "./db.ts";
+import { type Provenance, selfProvenance } from "../../lib/provenance.ts";
+import { type Decision, openDecisionsDb, upsertDecisionsEntry } from "./db.ts";
 
 export interface DecisionPack {
   cwd?: string;
@@ -31,11 +31,7 @@ export interface DecisionsGenerated {
   packs?: DecisionPack[] | null;
 }
 
-const DECISION_STATUSES = new Set<Decision["status"]>([
-  "directed",
-  "discussed",
-  "agent-initiated",
-]);
+const DECISION_STATUSES = new Set<Decision["status"]>(["directed", "discussed", "agent-initiated"]);
 
 export function parseDecisionsGenerated(value: unknown): DecisionsGenerated {
   const root = expectJsonObject(value, "decisions");
@@ -45,11 +41,7 @@ export function parseDecisionsGenerated(value: unknown): DecisionsGenerated {
   const packs = expectJsonArray(root.packs, "decisions.packs").map((value, packIndex) => {
     const pack = expectJsonObject(value, `decisions.packs[${packIndex}]`);
     const cwd = expectJsonString(pack.cwd, `decisions.packs[${packIndex}].cwd`);
-    if (
-      pack.intent !== undefined &&
-      pack.intent !== null &&
-      typeof pack.intent !== "string"
-    ) {
+    if (pack.intent !== undefined && pack.intent !== null && typeof pack.intent !== "string") {
       throw new Error(`decisions.packs[${packIndex}].intent must be a string or null`);
     }
 
@@ -65,16 +57,13 @@ export function parseDecisionsGenerated(value: unknown): DecisionsGenerated {
         const decision = expectJsonObject(value, path);
         const status = expectJsonString(decision.status, `${path}.status`);
         if (!DECISION_STATUSES.has(status as Decision["status"])) {
-          throw new Error(
-            `${path}.status must be directed, discussed, or agent-initiated`,
-          );
+          throw new Error(`${path}.status must be directed, discussed, or agent-initiated`);
         }
         const parsed: Decision = {
           title: expectJsonString(decision.title, `${path}.title`),
           status: status as Decision["status"],
-          touches: expectJsonArray(decision.touches, `${path}.touches`).map(
-            (touch, touchIndex) =>
-              expectJsonString(touch, `${path}.touches[${touchIndex}]`),
+          touches: expectJsonArray(decision.touches, `${path}.touches`).map((touch, touchIndex) =>
+            expectJsonString(touch, `${path}.touches[${touchIndex}]`),
           ),
           body: expectJsonString(decision.body, `${path}.body`),
         };

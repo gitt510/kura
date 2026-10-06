@@ -1,12 +1,6 @@
 // config.ts — XDG config の初期化と 1Password materialization。
 
-import {
-  chmodSync,
-  copyFileSync,
-  existsSync,
-  mkdirSync,
-  readFileSync,
-} from "node:fs";
+import { chmodSync, copyFileSync, existsSync, mkdirSync, readFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 
 type ConfigCommand = "init-env" | "bake-env";

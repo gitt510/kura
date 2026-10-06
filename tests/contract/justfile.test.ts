@@ -206,12 +206,9 @@ test("status は setup と features を表形式で表示する", () => {
     mkdirSync(configDir, { recursive: true });
     writeFileSync(
       join(configDir, "env"),
-      [
-        "KURA_GENERATOR=codex",
-        "KURA_CODEX_MODEL=gpt-test",
-        "KURA_CODEX_EFFORT=high",
-        "",
-      ].join("\n"),
+      ["KURA_GENERATOR=codex", "KURA_CODEX_MODEL=gpt-test", "KURA_CODEX_EFFORT=high", ""].join(
+        "\n",
+      ),
     );
     writeFileSync(
       join(configDir, "publish.json"),

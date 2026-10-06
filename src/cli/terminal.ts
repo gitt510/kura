@@ -18,8 +18,10 @@ export type CellFormatter = (
 ) => string;
 
 export function createPaint(enabled: boolean): Paint {
-  const wrap = (open: number, close: number) => (text: string): string =>
-    enabled ? `\u001b[${open}m${text}\u001b[${close}m` : text;
+  const wrap =
+    (open: number, close: number) =>
+    (text: string): string =>
+      enabled ? `\u001b[${open}m${text}\u001b[${close}m` : text;
   return {
     bold: wrap(1, 22),
     dim: wrap(2, 22),

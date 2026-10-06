@@ -140,12 +140,8 @@ test("Codex command は model / effort をその invocation だけに上書き�
 });
 
 test("agent ごとの明示的な skill 呼び出しを組み立てる", () => {
-  expect(skillPrompt("claude", "decisions", ["2026-07-17", "14"])).toBe(
-    "/decisions 2026-07-17 14",
-  );
-  expect(skillPrompt("codex", "decisions", ["2026-07-17", "14"])).toBe(
-    "$decisions 2026-07-17 14",
-  );
+  expect(skillPrompt("claude", "decisions", ["2026-07-17", "14"])).toBe("/decisions 2026-07-17 14");
+  expect(skillPrompt("codex", "decisions", ["2026-07-17", "14"])).toBe("$decisions 2026-07-17 14");
 });
 
 test("Claude の単一 JSON から結果と model を読む", () => {

@@ -10,15 +10,15 @@
 // schema / 型 / DB アクセスは同居の ./db.ts が所有する。
 
 import { getHourWindow } from "../../history/query.ts";
-import { hourTarget, type HourTarget } from "../../lib/clock.ts";
+import { type HourTarget, hourTarget } from "../../lib/clock.ts";
 import {
   expectJsonArray,
   expectJsonObject,
   expectJsonString,
   jsonArrayOrNull,
 } from "../../lib/json.ts";
-import { selfProvenance, type Provenance } from "../../lib/provenance.ts";
-import { openEnglishDb, upsertEnglishEntry, type Card, type EnglishEntry } from "./db.ts";
+import { type Provenance, selfProvenance } from "../../lib/provenance.ts";
+import { type Card, type EnglishEntry, openEnglishDb, upsertEnglishEntry } from "./db.ts";
 
 export interface EnglishGenerated {
   cards?: Card[] | null;

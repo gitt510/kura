@@ -3,13 +3,10 @@
 // このファイルが schema owner: openCompanionDb() が schema.sql を冪等に適用する。
 // writer / reader は run.ts のみ。読み出し元の会話 raw は別 DB (history/history.db)。
 
-import { Database } from "bun:sqlite";
+import type { Database } from "bun:sqlite";
 import { legacyDbPath, openStateDatabase, stateDbPath, tableColumns } from "../../lib/storage.ts";
 
-export const COMPANION_DB = stateDbPath(
-  "companion.db",
-  legacyDbPath("companion", "companion.db"),
-);
+export const COMPANION_DB = stateDbPath("companion.db", legacyDbPath("companion", "companion.db"));
 const SCHEMA_SQL = `${import.meta.dir}/schema.sql`;
 
 // 1 card = user が agent に打った 1 prompt への英語 feedback。

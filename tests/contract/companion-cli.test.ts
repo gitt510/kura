@@ -58,23 +58,18 @@ test("port が使用中なら案内して終了する", async () => {
       env: { ...process.env, XDG_STATE_HOME: root },
     });
 
-    const child = Bun.spawn(
-      [process.execPath, cli, "companion", `--port=${blocker.port}`],
-      {
-        env: { ...process.env, XDG_STATE_HOME: root },
-        stdout: "ignore",
-        stderr: "pipe",
-      },
-    );
+    const child = Bun.spawn([process.execPath, cli, "companion", `--port=${blocker.port}`], {
+      env: { ...process.env, XDG_STATE_HOME: root },
+      stdout: "ignore",
+      stderr: "pipe",
+    });
     const exitCode = await Promise.race([
       child.exited,
       new Promise<null>((resolve) => setTimeout(() => resolve(null), 4000)),
     ]);
     if (exitCode === null) child.kill();
     expect(exitCode).toBe(1);
-    expect(await new Response(child.stderr).text()).toContain(
-      `port ${blocker.port} is in use`,
-    );
+    expect(await new Response(child.stderr).text()).toContain(`port ${blocker.port} is in use`);
   } finally {
     blocker.stop(true);
     rmSync(root, { recursive: true, force: true });

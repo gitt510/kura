@@ -1,8 +1,8 @@
+import { Database } from "bun:sqlite";
 import { afterEach, expect, test } from "bun:test";
 import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { Database } from "bun:sqlite";
 
 const root = mkdtempSync(join(tmpdir(), "kura-history-source-claude-"));
 const fixture = join(import.meta.dir, "..", "fixtures", "claude.jsonl");
@@ -10,11 +10,7 @@ const cli = join(import.meta.dir, "..", "..", "src", "cli.ts");
 
 afterEach(() => rmSync(root, { recursive: true, force: true }));
 
-function runHook(
-  sessionId: string,
-  extraEnv: Record<string, string> = {},
-  transcript = fixture,
-) {
+function runHook(sessionId: string, extraEnv: Record<string, string> = {}, transcript = fixture) {
   mkdirSync(root, { recursive: true });
   const input = join(root, "hook-input.json");
   writeFileSync(
@@ -139,7 +135,9 @@ test("Claude tool-use input を保存する", () => {
 
 test("KURA_NO_HISTORY=1 なら Claude history を保存しない", () => {
   expect(runHook("claude-no-history", { KURA_NO_HISTORY: "1" }).exitCode).toBe(0);
-  expect(runPromptHook("claude-no-history", "prompt", "p-1", { KURA_NO_HISTORY: "1" }).exitCode).toBe(0);
+  expect(
+    runPromptHook("claude-no-history", "prompt", "p-1", { KURA_NO_HISTORY: "1" }).exitCode,
+  ).toBe(0);
   expect(existsSync(join(root, "kura", "history.db"))).toBe(false);
 });
 
@@ -160,7 +158,9 @@ test("command 入力と空入力は仮 row にしない", () => {
 });
 
 test("Stop scan は promptId の一致する仮 row を verbatim row に差し替える", () => {
-  expect(runPromptHook("claude-fixture", "fixture user message (draft)", "claude-prompt-1").exitCode).toBe(0);
+  expect(
+    runPromptHook("claude-fixture", "fixture user message (draft)", "claude-prompt-1").exitCode,
+  ).toBe(0);
   expect(runHook("claude-fixture").exitCode).toBe(0);
   expect(runHook("claude-fixture").exitCode).toBe(0);
   const rows = promptRows();
