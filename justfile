@@ -46,11 +46,6 @@ publish action feature:
 teardown:
     @bun "{{repo}}/src/cli.ts" teardown
 
-# Check the runtime and optional integration state.
-[group('operations')]
-doctor:
-    @bun "{{repo}}/src/cli.ts" doctor
-
 # Show setup and feature state.
 [group('operations')]
 status:
@@ -59,7 +54,13 @@ status:
 # Browse the state DBs in a local Datasette web UI (read-only). Runs via uvx; nothing installed.
 [group('operations')]
 view-db:
-    @bun "{{repo}}/src/cli.ts" view-db
+    #!/usr/bin/env bash
+    set -euo pipefail
+    command -v uvx >/dev/null || { echo "error: uvx not found — install uv: https://docs.astral.sh/uv/"; exit 1; }
+    shopt -s nullglob
+    dbs=("${XDG_STATE_HOME:-$HOME/.local/state}"/kura/*.db)
+    (( ${#dbs[@]} )) || { echo "error: no DB found in ${XDG_STATE_HOME:-$HOME/.local/state}/kura"; exit 1; }
+    exec uvx datasette --open "${dbs[@]}"
 
 # Show LLM token usage and cost per feature.
 [group('operations')]

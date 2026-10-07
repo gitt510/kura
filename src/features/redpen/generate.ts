@@ -38,8 +38,8 @@ export interface GenerateResult {
 }
 
 // 速さより質 — parts の切り方と訳語の自然さが価値なので既定は opus。
-export function resolveEnglishCardModel(config: KuraConfig = loadConfig()): string {
-  return config["english-card"].model;
+export function resolveRedpenModel(config: KuraConfig = loadConfig()): string {
+  return config["redpen"].model;
 }
 
 const CONTEXT_CLIP = 1200;
@@ -99,10 +99,10 @@ export function parseCardJson(result: string): CardItem[] | null {
 }
 
 export async function generateCard(job: GenerateInput): Promise<GenerateResult> {
-  const model = resolveEnglishCardModel();
+  const model = resolveRedpenModel();
   let run;
   try {
-    run = await runClaudePrompt("english-card", buildPrompt(job), model);
+    run = await runClaudePrompt("redpen", buildPrompt(job), model);
   } catch {
     return { items: null, model, status: "error" }; // claude CLI が無い
   }
@@ -112,7 +112,7 @@ export async function generateCard(job: GenerateInput): Promise<GenerateResult> 
     // card は "generation failed" のまま、原因は起動 terminal 側で診断できるようにする。
     const reason = run.stderr.trim().split("\n").pop() ?? "";
     process.stderr.write(
-      `english-card generate failed (exit ${run.exitCode})${reason ? `: ${reason}` : ""}\n`,
+      `redpen generate failed (exit ${run.exitCode})${reason ? `: ${reason}` : ""}\n`,
     );
     return { items: null, model: run.model, status: "error" };
   }

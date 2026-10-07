@@ -2,7 +2,7 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <!--
   kura.english — 毎時 HH:05 に english job を起動する。
-  run.ts が「直近の完了 hour」を解決し、空き hour / publish 済みは自前で skip する。
+  `kura <feature>` が「直近の完了 hour」を解決し、空き hour / publish 済みは自前で skip する。
   HH:00 の timeline と agent boot がぶつからないよう 5 分ずらす。
 
   machine 非依存: launchd は plist の絶対パスに $HOME/~ を展開しないので、
@@ -22,7 +22,7 @@
   <array>
     <string>/bin/bash</string>
     <string>-c</string>
-    <string>exec "$HOME/.local/share/kura/src/launchd/run.sh" english src/features/english/run.ts</string>
+    <string>exec "$HOME/.local/share/kura/src/launchd/run.sh" english</string>
   </array>
 
   <!-- Minute=5 = 毎時 HH:05 に発火 (24h)。idle hour は tick が無コストで skip。 -->

@@ -112,17 +112,4 @@ test("hook boundary は public help に表示しない", () => {
   const result = Bun.spawnSync([process.execPath, cli, "--help"]);
   expect(result.exitCode).toBe(0);
   expect(result.stdout.toString()).not.toContain("kura hook");
-  expect(result.stdout.toString()).not.toContain("kura ingest");
-});
-
-test("running session が保持する旧 hook command も無音で処理する", () => {
-  expect(runHook("codex-legacy-hook").exitCode).toBe(0);
-  const input = join(root, "hook-input.json");
-  const result = Bun.spawnSync([process.execPath, cli, "ingest", "codex"], {
-    stdin: Bun.file(input),
-    env: { ...process.env, XDG_STATE_HOME: root },
-  });
-  expect(result.exitCode).toBe(0);
-  expect(result.stdout.toString()).toBe("");
-  expect(result.stderr.toString()).toBe("");
 });

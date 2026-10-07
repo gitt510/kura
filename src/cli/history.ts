@@ -2,7 +2,7 @@
 
 import { join, resolve } from "node:path";
 
-type HistoryCommand = "history" | "hook" | "ingest" | "search" | "show";
+type HistoryCommand = "history" | "hook" | "search" | "show";
 
 const repo = resolve(import.meta.dir, "../..");
 
@@ -10,7 +10,6 @@ function usage(command: HistoryCommand): number {
   const lines: Record<HistoryCommand, string> = {
     history: "usage: kura history <enable|disable> <claude|codex|all>\n",
     hook: "usage: kura hook <claude|codex>\n",
-    ingest: "usage: kura hook <claude|codex>\n",
     search: "usage: kura search [--limit=N] <keyword...>\n",
     show: "usage: kura show <session-id-or-prefix>\n",
   };
@@ -41,9 +40,8 @@ export async function runHistory(command: HistoryCommand, args: string[]): Promi
     return runScript(join(repo, "src", "history", "hooks.ts"), [source, action]);
   }
 
-  // Running sessions can retain the previous Stop-hook command in memory after
-  // hooks.json changes. Keep that hidden boundary working until the session exits.
-  if (command === "hook" || command === "ingest") {
+  // agent の hook が呼ぶ内部の入口。usage には載せない。
+  if (command === "hook") {
     const [agent, extra] = args;
     if ((agent !== "claude" && agent !== "codex") || extra !== undefined) {
       return usage(command);

@@ -28,31 +28,18 @@ if (!home) throw new Error("HOME is required");
 
 const agents = ["claude", "codex"] as const;
 const actions = ["enable", "disable", "status", "check"] as const;
-const configs: Record<
-  Agent,
-  { label: string; path: string; command: string; events: string[]; owned: string[] }
-> = {
+const configs: Record<Agent, { label: string; path: string; command: string; events: string[] }> = {
   claude: {
     label: "Claude",
     path: `${home}/.claude/settings.json`,
     command: '"$HOME/.local/bin/kura" hook claude',
     events: ["Stop", "UserPromptSubmit"],
-    owned: [
-      '/.local/bin/kura" ingest claude',
-      "/kura/src/history/ingest/claude.ts",
-      "/kura/history/ingest.ts",
-    ],
   },
   codex: {
     label: "Codex",
     path: `${home}/.codex/hooks.json`,
     command: '"$HOME/.local/bin/kura" hook codex',
     events: ["Stop"],
-    owned: [
-      '/.local/bin/kura" ingest codex',
-      "/kura/src/history/ingest/codex.ts",
-      "/kura/history/ingest-codex.ts",
-    ],
   },
 };
 
@@ -129,10 +116,7 @@ function manage(agent: Agent, action: Action): number {
   }
 
   const isOurs = (hook: Hook): boolean =>
-    hook.type === "command" &&
-    typeof hook.command === "string" &&
-    (hook.command === config.command ||
-      config.owned.some((fragment) => hook.command!.includes(fragment)));
+    hook.type === "command" && hook.command === config.command;
 
   settings.hooks ??= {};
   for (const event of config.events) {

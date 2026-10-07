@@ -2,7 +2,7 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <!--
   kura.timeline — 毎時 HH:00 に timeline job を起動する。
-  run.ts が「直近の完了 hour」を解決し、空き hour / publish 済みは自前で skip する。
+  `kura <feature>` が「直近の完了 hour」を解決し、空き hour / publish 済みは自前で skip する。
 
   machine 非依存: launchd は plist の絶対パスに $HOME/~ を展開しないので、
   ProgramArguments は bash -c 経由で実行時に $HOME を解決させる
@@ -21,7 +21,7 @@
   <array>
     <string>/bin/bash</string>
     <string>-c</string>
-    <string>exec "$HOME/.local/share/kura/src/launchd/run.sh" timeline src/features/timeline/run.ts</string>
+    <string>exec "$HOME/.local/share/kura/src/launchd/run.sh" timeline</string>
   </array>
 
   <!-- Minute=0 のみ指定 = 毎時 HH:00 に発火 (24h)。idle hour は tick が無コストで skip。 -->

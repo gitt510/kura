@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import { parseConfig } from "../../lib/config.ts";
-import { buildPrompt, parseCardJson, resolveEnglishCardModel } from "./generate.ts";
+import { buildPrompt, parseCardJson, resolveRedpenModel } from "./generate.ts";
 
 test("prompt は入力 / 直前の assistant 文脈 / 3 種類の item 契約を含み、言語は指定しない", () => {
   const prompt = buildPrompt({ input: "これを直して", context: "I fixed auth.ts" });
@@ -57,13 +57,11 @@ test("kind 不明や from / to 欠落の要素は落とし、5 件で切る", ()
   expect(parseCardJson(JSON.stringify({ items: many }))).toHaveLength(5);
 });
 
-test("model は config の english-card.model、無ければ opus", () => {
+test("model は config の redpen.model、無ければ opus", () => {
   const config = parseConfig({}, "config.json");
-  expect(resolveEnglishCardModel(config)).toBe("opus");
-  expect(
-    resolveEnglishCardModel(parseConfig({ "english-card": { model: "sonnet" } }, "config.json")),
-  ).toBe("sonnet");
-  expect(
-    resolveEnglishCardModel(parseConfig({ "english-card": { model: "  " } }, "config.json")),
-  ).toBe("opus");
+  expect(resolveRedpenModel(config)).toBe("opus");
+  expect(resolveRedpenModel(parseConfig({ redpen: { model: "sonnet" } }, "config.json"))).toBe(
+    "sonnet",
+  );
+  expect(resolveRedpenModel(parseConfig({ redpen: { model: "  " } }, "config.json"))).toBe("opus");
 });

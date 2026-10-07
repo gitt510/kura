@@ -49,7 +49,7 @@ just setup
 ```bash
 just history enable claude
 just history enable codex
-just doctor
+just status
 ```
 
 - History storage is enabled per agent
@@ -98,7 +98,8 @@ $EDITOR "${XDG_CONFIG_HOME:-$HOME/.config}/kura/config.json"
   "generator": "claude",
   "claude": { "model": null, "effort": null },
   "codex": { "model": null, "effort": null },
-  "english-card": { "model": "opus" },
+  "redpen": { "model": "opus" },
+  "tldr": { "model": "opus" },
   "discord": {
     "webhooks": { "english": "op://vault/item/field", "timeline": "https://discord.com/api/webhooks/..." },
     "avatars": { "claude": "https://...", "gpt": "https://..." }
@@ -112,7 +113,8 @@ $EDITOR "${XDG_CONFIG_HOME:-$HOME/.config}/kura/config.json"
 | `generator` | Scheduled generation agent: `claude` (default) or `codex` |
 | `claude.model` / `claude.effort` | Claude model / effort for scheduled generation |
 | `codex.model` / `codex.effort` | Codex model / reasoning effort for scheduled generation |
-| `english-card.model` | English feedback card model (default `opus`) |
+| `redpen.model` | English feedback card model (default `opus`) |
+| `tldr.model` | Three-line answer summary model (default `opus`) |
 | `discord.webhooks.<feature>` | Discord webhook for `english` / `timeline` |
 | `discord.avatars.<family>` | Discord avatar per model family (`claude`, `gpt`, …) |
 | `publish.enabled` | Features with Discord delivery opted in |
@@ -142,7 +144,7 @@ kura show <session-id-or-prefix>
 - These commands return JSON
 
 ```bash
-echo "I make mod. kono houhou is good" | kura english-card
+echo "I make mod. kono houhou is good" | kura redpen
 ```
 
 - Prints one English feedback card for the prompt on stdin as JSON:
@@ -157,6 +159,27 @@ echo "I make mod. kono houhou is good" | kura english-card
   `{"status":"skipped"}` without calling the model
 - Generation runs headless Claude with `KURA_NO_HISTORY=1`, so it is not
   recorded as history
+
+```bash
+echo '{"turns": [{"question": "...", "answer": "..."}]}' | kura tldr
+```
+
+- Prints the last turn's answer compressed into three lines as JSON:
+  `{status, model, text}`; nothing is stored
+- `turns` is oldest first; up to 3 turns before the last one are passed as
+  context
+- Invalid stdin exits 2 without calling the model
+- Generation runs headless Claude with `KURA_NO_HISTORY=1`, like `redpen`
+
+```bash
+kura timeline [<YYYY-MM-DD> <hour 0-23>]
+kura english [<YYYY-MM-DD> <hour 0-23>]
+```
+
+- Generates, stores, and (when opted in) publishes one JST hour; without
+  arguments, the last completed hour
+- The scheduled jobs run these same commands; an hour already generated or
+  published is skipped
 
 ```bash
 kura usage [--days=N]
@@ -175,7 +198,7 @@ just usage --days=7
 - Cost comes from the agent's own output: the Claude CLI reports it, Codex's
   public events carry token counts only, so Codex rows show `-`
 - With `"generator": "codex"`, every scheduled feature shows `-`;
-  `english-card` always runs Claude and always reports cost
+  `redpen` and `tldr` always run Claude and always report cost
 - Claude's figure is what the API would charge for those tokens; under a
   subscription plan it is not an additional charge
 - Recording is fail-open: a storage failure prints one line and never fails
@@ -185,7 +208,8 @@ just usage --days=7
 | --- | --- | --- |
 | `timeline` | Activity timeline | Hourly at `:00` |
 | `english` | English learning card | Hourly at `:05` |
-| `english-card` | Nothing — prints one card as JSON | None — on demand `kura english-card` |
+| `redpen` | Nothing — prints one card as JSON | None — on demand `kura redpen` |
+| `tldr` | Nothing — prints three lines as JSON | None — on demand `kura tldr` |
 
 ```bash
 just schedule enable timeline

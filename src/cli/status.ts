@@ -1,13 +1,12 @@
-// status.ts — setup / feature state の収集、rich 表示、doctor、DB viewer。
+// status.ts — setup / feature state の収集と rich 表示。
 
-import { existsSync, lstatSync, readdirSync, readlinkSync } from "node:fs";
+import { existsSync, lstatSync, readlinkSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { resolveClaudeOptions, resolveCodexOptions, resolveGenerator } from "../lib/agent.ts";
 import { configPath } from "../lib/config.ts";
 import { isPublishEnabled, type PublishFeature } from "../lib/publish-policy.ts";
 import { paint, type Row, renderTable, stateColor } from "./terminal.ts";
 
-type OperationsCommand = "status" | "doctor" | "view-db";
 type State =
   | "READY"
   | "PRESENT"
@@ -106,6 +105,7 @@ function renderStatus(): number {
   const config = configPath();
 
   const setupRows: Row[] = [
+    ["runtime", symlinkState(runtime, repo), displayPath(runtime)],
     ["cli", symlinkState(cli, cliTarget), displayPath(cli)],
     ["config", existsSync(config) ? "PRESENT" : "MISSING", displayPath(config)],
     ["history.db", existsSync(historyDb) ? "PRESENT" : "NOT CREATED", displayPath(historyDb)],
@@ -154,57 +154,10 @@ function renderStatus(): number {
   return 0;
 }
 
-function renderDoctor(): number {
-  const userHome = home();
-  const runtime = join(userHome, ".local", "share", "kura");
-  const cli = join(userHome, ".local", "bin", "kura");
-  const stateDir = join(process.env.XDG_STATE_HOME || join(userHome, ".local", "state"), "kura");
-  const rows: Row[] = [
-    ["bun", "READY", process.execPath],
-    ["runtime", symlinkState(runtime, repo), displayPath(runtime)],
-    ["cli", symlinkState(cli, join(runtime, "src", "cli.ts")), displayPath(cli)],
-    ["state", existsSync(stateDir) ? "PRESENT" : "NOT CREATED", displayPath(stateDir)],
-  ];
-  process.stdout.write(`${paint.bold("Doctor")}\n`);
-  process.stdout.write(
-    `${renderTable(["Component", "State", "Detail"], rows, (cell, raw, row, column) =>
-      column === 2 ? paint.dim(cell) : tableCell(cell, raw, row, column),
-    )}\n`,
-  );
-  const healthy = rows.slice(0, 3).every((row) => row[1] === "READY");
-  process.stdout.write(
-    `\n${healthy ? paint.green(paint.bold("HEALTHY")) : paint.red(paint.bold("NEEDS SETUP"))}\n`,
-  );
-  return healthy ? 0 : 1;
-}
-
-async function viewDatabase(): Promise<number> {
-  const executable = Bun.which("uvx");
-  if (!executable) throw new Error("uvx not found — install uv: https://docs.astral.sh/uv/");
-  const stateDir = join(process.env.XDG_STATE_HOME || join(home(), ".local", "state"), "kura");
-  const databases = existsSync(stateDir)
-    ? readdirSync(stateDir)
-        .filter((name) => name.endsWith(".db"))
-        .sort()
-        .map((name) => join(stateDir, name))
-    : [];
-  if (databases.length === 0) throw new Error(`no DB found in ${stateDir}`);
-  process.stdout.write(`opening ${databases.length} db(s) in Datasette (Ctrl-C to stop)\n`);
-  const child = Bun.spawn([executable, "datasette", "--open", ...databases], {
-    env: process.env,
-    stdin: "inherit",
-    stdout: "inherit",
-    stderr: "inherit",
-  });
-  return await child.exited;
-}
-
-export async function runOperations(command: OperationsCommand, args: string[]): Promise<number> {
+export function runStatus(args: string[]): number {
   if (args.length !== 0) {
-    process.stderr.write(`usage: kura ${command}\n`);
+    process.stderr.write("usage: kura status\n");
     return 2;
   }
-  if (command === "status") return renderStatus();
-  if (command === "doctor") return renderDoctor();
-  return await viewDatabase();
+  return renderStatus();
 }
