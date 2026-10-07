@@ -3,7 +3,7 @@ import type { Row } from "./terminal.ts";
 import { fitToWidth, truncate } from "./usage.ts";
 
 const body: Row[] = [
-  ["companion", "claude-haiku-4-5-20251001", "17", "170", "15,982"],
+  ["english-card", "claude-haiku-4-5-20251001", "17", "170", "15,982"],
   ["timeline", "gpt-5.6-sol", "1", "110,563", "1,477"],
   ["TOTAL", "-", "18", "110,733", "17,459"],
 ];
@@ -23,7 +23,7 @@ test("端末幅が不明なら詰めない (非 TTY や pipe 出力)", () => {
 
 test("溢れた分だけ model 列を詰める — 他の列は触らない", () => {
   const fitted = fitToWidth(body, 106, 98);
-  expect(fitted[0]).toEqual(["companion", "claude-haiku-4-5…", "17", "170", "15,982"]);
+  expect(fitted[0]).toEqual(["english-card", "claude-haiku-4-5…", "17", "170", "15,982"]);
   expect(fitted[1]).toEqual(["timeline", "gpt-5.6-sol", "1", "110,563", "1,477"]);
 });
 

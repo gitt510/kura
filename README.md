@@ -98,7 +98,7 @@ $EDITOR "${XDG_CONFIG_HOME:-$HOME/.config}/kura/config.json"
   "generator": "claude",
   "claude": { "model": null, "effort": null },
   "codex": { "model": null, "effort": null },
-  "companion": { "model": "opus" },
+  "english-card": { "model": "opus" },
   "discord": {
     "webhooks": { "english": "op://vault/item/field", "timeline": "https://discord.com/api/webhooks/..." },
     "avatars": { "claude": "https://...", "gpt": "https://..." }
@@ -112,7 +112,7 @@ $EDITOR "${XDG_CONFIG_HOME:-$HOME/.config}/kura/config.json"
 | `generator` | Scheduled generation agent: `claude` (default) or `codex` |
 | `claude.model` / `claude.effort` | Claude model / effort for scheduled generation |
 | `codex.model` / `codex.effort` | Codex model / reasoning effort for scheduled generation |
-| `companion.model` | Companion card model (default `opus`) |
+| `english-card.model` | English feedback card model (default `opus`) |
 | `discord.webhooks.<feature>` | Discord webhook for `english` / `timeline` |
 | `discord.avatars.<family>` | Discord avatar per model family (`claude`, `gpt`, …) |
 | `publish.enabled` | Features with Discord delivery opted in |
@@ -137,39 +137,26 @@ just bake-secrets
 ```bash
 kura search sqlite schema
 kura show <session-id-or-prefix>
-kura decisions <repo>
 ```
 
 - These commands return JSON
-- `kura decisions` returns the stored decisions whose working directory
-  matches `<repo>` by path suffix, one entry per title with the newest
-  content, newest first
 
 ```bash
-kura companion [--tui] [--port=N] [--session=<prefix>]
+echo "I make mod. kono houhou is good" | kura english-card
 ```
 
-- Watches history.db for user prompts submitted after startup and serves
-  English feedback cards at `http://127.0.0.1:4989` (opens the browser on
-  macOS; live updates over SSE)
-- `--tui` logs cards to the terminal instead of starting a server: every line
-  starts with a label — `[meta]` (`yyyy-mm-dd hh:mm:ss · project · branch`),
-  `[input]`, then a `[status] processing …` placeholder replaced in place by
-  the item lines, `[done] nothing to flag`, or `[error]` once generated
-- One prompt = one card of `from → to` items, at most 5, no full translation
-  or rewrite: `[romaji]` Japanese written in Latin letters → English,
-  `[grammar]` a meaning-changing grammar mistake → the fix, `[natural]`
-  grammatical but unnatural English → how a native developer says it
+- Prints one English feedback card for the prompt on stdin as JSON:
+  `{status, model, items}`; nothing is stored
+- One prompt = at most 5 `from → to` items, no full translation or rewrite:
+  `romaji` Japanese written in Latin letters → English, `grammar` a
+  meaning-changing grammar mistake → the fix, `natural` grammatical but
+  unnatural English → how a native developer says it
 - Japanese written in kana / kanji, typos, spelling, and articles are never
-  items; a prompt with nothing to report shows only its `[input]` line
-- Cards are stored in `companion.db` before delivery; a page restart replays
-  the latest 50 from storage (the TUI starts empty)
-- Requires an enabled history source; Claude prompts arrive at submit time,
-  Codex prompts at turn end
-- Card generation runs headless Claude with `KURA_NO_HISTORY=1`, so companion
-  runs are not recorded as history
-- `companion` has no schedule and no Discord publish; it works only while the
-  process is running
+  items; `to` is English only, with no explanation or rule name
+- Prompts under 3 characters or starting with `<`, `/` or `!` print
+  `{"status":"skipped"}` without calling the model
+- Generation runs headless Claude with `KURA_NO_HISTORY=1`, so it is not
+  recorded as history
 
 ```bash
 kura usage [--days=N]
@@ -187,8 +174,8 @@ just usage --days=7
   connection) reports no token counts and records nothing
 - Cost comes from the agent's own output: the Claude CLI reports it, Codex's
   public events carry token counts only, so Codex rows show `-`
-- With `"generator": "codex"`, every scheduled feature shows `-`; `companion`
-  always runs Claude and always reports cost
+- With `"generator": "codex"`, every scheduled feature shows `-`;
+  `english-card` always runs Claude and always reports cost
 - Claude's figure is what the API would charge for those tokens; under a
   subscription plan it is not an additional charge
 - Recording is fail-open: a storage failure prints one line and never fails
@@ -198,8 +185,7 @@ just usage --days=7
 | --- | --- | --- |
 | `timeline` | Activity timeline | Hourly at `:00` |
 | `english` | English learning card | Hourly at `:05` |
-| `decisions` | Code decisions per repo | Hourly at `:10` |
-| `companion` | Live English feedback cards | None — ad-hoc `kura companion` |
+| `english-card` | Nothing — prints one card as JSON | None — on demand `kura english-card` |
 
 ```bash
 just schedule enable timeline

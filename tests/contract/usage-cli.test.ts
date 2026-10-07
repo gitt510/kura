@@ -57,8 +57,8 @@ test("記録が無ければ案内だけ出して正常終了する", () => {
 test("feature ごとの合計と TOTAL を表で出す", () => {
   const root = mkdtempSync(join(tmpdir(), "kura-usage-table-"));
   try {
-    seed(root, "companion", new Date().toISOString());
-    seed(root, "companion", new Date().toISOString());
+    seed(root, "english-card", new Date().toISOString());
+    seed(root, "english-card", new Date().toISOString());
     seed(root, "timeline", new Date().toISOString());
 
     const result = run([], root);
@@ -66,7 +66,7 @@ test("feature ごとの合計と TOTAL を表で出す", () => {
     expect(result.exitCode).toBe(0);
     expect(text).toContain("Usage");
     expect(text).toMatch(
-      /companion\s+│ claude-haiku-4-5\s+│ 2\s+│ 20\s+│ 80\s+│ 2,000\s+│ 200\s+│ 0\.0252/,
+      /english-card\s+│ claude-haiku-4-5\s+│ 2\s+│ 20\s+│ 80\s+│ 2,000\s+│ 200\s+│ 0\.0252/,
     );
     expect(text).toMatch(/timeline\s+│ claude-haiku-4-5\s+│ 1\s+│/);
     expect(text).toMatch(/TOTAL\s+│ -\s+│ 3\s+│ 30\s+│ 120\s+│ 3,000\s+│ 300\s+│ 0\.0378/);
@@ -78,15 +78,15 @@ test("feature ごとの合計と TOTAL を表で出す", () => {
 test("--days は期間外の call を除外する", () => {
   const root = mkdtempSync(join(tmpdir(), "kura-usage-days-"));
   try {
-    seed(root, "companion", new Date().toISOString());
-    seed(root, "english", "2026-01-01T00:00:00.000Z");
+    seed(root, "english-card", new Date().toISOString());
+    seed(root, "timeline", "2026-01-01T00:00:00.000Z");
 
     const result = run(["--days=7"], root);
     const text = result.stdout.toString();
     expect(result.exitCode).toBe(0);
     expect(text).toContain("(last 7 days)");
-    expect(text).toContain("companion");
-    expect(text).not.toContain("english");
+    expect(text).toContain("english-card");
+    expect(text).not.toContain("timeline");
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

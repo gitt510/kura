@@ -147,7 +147,6 @@ function renderStatus(): number {
       managerState(jobs, "english"),
       publishState("english"),
     ],
-    ["decisions", databaseState(stateDir, "decisions"), managerState(jobs, "decisions"), "-"],
   ];
   process.stdout.write(
     `${renderTable(["Feature", "Database", "Schedule", "Publish"], featureRows, tableCell)}\n`,

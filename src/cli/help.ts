@@ -25,7 +25,7 @@ Toggle conversation recording per agent by installing or removing the
 agent hooks (claude: Stop + UserPromptSubmit, codex: Stop) that write
 into history.db.
 `,
-  schedule: `usage: kura schedule <enable|disable> <timeline|english|decisions|all>
+  schedule: `usage: kura schedule <enable|disable> <timeline|english|all>
 
 Toggle the launchd jobs that run each feature on its schedule.
 `,
@@ -91,24 +91,13 @@ Load one recorded session as JSON: meta (session, cwd, model, volume)
 and the full message list. Accepts a unique session-id prefix — find
 candidates with: kura search
 `,
-  decisions: `usage: kura decisions [--limit=N] <repo>
+  "english-card": `usage: kura english-card < prompt.txt
 
-Recall stored decisions whose working directory matches <repo>, as JSON.
-
-options:
-  --limit=N   max decisions to return (default 50, range 1-200)
-  -h, --help  show this help
-`,
-  companion: `usage: kura companion [--tui] [--port=N] [--session=<prefix>]
-
-Serve live English feedback cards for user prompts on a local page,
-polling history.db while running. No schedule, no publishing.
-
-options:
-  --tui               log cards to the terminal instead of serving a page
-  --port=N            listen port (default 4989; page mode only)
-  --session=<prefix>  follow one session instead of all new prompts
-  -h, --help          show this help
+Turn one prompt read from stdin into an English feedback card and print it
+as JSON: {status, model, items}, each item {kind, from, to} with kind one of
+romaji, grammar, natural. Prompts under 3 characters or starting with <, /
+or ! print {"status":"skipped"}. Nothing is stored. The model is
+english-card.model in config.json (default opus).
 `,
 };
 

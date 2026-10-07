@@ -68,7 +68,7 @@ function teardown(): void {
   assertOwnedSymlink(cli, cliTarget, "remove");
   assertOwnedSymlink(runtime, repo, "remove");
 
-  const jobs = ["timeline", "english", "decisions"] as const;
+  const jobs = ["timeline", "english"] as const;
   for (const job of jobs) {
     assertOwnedSymlink(
       join(userHome, "Library", "LaunchAgents", `kura.${job}.plist`),

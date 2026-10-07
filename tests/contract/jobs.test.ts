@@ -88,7 +88,7 @@ test("job は未知の action と job を拒否する", () => {
   ]) {
     const result = run(args[0]!, args[1]!);
     expect(result.exitCode).toBe(2);
-    expect(result.stderr.toString()).toContain("jobs.ts <timeline|english|decisions>");
+    expect(result.stderr.toString()).toContain("jobs.ts <timeline|english>");
   }
 });
 
@@ -98,9 +98,7 @@ test("all は全 job を status / disable し、enable は拒否する", () => {
 
   const status = run("all", "status", "kura.timeline");
   expect(status.exitCode).toBe(0);
-  expect(status.stdout.toString()).toBe(
-    "timeline: enabled\nenglish: disabled\ndecisions: disabled\n",
-  );
+  expect(status.stdout.toString()).toBe("timeline: enabled\nenglish: disabled\n");
 
   expect(run("all", "enable").exitCode).toBe(2);
   expect(run("all", "disable").exitCode).toBe(0);
@@ -110,11 +108,11 @@ test("all は全 job を status / disable し、enable は拒否する", () => {
 });
 
 test("job enable は既存の通常 file を上書きしない", () => {
-  const target = join(home, "Library", "LaunchAgents", "kura.decisions.plist");
+  const target = join(home, "Library", "LaunchAgents", "kura.english.plist");
   mkdirSync(join(home, "Library", "LaunchAgents"), { recursive: true });
   writeFileSync(target, "keep");
 
-  const result = run("decisions", "enable");
+  const result = run("english", "enable");
   expect(result.exitCode).toBe(1);
   expect(result.stderr.toString()).toContain("refusing to replace existing path");
   expect(readFileSync(target, "utf-8")).toBe("keep");
