@@ -7,6 +7,7 @@ import {
   defaultConfig,
   loadConfig,
   parseConfig,
+  redactConfig,
   resolveSecret,
   saveConfig,
 } from "./config.ts";
@@ -69,4 +70,51 @@ test("secret は参照でなければそのまま、op:// 参照は bake 済み�
   expect(resolveSecret("https://plain.test", cache)).toBe("https://plain.test");
   expect(resolveSecret("op://vault/item/url", cache)).toBe("https://example.test/hook");
   expect(() => resolveSecret("op://vault/other/url", cache)).toThrow("run: just bake-secrets");
+});
+
+test("companion は既定で閉じ、幅と高さは Claude Code に任せ、redpen / tldr を 6:4 で積む", () => {
+  expect(parseConfig({}, "config.json").companion).toEqual({
+    autoOpen: false,
+    columns: null,
+    rows: null,
+    widgets: [
+      { id: "redpen", share: 6 },
+      { id: "tldr", share: 4 },
+    ],
+  });
+  const config = parseConfig(
+    { companion: { autoOpen: true, columns: 64, widgets: [{ id: "tldr", share: 1 }] } },
+    "config.json",
+  );
+  expect(config.companion).toEqual({
+    autoOpen: true,
+    columns: 64,
+    rows: null,
+    widgets: [{ id: "tldr", share: 1 }],
+  });
+});
+
+test("companion の不正な値は項目名付きで拒否する", () => {
+  expect(() => parseConfig({ companion: { autoOpen: "yes" } }, "/c.json")).toThrow(
+    "companion.autoOpen must be a boolean",
+  );
+  expect(() => parseConfig({ companion: { columns: 0 } }, "/c.json")).toThrow(
+    "companion.columns must be a positive integer",
+  );
+  expect(() =>
+    parseConfig({ companion: { widgets: [{ id: "tldr", share: 1.5 }] } }, "/c.json"),
+  ).toThrow("companion.widgets must be an array");
+});
+
+test("redactConfig は参照でない webhook だけを伏せる", () => {
+  const config = defaultConfig();
+  config.discord.webhooks = {
+    english: "op://Dev/Discord/english/webhook",
+    timeline: "https://discord.com/api/webhooks/1/secret",
+  };
+  expect(redactConfig(config).discord.webhooks).toEqual({
+    english: "op://Dev/Discord/english/webhook",
+    timeline: "<redacted>",
+  });
+  expect(config.discord.webhooks.timeline).toBe("https://discord.com/api/webhooks/1/secret");
 });

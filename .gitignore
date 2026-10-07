@@ -9,3 +9,6 @@
 # Old local secrets / 1Password references (pre config.json); keep them out of git.
 .env
 .env.*
+
+# Claude Code が plugin を読み込むたびに書き出す型定義
+plugin/.claude-plugin/types/

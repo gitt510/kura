@@ -62,8 +62,8 @@ just status
 
 ## Skill installation
 
-- `just setup` does not install the user-scope skills under `skills/`; the
-  public skill is `search-history`
+- `just setup` does not install the user-scope skills under
+  `plugin/skills/`; the public skill is `search-history`
 - `src/features/*/skills/` are used at project scope by the scheduled jobs;
   do not install them at user scope
 - Install through exactly one channel; installing through both defines the
@@ -100,6 +100,12 @@ $EDITOR "${XDG_CONFIG_HOME:-$HOME/.config}/kura/config.json"
   "codex": { "model": null, "effort": null },
   "redpen": { "model": "opus" },
   "tldr": { "model": "opus" },
+  "companion": {
+    "autoOpen": false,
+    "columns": null,
+    "rows": null,
+    "widgets": [{ "id": "redpen", "share": 6 }, { "id": "tldr", "share": 4 }]
+  },
   "discord": {
     "webhooks": { "english": "op://vault/item/field", "timeline": "https://discord.com/api/webhooks/..." },
     "avatars": { "claude": "https://...", "gpt": "https://..." }
@@ -115,6 +121,9 @@ $EDITOR "${XDG_CONFIG_HOME:-$HOME/.config}/kura/config.json"
 | `codex.model` / `codex.effort` | Codex model / reasoning effort for scheduled generation |
 | `redpen.model` | English feedback card model (default `opus`) |
 | `tldr.model` | Three-line answer summary model (default `opus`) |
+| `companion.autoOpen` | Open the companion pane when a Claude Code session starts (default `false`) |
+| `companion.columns` / `companion.rows` | Companion pane width when docked / height when inline; `null` leaves it to Claude Code |
+| `companion.widgets` | Companion pane widgets, top to bottom, each taking `share` of the rows: `redpen`, `tldr` |
 | `discord.webhooks.<feature>` | Discord webhook for `english` / `timeline` |
 | `discord.avatars.<family>` | Discord avatar per model family (`claude`, `gpt`, …) |
 | `publish.enabled` | Features with Discord delivery opted in |
@@ -133,6 +142,32 @@ $EDITOR "${XDG_CONFIG_HOME:-$HOME/.config}/kura/config.json"
 # Resolve op:// webhook references; re-run after changing one
 just bake-secrets
 ```
+
+```bash
+# The effective config, defaults filled in; plain webhook URLs are redacted
+kura config
+```
+
+## Companion pane
+
+```bash
+# Claude Code: toggle the pane
+/kura-companion
+```
+
+- Ships in the `kura` Claude Code plugin; requires `kura` on `PATH`
+  (`just setup`) and a Claude Code build with plugin function hooks
+- `redpen` shows the `kura redpen` card of every prompt typed in the session,
+  newest first
+- `tldr` shows `kura tldr` of the latest answer, with the 3 turns before it
+  as context
+- Nothing runs while the pane is closed: no card, no summary
+- While the pane is open but out of view, the newest card shows above the
+  prompt instead
+- A summary is made only while the pane is in view — one `tldr` call per
+  answer, per session with the pane in view
+- `companion.*` is read each time the pane opens; reopen it to apply a change
+- A widget id other than `redpen` / `tldr` is skipped with a toast
 
 ## Usage
 
@@ -301,4 +336,5 @@ just test
 just test-unit          # pure logic / small I/O tests colocated with src
 just test-contract      # public contract tests across CLI, hooks, and SQLite
 just test-architecture  # dependency rules
+just test-plugin        # Claude Code plugin: validate + tests against the engine
 ```

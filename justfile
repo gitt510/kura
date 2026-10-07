@@ -77,10 +77,10 @@ check:
 fmt:
     @{{biome}} check --write "{{repo}}"
 
-# Run the full Bun test suite.
+# Run the full Bun test suite (the Claude Code plugin's tests run under test-plugin).
 [group('development')]
 test:
-    @bun test
+    @bun test ./src ./tests
 
 # Run only unit tests (colocated with source).
 [group('development')]
@@ -91,6 +91,12 @@ test-unit:
 [group('development')]
 test-contract:
     @bun test tests/contract
+
+# Validate the Claude Code plugin and run its tests against the engine. Requires the claude CLI.
+[group('development')]
+test-plugin:
+    @claude plugin validate "{{repo}}/plugin"
+    @claude plugin test "{{repo}}/plugin"
 
 # Run only architecture tests (dependency rules).
 [group('development')]

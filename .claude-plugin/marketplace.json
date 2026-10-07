@@ -5,7 +5,7 @@
   "plugins": [
     {
       "name": "kura",
-      "source": "./",
+      "source": "./plugin",
       "description": "Search locally stored Claude Code and Codex conversations recorded by kura."
     }
   ]

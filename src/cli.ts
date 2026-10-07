@@ -13,6 +13,7 @@ import { runTldr } from "./cli/tldr.ts";
 import { runUsage } from "./cli/usage.ts";
 
 const usage = `usage: kura setup
+       kura config
        kura init-config
        kura bake-secrets
        kura history <enable|disable> <claude|codex|all>
@@ -53,7 +54,7 @@ async function main(): Promise<number> {
     if (command === "setup" || command === "teardown") {
       return await runLifecycle(command, args);
     }
-    if (command === "init-config" || command === "bake-secrets") {
+    if (command === "config" || command === "init-config" || command === "bake-secrets") {
       return await runConfig(command, args);
     }
     if (command === "history" || command === "hook" || command === "search" || command === "show") {
