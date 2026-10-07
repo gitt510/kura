@@ -24,7 +24,7 @@ export interface KuraConfig {
   generator: string;
   claude: AgentConfig;
   codex: AgentConfig;
-  companion: { model: string };
+  "english-card": { model: string };
   discord: {
     webhooks: Record<string, string>; // feature 名 → URL または op:// 参照
     avatars: Record<string, string>; // model family (小文字) → 画像 URL
@@ -37,7 +37,7 @@ export function defaultConfig(): KuraConfig {
     generator: "claude",
     claude: { model: null, effort: null },
     codex: { model: null, effort: null },
-    companion: { model: "opus" },
+    "english-card": { model: "opus" },
     discord: { webhooks: {}, avatars: {} },
     publish: { enabled: [] },
   };
@@ -106,10 +106,10 @@ export function parseConfig(raw: unknown, path: string): KuraConfig {
     generator: stringOrNull(raw.generator, "generator", path) ?? defaults.generator,
     claude: agentSection(raw, "claude", path),
     codex: agentSection(raw, "codex", path),
-    companion: {
+    "english-card": {
       model:
-        stringOrNull(section(raw, "companion", path).model, "companion.model", path) ??
-        defaults.companion.model,
+        stringOrNull(section(raw, "english-card", path).model, "english-card.model", path) ??
+        defaults["english-card"].model,
     },
     discord: {
       webhooks: stringMap(discord.webhooks, "discord.webhooks", path),

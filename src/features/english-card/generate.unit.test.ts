@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import { parseConfig } from "../../lib/config.ts";
-import { buildPrompt, parseCardJson, resolveCompanionModel } from "./generate.ts";
+import { buildPrompt, parseCardJson, resolveEnglishCardModel } from "./generate.ts";
 
 test("prompt は入力 / 直前の assistant 文脈 / 3 種類の item 契約を含み、言語は指定しない", () => {
   const prompt = buildPrompt({ input: "これを直して", context: "I fixed auth.ts" });
@@ -11,6 +11,8 @@ test("prompt は入力 / 直前の assistant 文脈 / 3 種類の item 契約を
   expect(prompt).toContain('"from" must be a verbatim fragment of <input>');
   expect(prompt).toContain("Do NOT translate or rewrite the whole input.");
   expect(prompt).toContain("Japanese written in kana or kanji is NOT feedback material");
+  expect(prompt).toContain('"to" is the English alone');
+  expect(prompt).not.toContain("rule name in Japanese");
   expect(prompt).toContain("Never make items for: spelling, typos");
   expect(prompt).toContain("One item per fragment");
   expect(prompt).not.toContain("lang=");
@@ -55,13 +57,13 @@ test("kind 不明や from / to 欠落の要素は落とし、5 件で切る", ()
   expect(parseCardJson(JSON.stringify({ items: many }))).toHaveLength(5);
 });
 
-test("model は config の companion.model、無ければ opus", () => {
+test("model は config の english-card.model、無ければ opus", () => {
   const config = parseConfig({}, "config.json");
-  expect(resolveCompanionModel(config)).toBe("opus");
+  expect(resolveEnglishCardModel(config)).toBe("opus");
   expect(
-    resolveCompanionModel(parseConfig({ companion: { model: "sonnet" } }, "config.json")),
+    resolveEnglishCardModel(parseConfig({ "english-card": { model: "sonnet" } }, "config.json")),
   ).toBe("sonnet");
-  expect(resolveCompanionModel(parseConfig({ companion: { model: "  " } }, "config.json"))).toBe(
-    "opus",
-  );
+  expect(
+    resolveEnglishCardModel(parseConfig({ "english-card": { model: "  " } }, "config.json")),
+  ).toBe("opus");
 });

@@ -1,8 +1,8 @@
 // generate.ts — 1 prompt を headless Claude で英語 feedback に変換する。
 //
 // tool は使わせない純粋な text→JSON 変換。KURA_NO_HISTORY=1 で走るので、
-// この呼び出し自身の session は history にも companion にも入らない。
-// 失敗した呼び出しは error card として残し、retry しない。
+// この呼び出し自身の session は history に入らない。
+// 失敗した呼び出しは status "error" で返し、retry しない。
 //
 // 契約は 1 つ — 入力の言語は判定しない。LLM が入力を断片に分けて種類を付けて返す。
 // 全文の英訳 / 書き換えは出さない (文字が多くて読まれなくなる)。欲しいのは自分で
@@ -38,8 +38,8 @@ export interface GenerateResult {
 }
 
 // 速さより質 — parts の切り方と訳語の自然さが価値なので既定は opus。
-export function resolveCompanionModel(config: KuraConfig = loadConfig()): string {
-  return config.companion.model;
+export function resolveEnglishCardModel(config: KuraConfig = loadConfig()): string {
+  return config["english-card"].model;
 }
 
 const CONTEXT_CLIP = 1200;
@@ -53,10 +53,11 @@ export function buildPrompt(job: GenerateInput): string {
     "Do NOT translate or rewrite the whole input. Pick out only the fragments worth feedback and return them as items. The user assembles English by themselves from these parts.",
     "Item kinds:",
     '- "romaji": Japanese written in Latin letters (e.g. "housin", "taiou suru") — the user tried to write English and fell back to romaji for a word they did not know → the natural, casual English a native developer would type.',
-    '- "grammar": an English grammar mistake that changes or obscures the meaning (tense, prepositions, word order, missing auxiliaries) → the fix, with the rule name in Japanese in full-width parentheses, e.g. "I\'m working on it since Monday" → "I\'ve been working on it since Monday（現在完了進行形）".',
+    '- "grammar": an English grammar mistake that changes or obscures the meaning (tense, prepositions, word order, missing auxiliaries) → the fix, e.g. "I\'m working on it since Monday" → "I\'ve been working on it since Monday".',
     '- "natural": grammatical but unnatural English → how a native developer would say it, keeping the original intent.',
     "Japanese written in kana or kanji is NOT feedback material — ignore it entirely, even when it is the whole input.",
     "Never make items for: spelling, typos, punctuation, articles, tone, code, file names, commands, or English that is already natural.",
+    '"to" is the English alone — no explanation, rule name, or note in parentheses, in any language.',
     '"from" must be a verbatim fragment of <input>. <context> is reference only, to resolve what the user is talking about — never make items from it.',
     "One item per fragment — never report the same fragment under two kinds.",
     `At most ${MAX_ITEMS} items, in the order they appear in the input.`,
@@ -74,8 +75,7 @@ function isKind(value: unknown): value is ItemKind {
 }
 
 // 1 要素を item に正規化する。null / 非 object / kind 不明 / from・to 欠落は null。
-// LLM の返答 (generate) と DB の note 列 (tui / page) の両方がこれで検証する。
-export function toCardItem(raw: unknown): CardItem | null {
+function toCardItem(raw: unknown): CardItem | null {
   if (!raw || typeof raw !== "object") return null;
   const item = raw as { kind?: unknown; from?: unknown; to?: unknown };
   if (!isKind(item.kind)) return null;
@@ -99,10 +99,10 @@ export function parseCardJson(result: string): CardItem[] | null {
 }
 
 export async function generateCard(job: GenerateInput): Promise<GenerateResult> {
-  const model = resolveCompanionModel();
+  const model = resolveEnglishCardModel();
   let run;
   try {
-    run = await runClaudePrompt("companion", buildPrompt(job), model);
+    run = await runClaudePrompt("english-card", buildPrompt(job), model);
   } catch {
     return { items: null, model, status: "error" }; // claude CLI が無い
   }
@@ -112,7 +112,7 @@ export async function generateCard(job: GenerateInput): Promise<GenerateResult> 
     // card は "generation failed" のまま、原因は起動 terminal 側で診断できるようにする。
     const reason = run.stderr.trim().split("\n").pop() ?? "";
     process.stderr.write(
-      `companion generate failed (exit ${run.exitCode})${reason ? `: ${reason}` : ""}\n`,
+      `english-card generate failed (exit ${run.exitCode})${reason ? `: ${reason}` : ""}\n`,
     );
     return { items: null, model: run.model, status: "error" };
   }

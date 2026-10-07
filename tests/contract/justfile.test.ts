@@ -223,7 +223,6 @@ test("status は setup と features を表形式で表示する", () => {
     expect(text).toContain("Features  codex · gpt-test · high  (config)");
     expect(text).toMatch(/timeline\s+│ PRESENT\s+│ ENABLED\s+│ ENABLED/);
     expect(text).toMatch(/english\s+│ NOT CREATED\s+│ DISABLED\s+│ DISABLED/);
-    expect(text).toMatch(/decisions\s+│ NOT CREATED\s+│ DISABLED\s+│ -/);
   } finally {
     rmSync(home, { recursive: true, force: true });
   }

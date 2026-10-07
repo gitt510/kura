@@ -40,7 +40,7 @@ test("書かれていない項目は既定値で埋め、空文字は未設定�
   expect(config.generator).toBe("codex");
   expect(config.codex).toEqual({ model: "gpt-5.6", effort: null });
   expect(config.claude).toEqual({ model: null, effort: null });
-  expect(config.companion.model).toBe("opus");
+  expect(config["english-card"].model).toBe("opus");
 });
 
 test("型の違う項目は path と項目名付きで拒否する", () => {

@@ -1,9 +1,8 @@
 #!/usr/bin/env bun
 // cli.ts — kura command の薄い dispatcher。処理本体は src/cli/ と domain module が持つ。
 
-import { runCompanion } from "./cli/companion.ts";
 import { runConfig } from "./cli/config.ts";
-import { runDecisions } from "./cli/decisions.ts";
+import { runEnglishCard } from "./cli/english-card.ts";
 import { runFeatures } from "./cli/features.ts";
 import { helpText } from "./cli/help.ts";
 import { runHistory } from "./cli/history.ts";
@@ -15,7 +14,7 @@ const usage = `usage: kura setup
        kura init-config
        kura bake-secrets
        kura history <enable|disable> <claude|codex|all>
-       kura schedule <enable|disable> <timeline|english|decisions|all>
+       kura schedule <enable|disable> <timeline|english|all>
        kura publish <enable|disable> <timeline|english|all>
        kura teardown
        kura status
@@ -24,8 +23,7 @@ const usage = `usage: kura setup
        kura usage [--days=N]
        kura search [--limit=N] <keyword...>
        kura show <session-id-or-prefix>
-       kura decisions [--limit=N] <repo>
-       kura companion [--tui] [--port=N] [--session=<prefix>]
+       kura english-card < prompt.txt
        kura --help
 `;
 
@@ -64,11 +62,8 @@ async function main(): Promise<number> {
     ) {
       return await runHistory(command, args);
     }
-    if (command === "decisions") {
-      return await runDecisions(args);
-    }
-    if (command === "companion") {
-      return await runCompanion(args);
+    if (command === "english-card") {
+      return await runEnglishCard(args);
     }
     if (command === "schedule" || command === "publish") {
       return await runFeatures(command, args);

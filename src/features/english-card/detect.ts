@@ -1,4 +1,4 @@
-// detect.ts — companion の入力選別 (pure)。card 化する prompt を選ぶ。
+// detect.ts — english-card の入力選別 (pure)。card 化する prompt を選ぶ。
 // 言語判定は持たない — ja / en / 混合の区別は LLM が断片ごとに付ける。
 
 // card 化しない入力:

@@ -16,7 +16,7 @@ function config(patch: Partial<KuraConfig>): KuraConfig {
   return { ...defaultConfig(), ...patch };
 }
 
-const WORK_DIR = "/tmp/kura-decisions";
+const WORK_DIR = "/tmp/kura-timeline";
 const ALLOWED_TOOLS = [
   `Read(/${WORK_DIR}/**)`,
   `Write(/${WORK_DIR}/**)`,
@@ -54,14 +54,14 @@ test("Claude command は model / effort が明示されたときだけ flag を�
   expect(
     buildClaudeCommand(
       "/bin/claude",
-      "/decisions 2026-07-17 14",
+      "/timeline 2026-07-17 14",
       { model: "claude-fable-5", effort: "high" },
       WORK_DIR,
     ),
   ).toEqual([
     "/bin/claude",
     "-p",
-    "/decisions 2026-07-17 14",
+    "/timeline 2026-07-17 14",
     "--output-format",
     "json",
     "--allowedTools",
@@ -74,14 +74,14 @@ test("Claude command は model / effort が明示されたときだけ flag を�
   expect(
     buildClaudeCommand(
       "/bin/claude",
-      "/decisions 2026-07-17 14",
+      "/timeline 2026-07-17 14",
       { model: null, effort: null },
       WORK_DIR,
     ),
   ).toEqual([
     "/bin/claude",
     "-p",
-    "/decisions 2026-07-17 14",
+    "/timeline 2026-07-17 14",
     "--output-format",
     "json",
     "--allowedTools",
@@ -92,7 +92,7 @@ test("Claude command は model / effort が明示されたときだけ flag を�
 test("Claude command は permission bypass を持たない", () => {
   const command = buildClaudeCommand(
     "/bin/claude",
-    "/decisions 2026-07-17 14",
+    "/timeline 2026-07-17 14",
     { model: null, effort: null },
     WORK_DIR,
   );
@@ -118,7 +118,7 @@ test("未知の Codex effort は拒否する", () => {
 
 test("Codex command は model / effort をその invocation だけに上書きする", () => {
   expect(
-    buildCodexCommand("/bin/codex", "$decisions 2026-07-17 14", {
+    buildCodexCommand("/bin/codex", "$timeline 2026-07-17 14", {
       model: "gpt-5.6",
       effort: "high",
     }),
@@ -135,13 +135,13 @@ test("Codex command は model / effort をその invocation だけに上書き�
     "--config",
     'model_reasoning_effort="high"',
     "--json",
-    "$decisions 2026-07-17 14",
+    "$timeline 2026-07-17 14",
   ]);
 });
 
 test("agent ごとの明示的な skill 呼び出しを組み立てる", () => {
-  expect(skillPrompt("claude", "decisions", ["2026-07-17", "14"])).toBe("/decisions 2026-07-17 14");
-  expect(skillPrompt("codex", "decisions", ["2026-07-17", "14"])).toBe("$decisions 2026-07-17 14");
+  expect(skillPrompt("claude", "timeline", ["2026-07-17", "14"])).toBe("/timeline 2026-07-17 14");
+  expect(skillPrompt("codex", "timeline", ["2026-07-17", "14"])).toBe("$timeline 2026-07-17 14");
 });
 
 test("Claude の単一 JSON から結果と model を読む", () => {

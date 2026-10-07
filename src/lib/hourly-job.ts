@@ -28,7 +28,7 @@ export interface HourlyFeature<T> {
   isGenerated(windowStart: string): boolean;
   parseGenerated(value: unknown): T;
   // 素材 (messages.json) を差し替える（決定論）。window に feature 固有の材料
-  // （例: decisions の knownTitles）を同梱したいときだけ実装する。LLM に DB を触らせない。
+  // を同梱したいときだけ実装する。LLM に DB を触らせない。
   materials?(target: HourTarget, window: HourWindow): unknown;
   // LLM が生成した JSON を DB に UPSERT する（決定論）。gen = 生成 provenance。
   insert(target: HourTarget, generated: T, gen: Provenance): void;

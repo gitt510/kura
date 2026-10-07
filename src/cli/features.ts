@@ -9,7 +9,7 @@ const repo = resolve(import.meta.dir, "../..");
 function usage(command: FeatureCommand): number {
   process.stderr.write(
     command === "schedule"
-      ? "usage: kura schedule <enable|disable> <timeline|english|decisions|all>\n"
+      ? "usage: kura schedule <enable|disable> <timeline|english|all>\n"
       : "usage: kura publish <enable|disable> <timeline|english|all>\n",
   );
   return 2;
