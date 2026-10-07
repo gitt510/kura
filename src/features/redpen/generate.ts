@@ -9,7 +9,7 @@
 // 英文を組み立てる時の parts — だから kana / 漢字の日本語も対象外。romaji は
 // 「英文を組もうとして単語が出てこず挫折した跡」なので、そこだけ拾う。
 
-import { runClaudePrompt } from "../../lib/agent.ts";
+import { type ClaudePrompt, runClaudePrompt } from "../../lib/agent.ts";
 import { type KuraConfig, loadConfig } from "../../lib/config.ts";
 
 export interface GenerateInput {
@@ -45,11 +45,12 @@ export function resolveRedpenModel(config: KuraConfig = loadConfig()): string {
 const CONTEXT_CLIP = 1200;
 const MAX_ITEMS = 5;
 
-export function buildPrompt(job: GenerateInput): string {
+// system が coach の規則、prompt が 1 回分の素材 (直前の文脈と入力)。
+export function buildPrompt(job: GenerateInput): ClaudePrompt {
   const context = (job.context ?? "").slice(0, CONTEXT_CLIP);
-  return [
+  const system = [
     "You are an English coach for a Japanese developer.",
-    "The input below is a prompt the user typed to their coding agent mid-conversation. It may be Japanese, English, or a mix.",
+    "The user message holds a prompt the user typed to their coding agent mid-conversation. It may be Japanese, English, or a mix.",
     "Do NOT translate or rewrite the whole input. Pick out only the fragments worth feedback and return them as items. The user assembles English by themselves from these parts.",
     "Item kinds:",
     '- "romaji": Japanese written in Latin letters (e.g. "housin", "taiou suru") — the user tried to write English and fell back to romaji for a word they did not know → the natural, casual English a native developer would type.',
@@ -64,10 +65,8 @@ export function buildPrompt(job: GenerateInput): string {
     'Do not use any tools. Reply with JSON only, no code fences, in this shape (kind is one of "romaji", "grammar", "natural"):',
     '{"items": [{"kind": "romaji", "from": "...", "to": "..."}]}',
     'If nothing is worth feedback, reply exactly {"items": []}.',
-    "",
-    `<context>${context}</context>`,
-    `<input>${job.input}</input>`,
   ].join("\n");
+  return { system, prompt: `<context>${context}</context>\n<input>${job.input}</input>` };
 }
 
 function isKind(value: unknown): value is ItemKind {

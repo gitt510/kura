@@ -1,10 +1,11 @@
 // generate.ts — agent の最新の回答を headless Claude で 3 行に圧縮する。
 //
-// 指示は「長い。3行で。」だけに留める — 形式を縛るほど model の言い回しの幅が狭まり、
-// 読みやすさは上がらない。直前の turn は何の話かを解決するための参考として渡す。
+// 会話の続きとして作る: model は会話の assistant 本人として、長い回答への user の
+// 「長い。3行で。」に答える。その次の返答が要約になる — 回答を外から要約させると、
+// 回答の翻訳のような 3 行になる。形式は縛らない (縛るほど言い回しの幅が狭まる)。
 // tool は使わせない。失敗した呼び出しは status "error" で返し、retry しない。
 
-import { runClaudePrompt } from "../../lib/agent.ts";
+import { type ClaudePrompt, runClaudePrompt } from "../../lib/agent.ts";
 import { type KuraConfig, loadConfig } from "../../lib/config.ts";
 
 export interface Turn {
@@ -51,24 +52,24 @@ export function parseTldrInput(raw: string): TldrInput {
   return { turns };
 }
 
-export function buildPrompt(input: TldrInput): string {
-  const target = input.turns.at(-1)!;
-  const context = input.turns
-    .slice(0, -1)
-    .slice(-CONTEXT_TURNS)
-    .map(
-      (turn) =>
-        `<turn>\n<question>${turn.question.slice(0, CONTEXT_CLIP)}</question>\n` +
-        `<answer>${turn.answer.slice(0, CONTEXT_CLIP)}</answer>\n</turn>`,
-    );
-  return [
-    ...(context.length > 0 ? [`<context>\n${context.join("\n")}\n</context>`, ""] : []),
-    `<question>${target.question}</question>`,
-    "",
-    `<answer>${target.answer}</answer>`,
-    "",
-    "長い。3行で。",
-  ].join("\n");
+export const ASK = "長い。3行で。";
+
+// system が要約する turn までの会話、prompt が user の次の発話。直前の turn は切り詰める。
+export function buildPrompt(input: TldrInput): ClaudePrompt {
+  const earlier = input.turns.slice(0, -1).slice(-CONTEXT_TURNS);
+  const clip = (text: string) => text.slice(0, CONTEXT_CLIP);
+  const turns = [
+    ...earlier.map((turn) => ({ question: clip(turn.question), answer: clip(turn.answer) })),
+    input.turns.at(-1)!,
+  ].map((turn) => `<user>${turn.question}</user>\n<assistant>${turn.answer}</assistant>`);
+  return {
+    system: [
+      `<conversation>\n${turns.join("\n")}\n</conversation>`,
+      "",
+      "You are the assistant in this conversation. Reply to the user's next message.",
+    ].join("\n"),
+    prompt: ASK,
+  };
 }
 
 export async function generateTldr(input: TldrInput): Promise<TldrResult> {

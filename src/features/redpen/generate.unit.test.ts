@@ -2,10 +2,12 @@ import { expect, test } from "bun:test";
 import { parseConfig } from "../../lib/config.ts";
 import { buildPrompt, parseCardJson, resolveRedpenModel } from "./generate.ts";
 
-test("prompt は入力 / 直前の assistant 文脈 / 3 種類の item 契約を含み、言語は指定しない", () => {
-  const prompt = buildPrompt({ input: "これを直して", context: "I fixed auth.ts" });
-  expect(prompt).toContain("<input>これを直して</input>");
-  expect(prompt).toContain("<context>I fixed auth.ts</context>");
+test("system は 3 種類の item 契約、prompt は直前の assistant 文脈と入力を持ち、言語は指定しない", () => {
+  const { system: prompt, prompt: material } = buildPrompt({
+    input: "これを直して",
+    context: "I fixed auth.ts",
+  });
+  expect(material).toBe("<context>I fixed auth.ts</context>\n<input>これを直して</input>");
   expect(prompt).toContain('{"items": [{"kind": "romaji", "from": "...", "to": "..."}]}');
   expect(prompt).toContain('reply exactly {"items": []}');
   expect(prompt).toContain('"from" must be a verbatim fragment of <input>');
@@ -19,8 +21,8 @@ test("prompt は入力 / 直前の assistant 文脈 / 3 種類の item 契約を
 });
 
 test("文脈なしでは空の context tag になり、長い文脈は切られる", () => {
-  expect(buildPrompt({ input: "x y z", context: null })).toContain("<context></context>");
-  const clipped = buildPrompt({ input: "x y z", context: "c".repeat(5000) });
+  expect(buildPrompt({ input: "x y z", context: null }).prompt).toContain("<context></context>");
+  const clipped = buildPrompt({ input: "x y z", context: "c".repeat(5000) }).prompt;
   expect(clipped).toContain(`<context>${"c".repeat(1200)}</context>`);
 });
 
