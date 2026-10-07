@@ -1,6 +1,7 @@
 import { expect, test } from "bun:test";
 import {
   buildClaudeCommand,
+  buildClaudePromptCommand,
   buildCodexCommand,
   parseClaudeJson,
   parseCodexJsonl,
@@ -235,4 +236,29 @@ test("Codex の失敗 event と壊れた JSONL は失敗に倒す", () => {
     result: "",
     usage: null,
   });
+});
+
+test("1 回きりの prompt は渡した system と prompt だけを送り、tool・MCP・skill・settings を積まない", () => {
+  const command = buildClaudePromptCommand(
+    "/bin/claude",
+    { system: "You are a coach.", prompt: "hello" },
+    "opus",
+  );
+  expect(command).toEqual([
+    "/bin/claude",
+    "-p",
+    "hello",
+    "--system-prompt",
+    "You are a coach.",
+    "--tools",
+    "",
+    "--strict-mcp-config",
+    "--disable-slash-commands",
+    "--setting-sources",
+    "",
+    "--output-format",
+    "json",
+    "--model",
+    "opus",
+  ]);
 });

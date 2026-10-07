@@ -194,6 +194,8 @@ echo "I make mod. kono houhou is good" | kura redpen
   `{"status":"skipped"}` without calling the model
 - Generation runs headless Claude with `KURA_NO_HISTORY=1`, so it is not
   recorded as history
+- Generation sends Claude only kura's own instructions and the input: no
+  tools, MCP servers, skills, settings, or `CLAUDE.md`
 
 ```bash
 echo '{"turns": [{"question": "...", "answer": "..."}]}' | kura tldr
@@ -201,6 +203,8 @@ echo '{"turns": [{"question": "...", "answer": "..."}]}' | kura tldr
 
 - Prints the last turn's answer compressed into three lines as JSON:
   `{status, model, text}`; nothing is stored
+- The three lines are the assistant's own next reply in the conversation,
+  to the user saying `長い。3行で。`
 - `turns` is oldest first; up to 3 turns before the last one are passed as
   context
 - Invalid stdin exits 2 without calling the model

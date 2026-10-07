@@ -248,18 +248,52 @@ export function buildCodexCommand(
   ];
 }
 
-// tool を一切許さない text→JSON 変換を Claude で 1 回実行する (非同期)。
+// tool も文脈も持たない 1 回きりの対話。system が model の立場と規則、prompt が user の発話。
+export interface ClaudePrompt {
+  system: string;
+  prompt: string;
+}
+
+// Claude Code 本体の system prompt・tool 定義・MCP・skill・settings (CLAUDE.md・plugin・hook)
+// を積まない — 入力は呼び手が渡した system と prompt だけになり、user 固有の指示
+// (応答言語など) が生成物に混ざらない。積んだ場合の入力は 1 回あたり約 14k token 多い。
+export function buildClaudePromptCommand(
+  executable: string,
+  { system, prompt }: ClaudePrompt,
+  model: string,
+): string[] {
+  return [
+    executable,
+    "-p",
+    prompt,
+    "--system-prompt",
+    system,
+    "--tools",
+    "",
+    "--strict-mcp-config",
+    "--disable-slash-commands",
+    "--setting-sources",
+    "",
+    "--output-format",
+    "json",
+    "--model",
+    model,
+  ];
+}
+
+// tool を一切許さない 1 回の対話を Claude で実行する (非同期)。
 // skill 契約も generator 選択も持たない代わりに、model は呼び手が明示する。
-// live server から呼ばれるため spawnSync ではなく spawn を使う。
 export async function runClaudePrompt(
   feature: string,
-  prompt: string,
+  input: ClaudePrompt,
   model: string,
 ): Promise<ClaudePromptRun> {
-  const child = Bun.spawn(
-    [agentExecutable("claude"), "-p", prompt, "--output-format", "json", "--model", model],
-    { env: agentEnv(), stdin: "ignore", stdout: "pipe", stderr: "pipe" },
-  );
+  const child = Bun.spawn(buildClaudePromptCommand(agentExecutable("claude"), input, model), {
+    env: agentEnv(),
+    stdin: "ignore",
+    stdout: "pipe",
+    stderr: "pipe",
+  });
   const [raw, stderr] = await Promise.all([
     new Response(child.stdout).text(),
     new Response(child.stderr).text(),

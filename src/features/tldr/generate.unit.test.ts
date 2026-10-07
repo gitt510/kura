@@ -4,17 +4,25 @@ import { buildPrompt, parseTldrInput, resolveTldrModel } from "./generate.ts";
 
 const turn = (n: number) => ({ question: `q${n}`, answer: `a${n}` });
 
-test("prompt は最後の turn を圧縮対象にし、指示は「長い。3行で。」だけ", () => {
-  const prompt = buildPrompt({ turns: [turn(1)] });
-  expect(prompt).toBe("<question>q1</question>\n\n<answer>a1</answer>\n\n長い。3行で。");
+test("会話の続きとして、assistant 本人に「長い。3行で。」と返させる", () => {
+  const { system, prompt } = buildPrompt({ turns: [turn(1)] });
+  expect(prompt).toBe("長い。3行で。");
+  expect(system).toBe(
+    "<conversation>\n<user>q1</user>\n<assistant>a1</assistant>\n</conversation>\n\n" +
+      "You are the assistant in this conversation. Reply to the user's next message.",
+  );
 });
 
-test("prompt は最後の turn より前の直近 3 turn を context に入れる", () => {
-  const prompt = buildPrompt({ turns: [1, 2, 3, 4, 5].map(turn) });
-  expect(prompt).toStartWith("<context>\n<turn>\n<question>q2</question>");
-  expect(prompt).not.toContain("q1");
-  expect(prompt).toContain("<answer>a4</answer>\n</turn>\n</context>");
-  expect(prompt).toEndWith("<question>q5</question>\n\n<answer>a5</answer>\n\n長い。3行で。");
+test("会話には最後の turn と、その前の直近 3 turn だけを入れ、前の turn は切り詰める", () => {
+  const long = { question: "q".repeat(2000), answer: "a".repeat(2000) };
+  const { system } = buildPrompt({ turns: [turn(1), long, turn(3), turn(4), long] });
+  expect(system).not.toContain("q1");
+  expect(system).toContain(
+    `<user>${"q".repeat(1500)}</user>\n<assistant>${"a".repeat(1500)}</assistant>\n<user>q3</user>`,
+  );
+  expect(system).toContain(
+    `<user>${"q".repeat(2000)}</user>\n<assistant>${"a".repeat(2000)}</assistant>\n</conversation>`,
+  );
 });
 
 test("parseTldrInput は turns の形を検証する", () => {
