@@ -1,8 +1,7 @@
-#!/usr/bin/env bun
-// run.ts — english 自動配信の entrypoint。
+// feature.ts — english の hourly job 定義。`kura english` (src/cli/hourly.ts) が実行する。
 // orchestrator (hourly-job) に素材取得・DB 書き込み・配信を委ね、LLM には生成だけ任せる。
 
-import { type HourlyFeature, runHourlyJob } from "../../lib/hourly-job.ts";
+import type { HourlyFeature } from "../../lib/hourly-job.ts";
 import { isPublishEnabled } from "../../lib/publish-policy.ts";
 import { openEnglishDb } from "./db.ts";
 import { type EnglishGenerated, insertEnglish, parseEnglishGenerated } from "./insert.ts";
@@ -29,7 +28,7 @@ const isPublished = (windowStart: string): boolean => {
   }
 };
 
-const feature = {
+export const feature = {
   name: "english",
   isGenerated,
   parseGenerated: parseEnglishGenerated,
@@ -40,5 +39,3 @@ const feature = {
     run: publishEnglish,
   },
 } satisfies HourlyFeature<EnglishGenerated>;
-
-process.exit(await runHourlyJob(feature, process.argv.slice(2)));

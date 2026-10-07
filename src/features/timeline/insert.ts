@@ -1,4 +1,3 @@
-#!/usr/bin/env bun
 // insert.ts — per-hour timeline の writer (timeline.db への UPSERT)。
 //
 // orchestrator (hourly-job) が insertTimeline() を import して使う。CLI でも叩ける（手動）。
@@ -6,18 +5,18 @@
 //   threads = [ { label, bullets[] }, ... ] スレッド (repo/テーマ) 別の箇条書き。
 //
 // meta (window/volume/cwds) は LLM を信用せず history DB から引き直す。
-// 生成 provenance (gen) は呼び手が渡す — orchestrator は LLM の model、CLI は selfProvenance()。
+// 生成 provenance (gen) は orchestrator が LLM の model から渡す。
 // schema / 型 / DB アクセスは同居の ./db.ts が所有する。
 
 import { getHourWindow } from "../../history/query.ts";
-import { type HourTarget, hourTarget } from "../../lib/clock.ts";
+import type { HourTarget } from "../../lib/clock.ts";
 import {
   expectJsonArray,
   expectJsonObject,
   expectJsonString,
   jsonArrayOrNull,
 } from "../../lib/json.ts";
-import { type Provenance, selfProvenance } from "../../lib/provenance.ts";
+import type { Provenance } from "../../lib/provenance.ts";
 import { openTimeline, type TimelineRow, upsertTimeline } from "./db.ts";
 
 export interface TimelineGenerated {
@@ -88,33 +87,4 @@ export function insertTimeline(
   } finally {
     db.close();
   }
-}
-
-if (import.meta.main) {
-  const dateArg = process.argv[2];
-  const hourArg = process.argv[3];
-  if (!dateArg || hourArg === undefined || !/^\d{1,2}$/.test(hourArg)) {
-    process.stderr.write("usage: bun insert.ts <YYYY-MM-DD> <hour>  (stdin: narrative JSON)\n");
-    process.exit(1);
-  }
-  let target;
-  try {
-    target = hourTarget(dateArg, Number.parseInt(hourArg, 10));
-  } catch (error) {
-    process.stderr.write(`${error}\n`);
-    process.exit(1);
-  }
-
-  const stdin = await Bun.stdin.text();
-  let generated: TimelineGenerated;
-  try {
-    generated = parseTimelineGenerated(stdin.trim() ? JSON.parse(stdin) : {});
-  } catch (error) {
-    process.stderr.write(`stdin has invalid timeline JSON: ${error}\n`);
-    process.exit(1);
-  }
-
-  // CLI（in-session の手動実行）では生成 provenance を自己 introspection で取る。
-  insertTimeline(target, generated, selfProvenance());
-  process.stdout.write(`upserted timeline for ${target.windowStart}\n`);
 }

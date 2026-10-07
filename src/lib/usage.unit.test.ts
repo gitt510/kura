@@ -13,7 +13,7 @@ function memoryDb(): Database {
 
 function claudeCall(overrides: Partial<UsageRecord> = {}): UsageRecord {
   return {
-    feature: "english-card",
+    feature: "redpen",
     agent: "claude",
     model: "claude-haiku-4-5",
     ok: true,
@@ -51,7 +51,7 @@ test("feature × model ごとに call 数・token・cost を合計する", () =>
 
   expect(usageSummary(db, null)).toEqual([
     {
-      feature: "english-card",
+      feature: "redpen",
       model: "claude-haiku-4-5",
       calls: 2,
       input_tokens: 20,

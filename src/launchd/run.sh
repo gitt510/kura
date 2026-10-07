@@ -1,12 +1,11 @@
 #!/usr/bin/env bash
-# launchd's minimal environment を補い、feature job の出力を state log に集約する。
+# launchd's minimal environment を補い、`kura <feature>` を実行して出力を state log に集約する。
 set -euo pipefail
 
 : "${HOME:?HOME is required}"
-[[ "$#" -eq 2 ]] || { echo "usage: run.sh <log-name> <repo-relative-entrypoint>" >&2; exit 2; }
+[[ "$#" -eq 1 ]] || { echo "usage: run.sh <feature>" >&2; exit 2; }
 
 name="$1"
-entrypoint="$2"
 repo="$HOME/.local/share/kura"
 log_dir="${XDG_STATE_HOME:-$HOME/.local/state}/kura"
 log="$log_dir/$name.log"
@@ -17,4 +16,4 @@ echo "── $(date '+%Y-%m-%d %H:%M:%S %Z') $name start ──" >>"$log"
 
 # project-scope skills (.claude/skills / .agents/skills) を解決できるよう repo root で実行する。
 cd "$repo"
-exec bun "$repo/$entrypoint" >>"$log" 2>&1
+exec bun "$repo/src/cli.ts" "$name" >>"$log" 2>&1

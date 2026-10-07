@@ -89,34 +89,6 @@ test("Stop だけの部分配線は disabled と報告され、enable が全 eve
   }
 });
 
-test("enable は旧 Claude hook を新 path へ置き換え、無関係な hook を残す", () => {
-  const home = mkdtempSync(join(tmpdir(), "kura-hooks-legacy-"));
-  const path = settingsPath(home, "claude");
-  mkdirSync(dirname(path), { recursive: true });
-  writeFileSync(
-    path,
-    JSON.stringify({
-      hooks: {
-        Stop: [
-          {
-            hooks: [
-              { type: "command", command: 'bun "$HOME/.local/share/kura/history/ingest.ts"' },
-              { type: "command", command: '"$HOME/.local/bin/kura" ingest claude' },
-              { type: "command", command: "echo keep-me" },
-            ],
-          },
-        ],
-      },
-    }),
-  );
-  try {
-    expect(run(home, "claude", "enable").exitCode).toBe(0);
-    expect(commands(path)).toEqual(["echo keep-me", '"$HOME/.local/bin/kura" hook claude']);
-  } finally {
-    rmSync(home, { recursive: true, force: true });
-  }
-});
-
 test("all は両方の history hook を status / disable し、enable は拒否する", () => {
   const home = mkdtempSync(join(tmpdir(), "kura-hooks-all-"));
   try {

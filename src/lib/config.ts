@@ -24,7 +24,8 @@ export interface KuraConfig {
   generator: string;
   claude: AgentConfig;
   codex: AgentConfig;
-  "english-card": { model: string };
+  redpen: { model: string };
+  tldr: { model: string };
   discord: {
     webhooks: Record<string, string>; // feature 名 → URL または op:// 参照
     avatars: Record<string, string>; // model family (小文字) → 画像 URL
@@ -37,7 +38,8 @@ export function defaultConfig(): KuraConfig {
     generator: "claude",
     claude: { model: null, effort: null },
     codex: { model: null, effort: null },
-    "english-card": { model: "opus" },
+    redpen: { model: "opus" },
+    tldr: { model: "opus" },
     discord: { webhooks: {}, avatars: {} },
     publish: { enabled: [] },
   };
@@ -93,6 +95,10 @@ function agentSection(raw: Json, key: string, path: string): AgentConfig {
   };
 }
 
+function modelSection(raw: Json, key: string, path: string, fallback: string): { model: string } {
+  return { model: stringOrNull(section(raw, key, path).model, `${key}.model`, path) ?? fallback };
+}
+
 // 書かれていない項目は既定値で埋める。型が違う項目は path と項目名を付けて拒否する。
 export function parseConfig(raw: unknown, path: string): KuraConfig {
   if (!isObject(raw)) throw new Error(`invalid config ${path}: must be a JSON object`);
@@ -106,11 +112,8 @@ export function parseConfig(raw: unknown, path: string): KuraConfig {
     generator: stringOrNull(raw.generator, "generator", path) ?? defaults.generator,
     claude: agentSection(raw, "claude", path),
     codex: agentSection(raw, "codex", path),
-    "english-card": {
-      model:
-        stringOrNull(section(raw, "english-card", path).model, "english-card.model", path) ??
-        defaults["english-card"].model,
-    },
+    redpen: modelSection(raw, "redpen", path, defaults.redpen.model),
+    tldr: modelSection(raw, "tldr", path, defaults.tldr.model),
     discord: {
       webhooks: stringMap(discord.webhooks, "discord.webhooks", path),
       avatars: stringMap(discord.avatars, "discord.avatars", path),

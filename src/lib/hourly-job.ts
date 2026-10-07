@@ -56,7 +56,7 @@ export async function runHourlyJob<T>(feature: HourlyFeature<T>, args: string[])
   try {
     target = resolveHourArgs(args);
   } catch (error) {
-    process.stderr.write(`usage: bun run.ts [<YYYY-MM-DD> <hour 0-23>]\n${error}\n`);
+    process.stderr.write(`usage: kura ${feature.name} [<YYYY-MM-DD> <hour 0-23>]\n${error}\n`);
     return 1;
   }
 

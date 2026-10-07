@@ -2,7 +2,7 @@
 -- 1 row = 1 call。writer は lib/usage.ts のみ。
 
 CREATE TABLE IF NOT EXISTS calls (
-  feature TEXT NOT NULL,                  -- 呼び出し元 (timeline / english / english-card)
+  feature TEXT NOT NULL,                  -- 呼び出し元 (timeline / english / redpen)
   agent TEXT NOT NULL,                    -- claude | codex
   model TEXT,                             -- 実行 model。出力から取得できなければ null
   ok INTEGER NOT NULL,                    -- 1 = 生成成功。失敗でも消費した token は記録する

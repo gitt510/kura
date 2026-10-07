@@ -42,17 +42,8 @@ symlinks created by setup. State (~/.local/state/kura) and config
 `,
   status: `usage: kura status
 
-Show setup state (cli, env, history.db, hooks) and per-feature state
-(database / schedule / publish) as tables.
-`,
-  doctor: `usage: kura doctor
-
-Check the runtime prerequisites (bun, symlinks, state dir) and print
-HEALTHY or NEEDS SETUP. Exits non-zero when setup is needed.
-`,
-  "view-db": `usage: kura view-db
-
-Open every *.db under the kura state dir in Datasette (requires uvx).
+Show setup state (runtime, cli, config, history.db, hooks) and
+per-feature state (database / schedule / publish) as tables.
 `,
   usage: `usage: kura usage [--days=N]
 
@@ -91,13 +82,34 @@ Load one recorded session as JSON: meta (session, cwd, model, volume)
 and the full message list. Accepts a unique session-id prefix — find
 candidates with: kura search
 `,
-  "english-card": `usage: kura english-card < prompt.txt
+  timeline: `usage: kura timeline [<YYYY-MM-DD> <hour 0-23>]
+
+Summarize one JST hour of recorded sessions into timeline.db, then publish
+it to Discord when publishing is enabled. Without arguments, targets the
+last completed hour. An hour already generated (or published) is skipped.
+The scheduled job runs this command.
+`,
+  english: `usage: kura english [<YYYY-MM-DD> <hour 0-23>]
+
+Turn one JST hour of your prompts into an English practice card in
+english.db, then publish it to Discord when publishing is enabled. Without
+arguments, targets the last completed hour. An hour already generated (or
+published) is skipped. The scheduled job runs this command.
+`,
+  redpen: `usage: kura redpen < prompt.txt
 
 Turn one prompt read from stdin into an English feedback card and print it
 as JSON: {status, model, items}, each item {kind, from, to} with kind one of
 romaji, grammar, natural. Prompts under 3 characters or starting with <, /
 or ! print {"status":"skipped"}. Nothing is stored. The model is
-english-card.model in config.json (default opus).
+redpen.model in config.json (default opus).
+`,
+  tldr: `usage: kura tldr < turns.json
+
+Compress the last answer of a conversation into three lines and print it as
+JSON: {status, model, text}. stdin is {"turns": [{question, answer}, ...]},
+oldest first; up to 3 turns before the last one are passed as context.
+Nothing is stored. The model is tldr.model in config.json (default opus).
 `,
 };
 
