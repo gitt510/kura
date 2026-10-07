@@ -1,21 +1,44 @@
-// config.ts — XDG config の初期化と 1Password materialization。
+// config.ts — config.json の初期化と、1Password 参照の secrets.json への bake。
 
-import { chmodSync, copyFileSync, existsSync, mkdirSync, readFileSync } from "node:fs";
-import { dirname, join, resolve } from "node:path";
+import { existsSync } from "node:fs";
+import {
+  configPath,
+  defaultConfig,
+  isSecretReference,
+  loadConfig,
+  saveConfig,
+  secretsPath,
+  writePrivateJson,
+} from "../lib/config.ts";
 
-type ConfigCommand = "init-env" | "bake-env";
+type ConfigCommand = "init-config" | "bake-secrets";
 
-const repo = resolve(import.meta.dir, "../..");
-
-function home(): string {
-  const value = process.env.HOME;
-  if (!value) throw new Error("HOME is required");
-  return value;
+function initConfig(): number {
+  const target = configPath();
+  if (existsSync(target)) throw new Error(`already exists: ${target}`);
+  saveConfig(defaultConfig(), target);
+  process.stdout.write(`config initialized: ${target}\n`);
+  return 0;
 }
 
-function configTarget(): string {
-  const configHome = process.env.XDG_CONFIG_HOME || join(home(), ".config");
-  return join(configHome, "kura", "env");
+function bakeSecrets(): number {
+  const references = Object.values(loadConfig().discord.webhooks).filter(isSecretReference);
+  if (references.length === 0) {
+    throw new Error(`no op:// reference in ${configPath()} — nothing to bake`);
+  }
+  const baked: Record<string, string> = {};
+  for (const reference of references) {
+    const result = Bun.spawnSync(["op", "read", "--no-newline", reference], {
+      stdin: "inherit",
+      stdout: "pipe",
+      stderr: "inherit",
+    });
+    if (result.exitCode !== 0) return result.exitCode ?? 1;
+    baked[reference] = result.stdout.toString();
+  }
+  writePrivateJson(secretsPath(), baked);
+  process.stdout.write(`secrets baked: ${secretsPath()} (${references.length})\n`);
+  return 0;
 }
 
 export async function runConfig(command: ConfigCommand, args: string[]): Promise<number> {
@@ -23,36 +46,5 @@ export async function runConfig(command: ConfigCommand, args: string[]): Promise
     process.stderr.write(`usage: kura ${command}\n`);
     return 2;
   }
-
-  const target = configTarget();
-  if (command === "init-env") {
-    if (existsSync(target)) throw new Error(`already exists: ${target}`);
-    mkdirSync(dirname(target), { recursive: true, mode: 0o700 });
-    copyFileSync(join(repo, ".env.example"), target);
-    chmodSync(target, 0o600);
-    process.stdout.write(`config initialized: ${target}\n`);
-    process.stdout.write("edit the file and set the Discord webhook URLs\n");
-    return 0;
-  }
-
-  const reference = join(repo, ".env.ref");
-  if (!existsSync(reference)) {
-    throw new Error(
-      ".env.ref not found — run: cp .env.ref.example .env.ref, then edit the references",
-    );
-  }
-  if (!/^[ \t]*[^#\s].*op:\/\//m.test(readFileSync(reference, "utf-8"))) {
-    throw new Error(".env.ref has no valid op:// reference — aborting bake");
-  }
-  mkdirSync(dirname(target), { recursive: true, mode: 0o700 });
-  const result = Bun.spawnSync(["op", "inject", "-i", reference, "-o", target, "-f"], {
-    env: process.env,
-    stdin: "inherit",
-    stdout: "inherit",
-    stderr: "inherit",
-  });
-  if (result.exitCode !== 0) return result.exitCode ?? 1;
-  chmodSync(target, 0o600);
-  process.stdout.write(`config baked: ${target}\n`);
-  return 0;
+  return command === "init-config" ? initConfig() : bakeSecrets();
 }

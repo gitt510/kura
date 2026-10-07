@@ -10,7 +10,7 @@
 // 「英文を組もうとして単語が出てこず挫折した跡」なので、そこだけ拾う。
 
 import { runClaudePrompt } from "../../lib/agent.ts";
-import { resolveEnv } from "../../lib/config.ts";
+import { type KuraConfig, loadConfig } from "../../lib/config.ts";
 
 export interface GenerateInput {
   input: string;
@@ -38,10 +38,8 @@ export interface GenerateResult {
 }
 
 // 速さより質 — parts の切り方と訳語の自然さが価値なので既定は opus。
-export function resolveCompanionModel(
-  env: Readonly<Record<string, string | undefined>> = process.env,
-): string {
-  return resolveEnv("KURA_COMPANION_MODEL", env)?.trim() || "opus";
+export function resolveCompanionModel(config: KuraConfig = loadConfig()): string {
+  return config.companion.model;
 }
 
 const CONTEXT_CLIP = 1200;

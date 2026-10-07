@@ -1,11 +1,10 @@
 #!/usr/bin/env bun
 // manage.ts — publish policy の enable / disable / status を管理する。
 
-import { resolveEnv } from "../lib/config.ts";
+import { loadConfig } from "../lib/config.ts";
 import {
   isPublishEnabled,
   PUBLISH_FEATURES,
-  PUBLISH_WEBHOOKS,
   type PublishFeature,
   setPublishEnabled,
 } from "../lib/publish-policy.ts";
@@ -57,9 +56,13 @@ if (actionArg === "status" || actionArg === "check") {
 
 if (actionArg === "enable") {
   const feature = targets[0]!;
-  if (!resolveEnv(PUBLISH_WEBHOOKS[feature])) {
-    runtimeError(`${PUBLISH_WEBHOOKS[feature]} is required before enabling publish`);
+  let webhook: string | undefined;
+  try {
+    webhook = loadConfig().discord.webhooks[feature];
+  } catch (error) {
+    runtimeError(`config を読めない: ${error}`);
   }
+  if (!webhook) runtimeError(`discord.webhooks.${feature} is required before enabling publish`);
 }
 
 try {

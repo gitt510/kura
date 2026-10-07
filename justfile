@@ -16,15 +16,15 @@ _default:
 setup:
     @bun "{{repo}}/src/cli.ts" setup
 
-# Initialize local config from the public template. Never overwrites existing config.
+# Create config.json with every key at its default. Never overwrites.
 [group('setup')]
-init-env:
-    @bun "{{repo}}/src/cli.ts" init-env
+init-config:
+    @bun "{{repo}}/src/cli.ts" init-config
 
-# Bake Discord webhook secrets from .env.ref into XDG config. Requires 'op signin'.
+# Resolve the op:// webhook references in config.json into the state dir. Requires 'op signin'.
 [group('setup')]
-bake-env:
-    @bun "{{repo}}/src/cli.ts" bake-env
+bake-secrets:
+    @bun "{{repo}}/src/cli.ts" bake-secrets
 
 # Enable or disable a conversation history source.
 [group('setup')]

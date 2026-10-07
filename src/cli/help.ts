@@ -8,17 +8,16 @@ Link this checkout into place: ~/.local/share/kura -> the repo, and
 ~/.local/bin/kura -> src/cli.ts. Refuses to replace a path it does not
 own. Idempotent.
 `,
-  "init-env": `usage: kura init-env
+  "init-config": `usage: kura init-config
 
-Create the config file (~/.config/kura/env, mode 600) from .env.example.
-Fails if the file already exists. Edit it afterwards to set the Discord
-webhook URLs. To materialize it from 1Password instead, use: kura bake-env
+Create the config file (~/.config/kura/config.json, mode 600) with every
+key at its default. Fails if the file already exists.
 `,
-  "bake-env": `usage: kura bake-env
+  "bake-secrets": `usage: kura bake-secrets
 
-Materialize ~/.config/kura/env from .env.ref via 1Password (op inject),
-overwriting the existing file. Requires .env.ref with op:// references
-(start from: cp .env.ref.example .env.ref).
+Resolve every op:// reference under discord.webhooks in config.json through
+1Password (op read) into the state dir's secrets.json (mode 600), which the
+publish jobs read. Run it again after changing a reference.
 `,
   history: `usage: kura history <enable|disable> <claude|codex|all>
 

@@ -12,8 +12,8 @@ import { runOperations } from "./cli/status.ts";
 import { runUsage } from "./cli/usage.ts";
 
 const usage = `usage: kura setup
-       kura init-env
-       kura bake-env
+       kura init-config
+       kura bake-secrets
        kura history <enable|disable> <claude|codex|all>
        kura schedule <enable|disable> <timeline|english|decisions|all>
        kura publish <enable|disable> <timeline|english|all>
@@ -52,7 +52,7 @@ async function main(): Promise<number> {
     if (command === "setup" || command === "teardown") {
       return await runLifecycle(command, args);
     }
-    if (command === "init-env" || command === "bake-env") {
+    if (command === "init-config" || command === "bake-secrets") {
       return await runConfig(command, args);
     }
     if (

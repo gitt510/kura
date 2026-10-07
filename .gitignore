@@ -6,8 +6,6 @@
 
 .DS_Store
 
-# Local secrets and 1Password references. Public templates are tracked below.
+# Old local secrets / 1Password references (pre config.json); keep them out of git.
 .env
 .env.*
-!.env.example
-!.env.ref.example

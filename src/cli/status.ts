@@ -1,9 +1,9 @@
 // status.ts — setup / feature state の収集、rich 表示、doctor、DB viewer。
 
-import { existsSync, lstatSync, readdirSync, readFileSync, readlinkSync } from "node:fs";
+import { existsSync, lstatSync, readdirSync, readlinkSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { resolveClaudeOptions, resolveCodexOptions, resolveGenerator } from "../lib/agent.ts";
-import { envFilePath } from "../lib/config.ts";
+import { configPath } from "../lib/config.ts";
 import { isPublishEnabled, type PublishFeature } from "../lib/publish-policy.ts";
 import { paint, type Row, renderTable, stateColor } from "./terminal.ts";
 
@@ -17,7 +17,6 @@ type State =
   | "MISSING"
   | "UNEXPECTED"
   | "ERROR";
-type Source = "process env" | "config" | "default";
 
 const repo = resolve(import.meta.dir, "../..");
 
@@ -74,14 +73,6 @@ function databaseState(stateDir: string, feature: string): State {
   return existsSync(join(stateDir, `${feature}.db`)) ? "PRESENT" : "NOT CREATED";
 }
 
-function sourceOf(name: string): Source {
-  if (process.env[name]) return "process env";
-  const configFile = envFilePath();
-  if (!existsSync(configFile)) return "default";
-  const pattern = new RegExp(`^\\s*(?:export\\s+)?${name}\\s*=\\s*(.+?)\\s*$`, "m");
-  return pattern.test(readFileSync(configFile, "utf-8")) ? "config" : "default";
-}
-
 function runtimeSummary(): {
   generator: string;
   model: string;
@@ -90,17 +81,11 @@ function runtimeSummary(): {
 } {
   const generator = resolveGenerator();
   const options = generator === "claude" ? resolveClaudeOptions() : resolveCodexOptions();
-  const prefix = generator === "claude" ? "KURA_CLAUDE" : "KURA_CODEX";
-  const sources = new Set<Source>([
-    sourceOf("KURA_GENERATOR"),
-    sourceOf(`${prefix}_MODEL`),
-    sourceOf(`${prefix}_EFFORT`),
-  ]);
   return {
     generator,
     model: options.model ?? "CLI default",
     effort: options.effort ?? "CLI default",
-    source: [...sources].join(" + "),
+    source: existsSync(configPath()) ? "config" : "default",
   };
 }
 
@@ -118,11 +103,11 @@ function renderStatus(): number {
   const hooks = join(repo, "src", "history", "hooks.ts");
   const jobs = join(repo, "src", "launchd", "jobs.ts");
   const historyDb = join(stateDir, "history.db");
-  const environment = envFilePath();
+  const config = configPath();
 
   const setupRows: Row[] = [
     ["cli", symlinkState(cli, cliTarget), displayPath(cli)],
-    ["env", existsSync(environment) ? "PRESENT" : "MISSING", displayPath(environment)],
+    ["config", existsSync(config) ? "PRESENT" : "MISSING", displayPath(config)],
     ["history.db", existsSync(historyDb) ? "PRESENT" : "NOT CREATED", displayPath(historyDb)],
     ["history/claude", managerState(hooks, "claude"), "Stop + UserPromptSubmit hooks"],
     ["history/codex", managerState(hooks, "codex"), "Stop hook"],

@@ -31,7 +31,7 @@ quietly and *take them out* only when you need them.)
 | [Claude Code](https://docs.anthropic.com/en/docs/claude-code) or [Codex](https://developers.openai.com/codex/cli/) CLI | history storage and scheduled generation |
 | GitHub CLI or Node.js / npx | installing user-scope skills |
 | A Discord webhook | Discord delivery |
-| [1Password CLI](https://developer.1password.com/docs/cli/) | the `.env.ref` integration |
+| [1Password CLI](https://developer.1password.com/docs/cli/) | `op://` webhook references |
 
 ## Setup
 
@@ -84,38 +84,52 @@ npx skills add gitt510/kura --skill search-history
 ## Configuration
 
 ```bash
-just init-env
-$EDITOR "${XDG_CONFIG_HOME:-$HOME/.config}/kura/env"
+just init-config
+$EDITOR "${XDG_CONFIG_HOME:-$HOME/.config}/kura/config.json"
 ```
 
-| Consumer | Environment variable |
-| --- | --- |
-| Scheduled generation agent | `KURA_GENERATOR` (`claude`, the default, or `codex`) |
-| Companion card model | `KURA_COMPANION_MODEL` (default `opus`) |
-| Claude model for scheduled generation | `KURA_CLAUDE_MODEL` |
-| Claude effort for scheduled generation | `KURA_CLAUDE_EFFORT` |
-| Codex model for scheduled generation | `KURA_CODEX_MODEL` |
-| Codex reasoning effort for scheduled generation | `KURA_CODEX_EFFORT` |
-| English learning card | `KURA_DISCORD_WEBHOOK_ENGLISH` |
-| Activity timeline | `KURA_DISCORD_WEBHOOK_TIMELINE` |
-| Claude-family Discord avatar | `KURA_DISCORD_AVATAR_CLAUDE` |
-| GPT-family Discord avatar | `KURA_DISCORD_AVATAR_GPT` |
+- `~/.config/kura/config.json` (mode 600) is the only configuration source;
+  kura reads no settings from environment variables
+- Without the file, every value below takes its default
+- `just init-config` writes every key with its default
 
-- The process environment takes precedence; the XDG config file is the
-  fallback
-- A `.env` in the checkout root is not a supported configuration path
-- `KURA_CLAUDE_*` / `KURA_CODEX_*` apply only to scheduled generation, and
-  only while their agent is selected; normal CLI usage is untouched
-- Unset model / effort variables inject no flag; the CLI's own default applies
+```json
+{
+  "generator": "claude",
+  "claude": { "model": null, "effort": null },
+  "codex": { "model": null, "effort": null },
+  "companion": { "model": "opus" },
+  "discord": {
+    "webhooks": { "english": "op://vault/item/field", "timeline": "https://discord.com/api/webhooks/..." },
+    "avatars": { "claude": "https://...", "gpt": "https://..." }
+  },
+  "publish": { "enabled": [] }
+}
+```
+
+| Key | Consumer |
+| --- | --- |
+| `generator` | Scheduled generation agent: `claude` (default) or `codex` |
+| `claude.model` / `claude.effort` | Claude model / effort for scheduled generation |
+| `codex.model` / `codex.effort` | Codex model / reasoning effort for scheduled generation |
+| `companion.model` | Companion card model (default `opus`) |
+| `discord.webhooks.<feature>` | Discord webhook for `english` / `timeline` |
+| `discord.avatars.<family>` | Discord avatar per model family (`claude`, `gpt`, …) |
+| `publish.enabled` | Features with Discord delivery opted in |
+
+- `claude.*` / `codex.*` apply only to scheduled generation, and only while
+  their agent is selected; normal CLI usage is untouched
+- `null` model / effort injects no flag; the CLI's own default applies
 - Invalid effort values are rejected at run time with the accepted list
-- Webhook configuration alone does not enable delivery; `just publish enable
-  <feature>` records the opt-in in the config directory's `publish.json`
+- A webhook alone does not enable delivery; `just publish enable <feature>`
+  adds the feature to `publish.enabled`
+- A webhook may be a 1Password reference (`op://...`); `just bake-secrets`
+  resolves every reference into `~/.local/state/kura/secrets.json` (mode 600),
+  which delivery reads, so scheduled jobs need no 1Password sign-in
 
 ```bash
-# Materialize secrets from 1Password through a local-only .env.ref
-cp .env.ref.example .env.ref
-$EDITOR .env.ref
-just bake-env
+# Resolve op:// webhook references; re-run after changing one
+just bake-secrets
 ```
 
 ## Usage
@@ -173,7 +187,7 @@ just usage --days=7
   connection) reports no token counts and records nothing
 - Cost comes from the agent's own output: the Claude CLI reports it, Codex's
   public events carry token counts only, so Codex rows show `-`
-- With `KURA_GENERATOR=codex`, every scheduled feature shows `-`; `companion`
+- With `"generator": "codex"`, every scheduled feature shows `-`; `companion`
   always runs Claude and always reports cost
 - Claude's figure is what the API would charge for those tokens; under a
   subscription plan it is not an additional charge

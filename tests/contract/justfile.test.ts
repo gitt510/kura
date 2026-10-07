@@ -137,10 +137,9 @@ test("teardown は history source・feature control・entrypoint を除去し、
     mkdirSync(stateDir, { recursive: true });
     writeFileSync(join(stateDir, "history.db"), "data");
     mkdirSync(configDir, { recursive: true });
-    writeFileSync(join(configDir, "env"), "KURA_GENERATOR=codex\n");
     writeFileSync(
-      join(configDir, "publish.json"),
-      `${JSON.stringify({ enabled: ["timeline"] }, null, 2)}\n`,
+      join(configDir, "config.json"),
+      JSON.stringify({ generator: "codex", publish: { enabled: ["timeline"] } }),
     );
 
     const result = runWithHome(home, bin, "kura.timeline", "teardown");
@@ -149,11 +148,10 @@ test("teardown は history source・feature control・entrypoint を除去し、
     expect(() => lstatSync(cli)).toThrow();
     expect(() => lstatSync(timelineJob)).toThrow();
     expect(readFileSync(claudeSettings, "utf-8")).not.toContain(".local/bin/kura");
-    expect(JSON.parse(readFileSync(join(configDir, "publish.json"), "utf-8"))).toEqual({
-      enabled: [],
-    });
+    const config = JSON.parse(readFileSync(join(configDir, "config.json"), "utf-8"));
+    expect(config.publish).toEqual({ enabled: [] });
+    expect(config.generator).toBe("codex");
     expect(readFileSync(join(stateDir, "history.db"), "utf-8")).toBe("data");
-    expect(readFileSync(join(configDir, "env"), "utf-8")).toBe("KURA_GENERATOR=codex\n");
     expect(output(result)).toContain(`retained state: ${stateDir}`);
     expect(output(result)).toContain(`retained config: ${configDir}`);
 
@@ -174,8 +172,8 @@ test("teardown は ownership の preflight に失敗したら何も停止しな�
     expect(runWithHome(home, bin, "", "history", "enable", "claude").exitCode).toBe(0);
     mkdirSync(configDir, { recursive: true });
     writeFileSync(
-      join(configDir, "publish.json"),
-      `${JSON.stringify({ enabled: ["timeline"] }, null, 2)}\n`,
+      join(configDir, "config.json"),
+      JSON.stringify({ publish: { enabled: ["timeline"] } }),
     );
     mkdirSync(join(home, "Library", "LaunchAgents"), { recursive: true });
     writeFileSync(foreignJob, "foreign");
@@ -185,7 +183,7 @@ test("teardown は ownership の preflight に失敗したら何も停止しな�
     expect(output(result)).toContain(`refusing to remove existing path: ${foreignJob}`);
     expect(readlinkSync(runtime)).toBe(repo);
     expect(readFileSync(claudeSettings, "utf-8")).toContain(".local/bin/kura");
-    expect(JSON.parse(readFileSync(join(configDir, "publish.json"), "utf-8"))).toEqual({
+    expect(JSON.parse(readFileSync(join(configDir, "config.json"), "utf-8")).publish).toEqual({
       enabled: ["timeline"],
     });
   } finally {
@@ -205,14 +203,12 @@ test("status は setup と features を表形式で表示する", () => {
     writeFileSync(join(stateDir, "timeline.db"), "data");
     mkdirSync(configDir, { recursive: true });
     writeFileSync(
-      join(configDir, "env"),
-      ["KURA_GENERATOR=codex", "KURA_CODEX_MODEL=gpt-test", "KURA_CODEX_EFFORT=high", ""].join(
-        "\n",
-      ),
-    );
-    writeFileSync(
-      join(configDir, "publish.json"),
-      `${JSON.stringify({ enabled: ["timeline"] }, null, 2)}\n`,
+      join(configDir, "config.json"),
+      JSON.stringify({
+        generator: "codex",
+        codex: { model: "gpt-test", effort: "high" },
+        publish: { enabled: ["timeline"] },
+      }),
     );
 
     const result = runWithHome(home, bin, "kura.timeline", "status");
@@ -220,7 +216,7 @@ test("status は setup と features を表形式で表示する", () => {
     expect(result.exitCode).toBe(0);
     expect(text).toContain("Setup\n┌");
     expect(text).toMatch(/cli\s+│ READY\s+│/);
-    expect(text).toMatch(/env\s+│ PRESENT\s+│ ~\/\.config\/kura\/env/);
+    expect(text).toMatch(/config\s+│ PRESENT\s+│ ~\/\.config\/kura\/config\.json/);
     expect(text).toMatch(/history\.db\s+│ PRESENT\s+│/);
     expect(text).toMatch(/history\/claude\s+│ ENABLED\s+│ Stop \+ UserPromptSubmit hooks/);
     expect(text).toMatch(/history\/codex\s+│ DISABLED\s+│ Stop hook/);

@@ -9,7 +9,12 @@ import {
   resolveGenerator,
   skillPrompt,
 } from "./agent.ts";
+import { defaultConfig, type KuraConfig } from "./config.ts";
 import { KURA_ROOT } from "./storage.ts";
+
+function config(patch: Partial<KuraConfig>): KuraConfig {
+  return { ...defaultConfig(), ...patch };
+}
 
 const WORK_DIR = "/tmp/kura-decisions";
 const ALLOWED_TOOLS = [
@@ -19,32 +24,29 @@ const ALLOWED_TOOLS = [
 ].join(",");
 
 test("generator は未指定なら Claude、指定時は Codex を選ぶ", () => {
-  expect(resolveGenerator({ XDG_CONFIG_HOME: "/kura-test-no-config" })).toBe("claude");
-  expect(resolveGenerator({ KURA_GENERATOR: "codex" })).toBe("codex");
+  expect(resolveGenerator(defaultConfig())).toBe("claude");
+  expect(resolveGenerator(config({ generator: "codex" }))).toBe("codex");
 });
 
 test("未知の generator は拒否する", () => {
-  expect(() => resolveGenerator({ KURA_GENERATOR: "other" })).toThrow(
-    'KURA_GENERATOR must be "claude" or "codex"',
+  expect(() => resolveGenerator(config({ generator: "other" }))).toThrow(
+    'generator must be "claude" or "codex"',
   );
 });
 
-test("Claude の model / effort を kura env から解決する", () => {
+test("Claude の model / effort を config から解決する", () => {
   expect(
-    resolveClaudeOptions({
-      KURA_CLAUDE_MODEL: "claude-fable-5",
-      KURA_CLAUDE_EFFORT: "high",
-    }),
+    resolveClaudeOptions(config({ claude: { model: "claude-fable-5", effort: "high" } })),
   ).toEqual({ model: "claude-fable-5", effort: "high" });
-  expect(resolveClaudeOptions({ XDG_CONFIG_HOME: "/kura-test-no-config" })).toEqual({
+  expect(resolveClaudeOptions(defaultConfig())).toEqual({
     model: null,
     effort: null,
   });
 });
 
 test("未知の Claude effort は拒否する", () => {
-  expect(() => resolveClaudeOptions({ KURA_CLAUDE_EFFORT: "ultra" })).toThrow(
-    "KURA_CLAUDE_EFFORT must be one of",
+  expect(() => resolveClaudeOptions(config({ claude: { model: null, effort: "ultra" } }))).toThrow(
+    "claude.effort must be one of",
   );
 });
 
@@ -97,22 +99,20 @@ test("Claude command は permission bypass を持たない", () => {
   expect(command).not.toContain("--dangerously-skip-permissions");
 });
 
-test("Codex の model / effort を kura env から解決する", () => {
-  expect(
-    resolveCodexOptions({
-      KURA_CODEX_MODEL: "gpt-5.6",
-      KURA_CODEX_EFFORT: "high",
-    }),
-  ).toEqual({ model: "gpt-5.6", effort: "high" });
-  expect(resolveCodexOptions({ XDG_CONFIG_HOME: "/kura-test-no-config" })).toEqual({
+test("Codex の model / effort を config から解決する", () => {
+  expect(resolveCodexOptions(config({ codex: { model: "gpt-5.6", effort: "high" } }))).toEqual({
+    model: "gpt-5.6",
+    effort: "high",
+  });
+  expect(resolveCodexOptions(defaultConfig())).toEqual({
     model: null,
     effort: null,
   });
 });
 
 test("未知の Codex effort は拒否する", () => {
-  expect(() => resolveCodexOptions({ KURA_CODEX_EFFORT: "extreme" })).toThrow(
-    "KURA_CODEX_EFFORT must be one of",
+  expect(() => resolveCodexOptions(config({ codex: { model: null, effort: "extreme" } }))).toThrow(
+    "codex.effort must be one of",
   );
 });
 
