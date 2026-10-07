@@ -91,10 +91,7 @@ $EDITOR "${XDG_CONFIG_HOME:-$HOME/.config}/kura/config.json"
 - `~/.config/kura/config.json` (mode 600) is the only configuration source;
   kura reads no settings from environment variables
 - Without the file, every value below takes its default
-- `just init-config` writes every key with its default; it migrates values
-  from the old `~/.config/kura/env`, the checkout's `.env.ref`, and
-  `~/.config/kura/publish.json` when they exist, and leaves those files for
-  you to remove
+- `just init-config` writes every key with its default
 
 ```json
 {

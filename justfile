@@ -16,7 +16,7 @@ _default:
 setup:
     @bun "{{repo}}/src/cli.ts" setup
 
-# Create config.json, migrating the old env file and publish.json when present. Never overwrites.
+# Create config.json with every key at its default. Never overwrites.
 [group('setup')]
 init-config:
     @bun "{{repo}}/src/cli.ts" init-config

@@ -10,10 +10,8 @@ own. Idempotent.
 `,
   "init-config": `usage: kura init-config
 
-Create the config file (~/.config/kura/config.json, mode 600). Values come
-from the old ~/.config/kura/env, the repo's .env.ref (1Password references)
-and ~/.config/kura/publish.json when they exist, defaults otherwise. Fails
-if config.json already exists. The old files are left for you to remove.
+Create the config file (~/.config/kura/config.json, mode 600) with every
+key at its default. Fails if the file already exists.
 `,
   "bake-secrets": `usage: kura bake-secrets
 

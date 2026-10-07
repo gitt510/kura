@@ -2,7 +2,6 @@ import { afterEach, expect, test } from "bun:test";
 import { mkdtempSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { fromLegacy } from "../cli/config.ts";
 import {
   configPath,
   defaultConfig,
@@ -69,26 +68,4 @@ test("secret は参照でなければそのまま、op:// 参照は bake 済み�
   expect(resolveSecret("https://plain.test", cache)).toBe("https://plain.test");
   expect(resolveSecret("op://vault/item/url", cache)).toBe("https://example.test/hook");
   expect(() => resolveSecret("op://vault/other/url", cache)).toThrow("run: just bake-secrets");
-});
-
-test("旧 env・.env.ref・publish.json から config を組み立て、webhook は参照を優先する", () => {
-  const { config, dropped } = fromLegacy({
-    env: [
-      "KURA_GENERATOR=codex",
-      "KURA_CODEX_MODEL=gpt-5.6",
-      "KURA_CLAUDE_MODEL=",
-      "KURA_DISCORD_WEBHOOK_TIMELINE=https://baked.test/hook",
-      "KURA_DISCORD_AVATAR_GPT=https://example.test/gpt.png",
-      "KURA_DISCORD_WEBHOOK_BRIEFING=https://baked.test/briefing",
-    ].join("\n"),
-    ref: "# refs\nKURA_DISCORD_WEBHOOK_TIMELINE=op://vault/timeline/url\nKURA_GENERATOR=\n",
-    publish: JSON.stringify({ enabled: ["timeline"] }),
-  });
-  expect(config.generator).toBe("codex");
-  expect(config.codex.model).toBe("gpt-5.6");
-  expect(config.claude.model).toBeNull();
-  expect(config.discord.webhooks).toEqual({ timeline: "op://vault/timeline/url" });
-  expect(config.discord.avatars).toEqual({ gpt: "https://example.test/gpt.png" });
-  expect(config.publish.enabled).toEqual(["timeline"]);
-  expect(dropped).toEqual(["KURA_DISCORD_WEBHOOK_BRIEFING"]);
 });
