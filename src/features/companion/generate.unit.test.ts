@@ -1,4 +1,5 @@
 import { expect, test } from "bun:test";
+import { parseConfig } from "../../lib/config.ts";
 import { buildPrompt, parseCardJson, resolveCompanionModel } from "./generate.ts";
 
 test("prompt は入力 / 直前の assistant 文脈 / 3 種類の item 契約を含み、言語は指定しない", () => {
@@ -54,8 +55,13 @@ test("kind 不明や from / to 欠落の要素は落とし、5 件で切る", ()
   expect(parseCardJson(JSON.stringify({ items: many }))).toHaveLength(5);
 });
 
-test("model は KURA_COMPANION_MODEL があればそれ、無ければ opus", () => {
-  expect(resolveCompanionModel({})).toBe("opus");
-  expect(resolveCompanionModel({ KURA_COMPANION_MODEL: "sonnet" })).toBe("sonnet");
-  expect(resolveCompanionModel({ KURA_COMPANION_MODEL: "  " })).toBe("opus");
+test("model は config の companion.model、無ければ opus", () => {
+  const config = parseConfig({}, "config.json");
+  expect(resolveCompanionModel(config)).toBe("opus");
+  expect(
+    resolveCompanionModel(parseConfig({ companion: { model: "sonnet" } }, "config.json")),
+  ).toBe("sonnet");
+  expect(resolveCompanionModel(parseConfig({ companion: { model: "  " } }, "config.json"))).toBe(
+    "opus",
+  );
 });

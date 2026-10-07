@@ -1,88 +1,42 @@
-// publish-policy.ts — external publish の明示 opt-in を XDG config で管理する。
+// publish-policy.ts — external publish の明示 opt-in。config.json の publish.enabled が正本。
 
-import { chmodSync, existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
-import { dirname } from "node:path";
-
-type Environment = Readonly<Record<string, string | undefined>>;
+import { existsSync } from "node:fs";
+import { configPath, loadConfig, saveConfig } from "./config.ts";
 
 export const PUBLISH_FEATURES = ["timeline", "english"] as const;
 export type PublishFeature = (typeof PUBLISH_FEATURES)[number];
 
-export const PUBLISH_WEBHOOKS: Record<PublishFeature, string> = {
-  timeline: "KURA_DISCORD_WEBHOOK_TIMELINE",
-  english: "KURA_DISCORD_WEBHOOK_ENGLISH",
-};
-
-type PublishPolicy = { enabled: PublishFeature[] };
-
-export function publishPolicyPath(env: Environment = process.env): string {
-  const configHome = env.XDG_CONFIG_HOME || `${env.HOME ?? ""}/.config`;
-  if (!configHome || configHome === "/.config") throw new Error("HOME is required");
-  return `${configHome}/kura/publish.json`;
+function isPublishFeature(value: string): value is PublishFeature {
+  return PUBLISH_FEATURES.includes(value as PublishFeature);
 }
 
-function isPublishFeature(value: unknown): value is PublishFeature {
-  return typeof value === "string" && PUBLISH_FEATURES.includes(value as PublishFeature);
-}
-
-function loadPolicy(env: Environment): PublishPolicy {
-  const path = publishPolicyPath(env);
-  if (!existsSync(path)) return { enabled: [] };
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(readFileSync(path, "utf-8"));
-  } catch (error) {
-    throw new Error(`cannot parse ${path}: ${error}`);
+function enabledFeatures(path: string): PublishFeature[] {
+  const enabled = loadConfig(path).publish.enabled;
+  const unknown = enabled.filter((value) => !isPublishFeature(value));
+  if (unknown.length > 0) {
+    throw new Error(`invalid config ${path}: unknown publish feature ${unknown.join(", ")}`);
   }
-  if (
-    !parsed ||
-    typeof parsed !== "object" ||
-    Array.isArray(parsed) ||
-    !Array.isArray((parsed as { enabled?: unknown }).enabled) ||
-    !(parsed as { enabled: unknown[] }).enabled.every(isPublishFeature)
-  ) {
-    throw new Error(`invalid publish policy: ${path}`);
-  }
-  return {
-    enabled: PUBLISH_FEATURES.filter((feature) =>
-      (parsed as { enabled: PublishFeature[] }).enabled.includes(feature),
-    ),
-  };
+  return PUBLISH_FEATURES.filter((feature) => enabled.includes(feature));
 }
 
-export function isPublishEnabled(feature: PublishFeature, env: Environment = process.env): boolean {
-  return loadPolicy(env).enabled.includes(feature);
+export function isPublishEnabled(feature: PublishFeature, path: string = configPath()): boolean {
+  return enabledFeatures(path).includes(feature);
 }
 
 export function setPublishEnabled(
   features: readonly PublishFeature[],
   enabled: boolean,
-  env: Environment = process.env,
+  path: string = configPath(),
 ): void {
-  const path = publishPolicyPath(env);
+  // 無効化は既定どおりなので、config が無ければ作らない。
   if (!enabled && !existsSync(path)) return;
 
-  const current = new Set(loadPolicy(env).enabled);
+  const current = new Set(enabledFeatures(path));
   for (const feature of features) {
     if (enabled) current.add(feature);
     else current.delete(feature);
   }
-  const policy: PublishPolicy = {
-    enabled: PUBLISH_FEATURES.filter((feature) => current.has(feature)),
-  };
-
-  mkdirSync(dirname(path), { recursive: true, mode: 0o700 });
-  try {
-    chmodSync(dirname(path), 0o700);
-  } catch {
-    /* filesystem may not support POSIX permissions */
-  }
-  const temp = `${path}.kura-${process.pid}`;
-  writeFileSync(temp, `${JSON.stringify(policy, null, 2)}\n`, { mode: 0o600 });
-  renameSync(temp, path);
-  try {
-    chmodSync(path, 0o600);
-  } catch {
-    /* filesystem may not support POSIX permissions */
-  }
+  const config = loadConfig(path);
+  config.publish.enabled = PUBLISH_FEATURES.filter((feature) => current.has(feature));
+  saveConfig(config, path);
 }

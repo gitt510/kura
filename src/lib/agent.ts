@@ -1,5 +1,5 @@
 import { existsSync } from "node:fs";
-import { resolveEnv } from "./config.ts";
+import { type KuraConfig, loadConfig } from "./config.ts";
 import { KURA_ROOT } from "./storage.ts";
 import { type AgentUsage, recordUsage } from "./usage.ts";
 
@@ -15,7 +15,6 @@ export type CodexEffort =
   | "xhigh"
   | "max"
   | "ultra";
-type Environment = Readonly<Record<string, string | undefined>>;
 
 export interface ClaudeOptions {
   model: string | null;
@@ -55,10 +54,10 @@ interface ParsedAgentOutput {
   usage: AgentUsage | null; // 出力に usage が無い / parse 失敗なら null
 }
 
-export function resolveGenerator(env: Environment = process.env): Generator {
-  const value = resolveEnv("KURA_GENERATOR", env) ?? "claude";
+export function resolveGenerator(config: KuraConfig = loadConfig()): Generator {
+  const value = config.generator;
   if (value === "claude" || value === "codex") return value;
-  throw new Error(`KURA_GENERATOR must be "claude" or "codex" (got: ${value})`);
+  throw new Error(`generator must be "claude" or "codex" (got: ${value})`);
 }
 
 const CLAUDE_EFFORTS = new Set<ClaudeEffort>(["low", "medium", "high", "xhigh", "max"]);
@@ -74,23 +73,21 @@ const CODEX_EFFORTS = new Set<CodexEffort>([
   "ultra",
 ]);
 
-export function resolveClaudeOptions(env: Environment = process.env): ClaudeOptions {
-  const model = resolveEnv("KURA_CLAUDE_MODEL", env)?.trim() || null;
-  const rawEffort = resolveEnv("KURA_CLAUDE_EFFORT", env)?.trim() || null;
+export function resolveClaudeOptions(config: KuraConfig = loadConfig()): ClaudeOptions {
+  const { model, effort: rawEffort } = config.claude;
   if (rawEffort && !CLAUDE_EFFORTS.has(rawEffort as ClaudeEffort)) {
     throw new Error(
-      `KURA_CLAUDE_EFFORT must be one of ${[...CLAUDE_EFFORTS].join(", ")} (got: ${rawEffort})`,
+      `claude.effort must be one of ${[...CLAUDE_EFFORTS].join(", ")} (got: ${rawEffort})`,
     );
   }
   return { model, effort: rawEffort as ClaudeEffort | null };
 }
 
-export function resolveCodexOptions(env: Environment = process.env): CodexOptions {
-  const model = resolveEnv("KURA_CODEX_MODEL", env)?.trim() || null;
-  const rawEffort = resolveEnv("KURA_CODEX_EFFORT", env)?.trim() || null;
+export function resolveCodexOptions(config: KuraConfig = loadConfig()): CodexOptions {
+  const { model, effort: rawEffort } = config.codex;
   if (rawEffort && !CODEX_EFFORTS.has(rawEffort as CodexEffort)) {
     throw new Error(
-      `KURA_CODEX_EFFORT must be one of ${[...CODEX_EFFORTS].join(", ")} (got: ${rawEffort})`,
+      `codex.effort must be one of ${[...CODEX_EFFORTS].join(", ")} (got: ${rawEffort})`,
     );
   }
   return { model, effort: rawEffort as CodexEffort | null };
