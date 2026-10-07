@@ -1,4 +1,4 @@
-// config.ts — config.json の初期化と、1Password 参照の secrets.json への bake。
+// config.ts — config.json の表示・初期化と、1Password 参照の secrets.json への bake。
 
 import { existsSync } from "node:fs";
 import {
@@ -6,12 +6,19 @@ import {
   defaultConfig,
   isSecretReference,
   loadConfig,
+  redactConfig,
   saveConfig,
   secretsPath,
   writePrivateJson,
 } from "../lib/config.ts";
 
-type ConfigCommand = "init-config" | "bake-secrets";
+type ConfigCommand = "config" | "init-config" | "bake-secrets";
+
+// 既定値で埋めた実効値を JSON で出す。mod はこれを読み、補完・検証を kura に任せる。
+function showConfig(): number {
+  process.stdout.write(`${JSON.stringify(redactConfig(loadConfig()), null, 2)}\n`);
+  return 0;
+}
 
 function initConfig(): number {
   const target = configPath();
@@ -46,5 +53,6 @@ export async function runConfig(command: ConfigCommand, args: string[]): Promise
     process.stderr.write(`usage: kura ${command}\n`);
     return 2;
   }
+  if (command === "config") return showConfig();
   return command === "init-config" ? initConfig() : bakeSecrets();
 }

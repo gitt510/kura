@@ -19,6 +19,15 @@ export interface AgentConfig {
   effort: string | null;
 }
 
+// Claude Code の mod (plugin/) の pane。null は Claude Code の既定に任せる。
+// widget の id が mod に実在するかは mod が判定する。
+export interface CompanionConfig {
+  autoOpen: boolean; // session 開始時に pane を開く
+  columns: number | null; // 横に dock したときの幅
+  rows: number | null; // prompt の上に置いたときの高さ
+  widgets: { id: string; share: number }[]; // 上から順に積み、高さを share で割る
+}
+
 // generator / effort の値の妥当性は使う側 (lib/agent.ts) が検証する。ここは形だけ。
 export interface KuraConfig {
   generator: string;
@@ -26,6 +35,7 @@ export interface KuraConfig {
   codex: AgentConfig;
   redpen: { model: string };
   tldr: { model: string };
+  companion: CompanionConfig;
   discord: {
     webhooks: Record<string, string>; // feature 名 → URL または op:// 参照
     avatars: Record<string, string>; // model family (小文字) → 画像 URL
@@ -40,6 +50,15 @@ export function defaultConfig(): KuraConfig {
     codex: { model: null, effort: null },
     redpen: { model: "opus" },
     tldr: { model: "opus" },
+    companion: {
+      autoOpen: false,
+      columns: null,
+      rows: null,
+      widgets: [
+        { id: "redpen", share: 6 },
+        { id: "tldr", share: 4 },
+      ],
+    },
     discord: { webhooks: {}, avatars: {} },
     publish: { enabled: [] },
   };
@@ -99,6 +118,46 @@ function modelSection(raw: Json, key: string, path: string, fallback: string): {
   return { model: stringOrNull(section(raw, key, path).model, `${key}.model`, path) ?? fallback };
 }
 
+function isCount(value: unknown): value is number {
+  return typeof value === "number" && Number.isInteger(value) && value > 0;
+}
+
+function countOrNull(value: unknown, field: string, path: string): number | null {
+  if (value === undefined || value === null) return null;
+  if (!isCount(value))
+    throw new Error(`invalid config ${path}: ${field} must be a positive integer`);
+  return value;
+}
+
+function companionSection(raw: Json, path: string, fallback: CompanionConfig): CompanionConfig {
+  const value = section(raw, "companion", path);
+  const autoOpen = value.autoOpen ?? fallback.autoOpen;
+  if (typeof autoOpen !== "boolean") {
+    throw new Error(`invalid config ${path}: companion.autoOpen must be a boolean`);
+  }
+  const widgets = value.widgets ?? fallback.widgets;
+  if (
+    !Array.isArray(widgets) ||
+    !widgets.every(
+      (widget) =>
+        isObject(widget) &&
+        typeof widget.id === "string" &&
+        widget.id.trim() !== "" &&
+        isCount(widget.share),
+    )
+  ) {
+    throw new Error(
+      `invalid config ${path}: companion.widgets must be an array of {id: string, share: positive integer}`,
+    );
+  }
+  return {
+    autoOpen,
+    columns: countOrNull(value.columns, "companion.columns", path),
+    rows: countOrNull(value.rows, "companion.rows", path),
+    widgets: widgets.map((widget) => ({ id: widget.id, share: widget.share })),
+  };
+}
+
 // 書かれていない項目は既定値で埋める。型が違う項目は path と項目名を付けて拒否する。
 export function parseConfig(raw: unknown, path: string): KuraConfig {
   if (!isObject(raw)) throw new Error(`invalid config ${path}: must be a JSON object`);
@@ -114,6 +173,7 @@ export function parseConfig(raw: unknown, path: string): KuraConfig {
     codex: agentSection(raw, "codex", path),
     redpen: modelSection(raw, "redpen", path, defaults.redpen.model),
     tldr: modelSection(raw, "tldr", path, defaults.tldr.model),
+    companion: companionSection(raw, path, defaults.companion),
     discord: {
       webhooks: stringMap(discord.webhooks, "discord.webhooks", path),
       avatars: stringMap(discord.avatars, "discord.avatars", path),
@@ -153,6 +213,17 @@ export function writePrivateJson(path: string, value: unknown): void {
 
 export function saveConfig(config: KuraConfig, path: string = configPath()): void {
   writePrivateJson(path, config);
+}
+
+// 表示用の config。参照でない webhook は実値なので伏せる — 参照 (op://) はそのまま見せる。
+export function redactConfig(config: KuraConfig): KuraConfig {
+  const webhooks = Object.fromEntries(
+    Object.entries(config.discord.webhooks).map(([name, value]) => [
+      name,
+      isSecretReference(value) ? value : "<redacted>",
+    ]),
+  );
+  return { ...config, discord: { ...config.discord, webhooks } };
 }
 
 export function isSecretReference(value: string): boolean {

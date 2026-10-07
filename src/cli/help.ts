@@ -8,6 +8,11 @@ Link this checkout into place: ~/.local/share/kura -> the repo, and
 ~/.local/bin/kura -> src/cli.ts. Refuses to replace a path it does not
 own. Idempotent.
 `,
+  config: `usage: kura config
+
+Print the effective config as JSON: config.json with every unset key at its
+default. Webhooks that are not op:// references are printed as <redacted>.
+`,
   "init-config": `usage: kura init-config
 
 Create the config file (~/.config/kura/config.json, mode 600) with every
