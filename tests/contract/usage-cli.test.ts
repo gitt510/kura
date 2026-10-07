@@ -79,14 +79,14 @@ test("--days は期間外の call を除外する", () => {
   const root = mkdtempSync(join(tmpdir(), "kura-usage-days-"));
   try {
     seed(root, "english-card", new Date().toISOString());
-    seed(root, "english", "2026-01-01T00:00:00.000Z");
+    seed(root, "timeline", "2026-01-01T00:00:00.000Z");
 
     const result = run(["--days=7"], root);
     const text = result.stdout.toString();
     expect(result.exitCode).toBe(0);
     expect(text).toContain("(last 7 days)");
     expect(text).toContain("english-card");
-    expect(text).not.toContain("english");
+    expect(text).not.toContain("timeline");
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
