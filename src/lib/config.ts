@@ -22,6 +22,7 @@ export interface AgentConfig {
 // Claude Code の mod (plugin/) の pane。null は Claude Code の既定に任せる。
 // widget の id が mod に実在するかは mod が判定する。
 export interface CompanionConfig {
+  enabled: boolean; // redpen / tldr を session の始めから生成する。false なら mod の companion は何もしない
   autoOpen: boolean; // session 開始時に pane を開く
   columns: number | null; // 横に dock したときの幅
   rows: number | null; // prompt の上に置いたときの高さ
@@ -51,12 +52,13 @@ export function defaultConfig(): KuraConfig {
     redpen: { model: "opus" },
     tldr: { model: "opus" },
     companion: {
+      enabled: false,
       autoOpen: false,
       columns: null,
       rows: null,
       widgets: [
-        { id: "redpen", share: 6 },
-        { id: "tldr", share: 4 },
+        { id: "redpen", share: 4 },
+        { id: "tldr", share: 6 },
       ],
     },
     discord: { webhooks: {}, avatars: {} },
@@ -131,6 +133,10 @@ function countOrNull(value: unknown, field: string, path: string): number | null
 
 function companionSection(raw: Json, path: string, fallback: CompanionConfig): CompanionConfig {
   const value = section(raw, "companion", path);
+  const enabled = value.enabled ?? fallback.enabled;
+  if (typeof enabled !== "boolean") {
+    throw new Error(`invalid config ${path}: companion.enabled must be a boolean`);
+  }
   const autoOpen = value.autoOpen ?? fallback.autoOpen;
   if (typeof autoOpen !== "boolean") {
     throw new Error(`invalid config ${path}: companion.autoOpen must be a boolean`);
@@ -151,6 +157,7 @@ function companionSection(raw: Json, path: string, fallback: CompanionConfig): C
     );
   }
   return {
+    enabled,
     autoOpen,
     columns: countOrNull(value.columns, "companion.columns", path),
     rows: countOrNull(value.rows, "companion.rows", path),
