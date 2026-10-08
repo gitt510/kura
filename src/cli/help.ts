@@ -87,6 +87,13 @@ Load one recorded session as JSON: meta (session, cwd, model, volume)
 and the full message list. Accepts a unique session-id prefix — find
 candidates with: kura search
 `,
+  handoff: `usage: kura handoff <session-id>
+
+Open a new Claude Code session in a tmux pane to the right, in the current
+directory. The session gets only the given session id in its system prompt
+and loads that conversation with kura show when a request depends on it.
+It starts idle: type the first instruction there. Fails outside tmux.
+`,
   timeline: `usage: kura timeline [<YYYY-MM-DD> <hour 0-23>]
 
 Summarize one JST hour of recorded sessions into timeline.db, then publish

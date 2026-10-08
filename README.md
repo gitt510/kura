@@ -169,6 +169,23 @@ kura config
 - `companion.*` is read each time the pane opens; reopen it to apply a change
 - A widget id other than `redpen` / `tldr` is skipped with a toast
 
+## Handoff
+
+```bash
+# Claude Code: open a new session in a tmux pane, handed this session's id
+/kura-handoff
+# Anywhere else
+kura handoff <session-id>
+```
+
+- Ships in the `kura` Claude Code plugin; requires `kura` on `PATH` and
+  running inside tmux
+- The new session opens to the right, in the same directory, and waits for
+  the first instruction
+- Only the session id is passed, in the system prompt; the new session loads
+  the conversation with `kura show` when a request depends on it
+- The current turn is stored by the Stop hook, so hand off after it ends
+
 ## Usage
 
 ```bash

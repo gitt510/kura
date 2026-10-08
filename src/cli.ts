@@ -3,6 +3,7 @@
 
 import { runConfig } from "./cli/config.ts";
 import { runFeatures } from "./cli/features.ts";
+import { runHandoff } from "./cli/handoff.ts";
 import { helpText } from "./cli/help.ts";
 import { runHistory } from "./cli/history.ts";
 import { runHourly } from "./cli/hourly.ts";
@@ -24,6 +25,7 @@ const usage = `usage: kura setup
        kura usage [--days=N]
        kura search [--limit=N] <keyword...>
        kura show <session-id-or-prefix>
+       kura handoff <session-id>
        kura timeline [<YYYY-MM-DD> <hour 0-23>]
        kura english [<YYYY-MM-DD> <hour 0-23>]
        kura redpen < prompt.txt
@@ -59,6 +61,9 @@ async function main(): Promise<number> {
     }
     if (command === "history" || command === "hook" || command === "search" || command === "show") {
       return await runHistory(command, args);
+    }
+    if (command === "handoff") {
+      return await runHandoff(args);
     }
     if (command === "timeline" || command === "english") {
       return await runHourly(command, args);

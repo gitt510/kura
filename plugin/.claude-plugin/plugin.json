@@ -1,6 +1,6 @@
 {
   "name": "kura",
-  "description": "Search locally stored Claude Code and Codex conversations recorded by kura, and a companion pane with English feedback and three-line answer summaries.",
+  "description": "Search locally stored Claude Code and Codex conversations recorded by kura, and a companion pane with English feedback and three-line answer summaries, and a handoff of the session to a new tmux pane.",
   "author": { "name": "gitt510" },
   "types": "./types/index.d.ts"
 }
