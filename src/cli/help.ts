@@ -119,7 +119,8 @@ redpen.model in config.json (default opus).
   tldr: `usage: kura tldr < turns.json
 
 Compress the last answer of a conversation into three lines and print it as
-JSON: {status, model, text}. stdin is {"turns": [{question, answer}, ...]},
+JSON: {status, model, text, question}. question is the last question in one
+line, or null when the reply did not give one. stdin is {"turns": [{question, answer}, ...]},
 oldest first; up to 3 turns before the last one are passed as context.
 Nothing is stored. The model is tldr.model in config.json (default opus).
 `,

@@ -164,9 +164,16 @@ kura config
 - From session start, every typed prompt gets a `kura redpen` card and every
   answer a `kura tldr` summary, whether the pane is open or not — one call
   each, kept for the session (last 30)
-- `redpen` shows the cards with something to fix, oldest at the top
-- `tldr` shows each turn as the question on one line and its summary, oldest
-  at the top, with the 3 turns before it as summary context
+- `redpen` shows the cards with something to fix, oldest at the top; a card
+  with nothing to fix shows `nothing to flag ✓` for 2 seconds
+- `tldr` shows each turn from the moment its prompt is typed: `> question` on
+  one line and the summary below it, oldest at the top, with the 3 turns
+  before it as summary context
+- Once summarized, the question line is the one-line question `kura tldr`
+  returns; until then it is the typed prompt, cut at the pane width
+- A row still waiting shows a spinner; the card and the turn of one prompt
+  share its word and colors
+- A summary cut off by a plugin reload is made again at the next session start
 - While the pane is open but out of view, the newest card shows above the
   prompt instead
 - `companion.*` is read at session start and each time the pane opens;

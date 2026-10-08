@@ -1,12 +1,13 @@
 import { expect, test } from "bun:test";
 import { parseConfig } from "../../lib/config.ts";
-import { buildPrompt, parseTldrInput, resolveTldrModel } from "./generate.ts";
+import { ASK, buildPrompt, parseTldrInput, resolveTldrModel, splitReply } from "./generate.ts";
 
 const turn = (n: number) => ({ question: `q${n}`, answer: `a${n}` });
 
 test("会話の続きとして、assistant 本人に「長い。3行で。」と返させる", () => {
   const { system, prompt } = buildPrompt({ turns: [turn(1)] });
-  expect(prompt).toBe("長い。3行で。");
+  expect(prompt).toBe(ASK);
+  expect(prompt.startsWith("長い。3行で。")).toBe(true);
   expect(system).toBe(
     "<conversation>\n<user>q1</user>\n<assistant>a1</assistant>\n</conversation>\n\n" +
       "You are the assistant in this conversation. Reply to the user's next message.",
@@ -23,6 +24,15 @@ test("会話には最後の turn と、その前の直近 3 turn だけを入れ
   expect(system).toContain(
     `<user>${"q".repeat(2000)}</user>\n<assistant>${"a".repeat(2000)}</assistant>\n</conversation>`,
   );
+});
+
+test("返答の先頭行の `> ` を question の 1 行要約として取り出し、無ければ全部を要約にする", () => {
+  expect(splitReply("> キャッシュの仕組みを聞いた\n1\n2\n3")).toEqual({
+    question: "キャッシュの仕組みを聞いた",
+    text: "1\n2\n3",
+  });
+  expect(splitReply("1\n2\n3")).toEqual({ question: null, text: "1\n2\n3" });
+  expect(splitReply("> only a question")).toEqual({ question: null, text: "> only a question" });
 });
 
 test("parseTldrInput は turns の形を検証する", () => {

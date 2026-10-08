@@ -9,9 +9,8 @@
 // /kura-handoff も置く: この session の id を `kura handoff` に渡し、tmux の右に新しい
 // Claude Code を開く。pane を開くのも system prompt を組むのも kura が持つ。
 
-import type { EngineInterface, Register, RenderElement } from "claude-code";
+import type { EngineInterface, Register, RenderElement, Timer } from "claude-code";
 import { atom, read, update } from "claude-code";
-
 import type { Card, Entry, Item, ItemKind, Layout, Tldr, Turn } from "../types";
 
 const PANE = "kura-companion";
@@ -21,13 +20,17 @@ const HISTORY_LIMIT = 30;
 // 要約する turn と、kura tldr が context として読む直前の 3 turn。
 const CONTEXT_TURNS = 4;
 const TIMEOUT_MS = 120_000;
+// 直すところの無い card を pane に出しておく時間。
+const FLASH_MS = 2_000;
 
 // 打った prompt ごとに 1 entry、古い順。band は最新を、pane は全部を出す。
 const history = atom({ plugin: "kura", key: "history" } as const, []);
-// main loop の question / answer とその要約、古い順。
+// main loop の question / answer とその要約、古い順。turn は prompt を打った時点で積み、回答で埋める。
 const turns = atom({ plugin: "kura", key: "turns" } as const, []);
 // session の始めか pane を開いたときに読んだ `kura config` の companion section。
 const layout = atom({ plugin: "kura", key: "layout" } as const, null);
+// spinner の frame。生成を待つものがある間だけ進む。
+const frame = atom({ plugin: "kura", key: "frame" } as const, 0);
 
 type Elements = ReturnType<EngineInterface["ui"]["resolve"]>;
 
@@ -38,6 +41,70 @@ async function kura($: EngineInterface, args: string[], stdin?: string): Promise
     throw new Error(`kura ${args[0]}: ${reason}`);
   }
   return run.stdout;
+}
+
+// ---- spinner ----
+
+// 記号は行って戻る。文言と palette は待っている item ごとに id から 1 つ選び、待つ間は変えない。
+const GLYPHS = ["·", "✢", "✳", "✶", "✻", "✽"];
+const CYCLE = [...GLYPHS, ...GLYPHS.slice(1, -1).reverse()];
+const TICK_MS = 120;
+// redpen と tldr で共通: 同じ prompt の card と turn は同じ id なので、同じ文言と palette になる。
+const WORDS = ["Pondering", "Distilling", "Brewing", "Mulling", "Polishing", "Simmering"];
+// 明るい順: 光の芯、その両隣、さらに外、地の色。
+const PALETTES = [
+  ["#fff7d6", "#ffd866", "#e0a526", "#9c7a2e"],
+  ["#ffe3f1", "#ff8fc7", "#d9589a", "#8f4a6b"],
+  ["#e0f7ff", "#78dcff", "#3aa7d9", "#3f6e85"],
+  ["#eee6ff", "#b69cff", "#8a63e6", "#5f4f8f"],
+  ["#e6ffe9", "#7ee68f", "#3fb85a", "#457552"],
+];
+
+function pick<T>(list: T[], id: string, salt: number): T {
+  let hash = salt;
+  for (const char of id) hash = (hash * 31 + (char.codePointAt(0) ?? 0)) >>> 0;
+  return list[hash % list.length];
+}
+
+function spinner({ Text }: Elements, id: string, tick: number): RenderElement {
+  const label = `${pick(WORDS, id, 1)}…`;
+  const palette = pick(PALETTES, id, 2);
+  // 光は label の左外から右外へ流れ、少し間を置いてまた左から。
+  const at = (tick % (label.length + 8)) - 3;
+  return (
+    <Text wrap="truncate-end">
+      <Text color={palette[1]}>{`${CYCLE[tick % CYCLE.length]} `}</Text>
+      {[...label].map((char, index) => (
+        <Text key={index} color={palette[Math.min(Math.abs(index - at), palette.length - 1)]}>
+          {char}
+        </Text>
+      ))}
+    </Text>
+  );
+}
+
+function isWaiting(summary: Tldr): boolean {
+  return summary.status === "answering" || summary.status === "pending";
+}
+
+// 待つものがある間だけ frame を進め、無くなったら止める。
+let ticker: Timer | null = null;
+
+function startTicker($: EngineInterface): void {
+  if (ticker) return;
+  ticker = $.clock.every(TICK_MS, () => {
+    void (async () => {
+      const hasWaiting =
+        (await read($, history)).some((entry) => entry.card.status === "pending") ||
+        (await read($, turns)).some((turn) => isWaiting(turn.summary));
+      if (!hasWaiting) {
+        ticker?.cancel();
+        ticker = null;
+        return;
+      }
+      await update($, frame, (n) => n + 1);
+    })().catch(() => {});
+  });
 }
 
 // ---- redpen ----
@@ -73,10 +140,16 @@ function parseCard(stdout: string): Card | null {
   return { status: "error" };
 }
 
-function cardRows({ Box, Text }: Elements, card: Card, columns: number): RenderElement {
-  if (card.status === "pending") return <Text dimColor>[kura] processing …</Text>;
+function cardRows(
+  elements: Elements,
+  { id, card }: Entry,
+  columns: number,
+  tick: number,
+): RenderElement {
+  const { Box, Text } = elements;
+  if (card.status === "pending") return spinner(elements, id, tick);
   if (card.status === "error") return <Text color="error">[kura] generation failed</Text>;
-  if (card.items.length === 0) return <Text color="success">[kura] nothing to flag ✓</Text>;
+  if (card.items.length === 0) return <Text dimColor>nothing to flag ✓</Text>;
 
   return (
     <Box flexDirection="column">
@@ -88,9 +161,9 @@ function cardRows({ Box, Text }: Elements, card: Card, columns: number): RenderE
           return (
             <Text>
               {label}
-              <Text dimColor>{item.from}</Text>
+              <Text>{item.from}</Text>
               {" → "}
-              <Text bold>{item.to}</Text>
+              <Text color={KIND_COLOR[item.kind]}>{item.to}</Text>
             </Text>
           );
         }
@@ -99,10 +172,10 @@ function cardRows({ Box, Text }: Elements, card: Card, columns: number): RenderE
           <Box flexDirection="column">
             <Text>
               {label}
-              <Text dimColor>{item.from}</Text>
+              <Text>{item.from}</Text>
             </Text>
             <Text>
-              {" ".repeat(LABEL_WIDTH)}→ <Text bold>{item.to}</Text>
+              {" ".repeat(LABEL_WIDTH)}→ <Text color={KIND_COLOR[item.kind]}>{item.to}</Text>
             </Text>
           </Box>
         );
@@ -115,16 +188,18 @@ function cardRows({ Box, Text }: Elements, card: Card, columns: number): RenderE
 
 // pane は上から widget を積む。各 widget は share の比で pane の行を分け合い、
 // 自分の行数で切られる。どれを何の比で積むかは config の companion.widgets が決める。
-type PaneData = { history: Entry[]; turns: Turn[] };
+type PaneData = { history: Entry[]; turns: Turn[]; tick: number };
 type Size = { columns: number; rows: number };
 type Draw = (elements: Elements, data: PaneData, size: Size) => RenderElement;
 
-// 直すところのある card。直すところの無い card は pane に出さない。
+// 直すところのある card。直すところの無い card は FLASH_MS の間だけ出す。
 function fixable(list: Entry[]): Entry[] {
-  return list.filter((entry) => entry.card.status !== "ok" || entry.card.items.length > 0);
+  return list.filter(
+    (entry) => entry.card.status !== "ok" || entry.card.items.length > 0 || entry.isFlashing,
+  );
 }
 
-function drawRedpen(elements: Elements, { history: list }: PaneData, { columns }: Size) {
+function drawRedpen(elements: Elements, { history: list, tick }: PaneData, { columns }: Size) {
   const { Box, Text } = elements;
   // 直すところのある card だけを古い順に — chat のように最新が一番下に来る。item が元の文の
   // 該当部分を持つので、打った prompt は出さない。
@@ -134,38 +209,39 @@ function drawRedpen(elements: Elements, { history: list }: PaneData, { columns }
       {shown.length === 0 && <Text dimColor>Prompts with something to fix show up here.</Text>}
       {shown.map((entry) => (
         <Box key={entry.id} flexDirection="column">
-          {cardRows(elements, entry.card, columns)}
+          {cardRows(elements, entry, columns, tick)}
         </Box>
       ))}
     </Box>
   );
 }
 
-function summaryRows({ Text }: Elements, summary: Tldr | null): RenderElement {
-  // null は要約の途中で reload された turn: 要約は作り直さない。
-  if (summary === null) return <Text dimColor>not summarized</Text>;
-  if (summary.status === "pending") return <Text dimColor>summarizing …</Text>;
+function summaryRows(elements: Elements, { id, summary }: Turn, tick: number): RenderElement {
+  const { Text } = elements;
+  if (isWaiting(summary)) return spinner(elements, id, tick);
   if (summary.status === "error") return <Text color="error">summary failed</Text>;
   return <Text>{summary.text}</Text>;
 }
 
-function drawTldr(elements: Elements, { turns: list }: PaneData, { columns }: Size) {
+function drawTldr(elements: Elements, { turns: list, tick }: PaneData) {
   const { Box, Text } = elements;
-  // redpen と同じく古い順。chat のように question は右寄せの 1 行、要約は左寄せの kura tldr の 3 行。
+  // redpen と同じく古い順。question は `>` を付けた 1 行、要約はその下に 2 桁下げた kura tldr の 3 行。
   // 何 turn 出るかは領域の高さが決める。
   return (
     <Box flexDirection="column">
       <Text dimColor>[tldr]</Text>
       {list.length === 0 && <Text dimColor>The next answer is summarized here.</Text>}
       {list.map((turn, index) => (
-        <Box key={turn.id} flexDirection="column">
-          {index > 0 && <Text dimColor>{"┈".repeat(columns)}</Text>}
-          <Box justifyContent="flex-end" paddingLeft={4} marginBottom={1}>
+        <Box key={turn.id} flexDirection="column" marginTop={index > 0 ? 1 : 0}>
+          {turn.question.trim() !== "" && (
             <Text color="suggestion" wrap="truncate-end">
-              {turn.question.replace(/\s+/g, " ")}
+              {/* 要約ができれば kura tldr がまとめた 1 行、それまでは打った prompt を切って出す。 */}
+              {`> ${(turn.summary.status === "ok" && turn.summary.question) || turn.question.replace(/\s+/g, " ")}`}
             </Text>
+          )}
+          <Box flexDirection="column" paddingLeft={2}>
+            {summaryRows(elements, turn, tick)}
           </Box>
-          {summaryRows(elements, turn.summary)}
         </Box>
       ))}
     </Box>
@@ -210,6 +286,32 @@ async function openPane($: EngineInterface): Promise<void> {
   });
 }
 
+// turn id の要約を kura tldr に作らせる。context はその turn と直前の turn。失敗はここで受ける。
+async function summarize($: EngineInterface, id: string): Promise<void> {
+  const settle = (summary: Tldr) =>
+    update($, turns, (list) => list.map((each) => (each.id === id ? { ...each, summary } : each)));
+  startTicker($);
+  try {
+    const list = await read($, turns);
+    const end = list.findIndex((turn) => turn.id === id) + 1;
+    const context = list
+      .slice(Math.max(0, end - CONTEXT_TURNS), end)
+      .map(({ question, answer }) => ({ question, answer }));
+    const out = JSON.parse(await kura($, ["tldr"], JSON.stringify({ turns: context }))) as {
+      status?: string;
+      text?: string;
+      question?: string | null;
+    };
+    await settle(
+      out.status === "ok" && out.text
+        ? { status: "ok", text: out.text, ...(out.question ? { question: out.question } : {}) }
+        : { status: "error" },
+    );
+  } catch {
+    await settle({ status: "error" }).catch(() => {});
+  }
+}
+
 // 各 load の最初の event で宣言する。session.start だけだと hot reload の後に typeahead から
 // 消えていた。宣言し直すと置き換わる。
 let isDeclared = false;
@@ -230,22 +332,33 @@ async function declare($: EngineInterface): Promise<void> {
 }
 
 export const register: Register = (on) => {
-  // 最後に打った prompt: 次の回答が答えている question。
-  let question = "";
-
   on("session.start", async ($, e, next) => {
     await declare($);
     // reload は前の load の実行中の仕事を終わらせる。pending のまま残ったものは片付かない。
-    await update($, history, (list) => list.filter((entry) => entry.card.status !== "pending"));
-    // id の無い turn は要約を turn ごとに持つ前の形: 捨てる。
+    await update($, history, (list) =>
+      list
+        .filter((entry) => entry.card.status !== "pending")
+        .map((entry) => (entry.isFlashing ? { ...entry, isFlashing: false } : entry)),
+    );
+    // id の無い turn は要約を turn ごとに持つ前の形、回答を待っていた turn は回答が届かない: 捨てる。
+    // 要約の途中だった turn (と要約を持たない前の形) は作り直す。
     await update($, turns, (list) =>
       list
-        .filter((turn) => turn.id !== undefined)
-        .map((turn) => (turn.summary?.status === "pending" ? { ...turn, summary: null } : turn)),
+        .filter((turn) => turn.id !== undefined && turn.summary?.status !== "answering")
+        .map((turn) =>
+          !turn.summary || turn.summary.status === "pending"
+            ? { ...turn, summary: { status: "pending" } }
+            : turn,
+        ),
     );
     const done = await next(e);
     void (async () => {
       const companion = await loadLayout($);
+      if (companion.enabled) {
+        for (const turn of await read($, turns)) {
+          if (turn.summary.status === "pending") void summarize($, turn.id);
+        }
+      }
       if (companion.enabled && companion.autoOpen && !(await paneState($)).isOpen) {
         await openPane($);
       }
@@ -283,7 +396,6 @@ export const register: Register = (on) => {
 
   on("prompt.submit", async ($, e, next) => {
     if (e.origin?.kind !== "composer") return next(e);
-    question = e.text;
 
     // card が prompt を止めないように、失敗はすべてこの task の中で受ける。
     // id は hot reload をまたいで一意 — history は module より長生きし、counter では重なる。
@@ -296,13 +408,41 @@ export const register: Register = (on) => {
       );
     void (async () => {
       if (!(await isEnabled($))) return;
+      // command は turn にしない。回答中に打った prompt は、その turn の question に足す。
+      if (!e.text.startsWith("/")) {
+        await update($, turns, (list) => {
+          const open = list.at(-1);
+          if (open?.summary.status === "answering") {
+            return [...list.slice(0, -1), { ...open, question: `${open.question}\n${e.text}` }];
+          }
+          // card と同じ id: 同じ prompt の redpen と tldr は同じ palette の spinner になる。
+          const turn: Turn = {
+            id,
+            question: e.text,
+            answer: "",
+            summary: { status: "answering" },
+          };
+          return [...list, turn].slice(-HISTORY_LIMIT);
+        });
+      }
       await update($, history, (list) =>
         [...list, { id, input: e.text, card: { status: "pending" } } as Entry].slice(
           -HISTORY_LIMIT,
         ),
       );
+      startTicker($);
       try {
-        await settle(parseCard(await kura($, ["redpen"], e.text)));
+        const card = parseCard(await kura($, ["redpen"], e.text));
+        await settle(card);
+        // 直すところが無ければ、その旨を一瞬だけ出して消す。
+        if (card?.status === "ok" && card.items.length === 0) {
+          const flash = (isFlashing: boolean) =>
+            update($, history, (list) =>
+              list.map((entry) => (entry.id === id ? { ...entry, isFlashing } : entry)),
+            );
+          await flash(true);
+          $.clock.after(FLASH_MS, () => void flash(false).catch(() => {}));
+        }
       } catch {
         await settle({ status: "error" });
       }
@@ -321,47 +461,30 @@ export const register: Register = (on) => {
     const pane = await paneState($);
     if (!pane.isOpen || pane.isInView) return next(e);
 
-    return cardRows($.ui.resolve(e), newest.card, e.props.bodyColumns);
+    const tick = newest.card.status === "pending" ? await read($, frame) : 0;
+    return cardRows($.ui.resolve(e), newest, e.props.bodyColumns, tick);
   });
 
   on("turn.complete", async ($, e, next) => {
     const done = await next(e);
-    if (e.agentId !== undefined || e.reason !== "answer" || !e.answer.trim()) return done;
-    if (!(await isEnabled($))) return done;
+    if (e.agentId !== undefined || !(await isEnabled($))) return done;
+    const open = (await read($, turns)).at(-1);
+    const openId = open?.summary.status === "answering" ? open.id : undefined;
+    // 中断・エラー・空の回答は要約しない: 回答を待っていた turn ごと捨てる。
+    if (e.reason !== "answer" || !e.answer.trim()) {
+      if (openId) await update($, turns, (list) => list.filter((turn) => turn.id !== openId));
+      return done;
+    }
     // id は hot reload をまたいで一意 — turns は module より長生きする。
-    const id = crypto.randomUUID();
-    const turn: Turn = {
-      id,
-      question,
-      answer: e.answer,
-      summary: { status: "pending" },
-    };
-    await update($, turns, (list) => [...list, turn].slice(-HISTORY_LIMIT));
-
-    const settle = (summary: Tldr) =>
-      update($, turns, (list) =>
-        list.map((each) => (each.id === id ? { ...each, summary } : each)),
-      );
-    void (async () => {
-      try {
-        const context = (await read($, turns))
-          .slice(-CONTEXT_TURNS)
-          .map(({ question, answer }) => ({
-            question,
-            answer,
-          }));
-        const stdin = JSON.stringify({ turns: context });
-        const out = JSON.parse(await kura($, ["tldr"], stdin)) as {
-          status?: string;
-          text?: string;
-        };
-        await settle(
-          out.status === "ok" && out.text ? { status: "ok", text: out.text } : { status: "error" },
-        );
-      } catch {
-        await settle({ status: "error" });
-      }
-    })().catch(() => {});
+    const id = openId ?? crypto.randomUUID();
+    const filled = { answer: e.answer, summary: { status: "pending" } } as const;
+    // prompt の無い turn (plugin が送った prompt など) は question を空で積む。
+    await update($, turns, (list) =>
+      openId
+        ? list.map((turn) => (turn.id === id ? { ...turn, ...filled } : turn))
+        : [...list, { id, question: "", ...filled }].slice(-HISTORY_LIMIT),
+    );
+    void summarize($, id);
 
     return done;
   });
@@ -369,7 +492,11 @@ export const register: Register = (on) => {
   on("ui.render", { component: "Pane", requestId: PANE }, async ($, e) => {
     const elements = $.ui.resolve(e);
     const { Box, Text } = elements;
-    const data: PaneData = { history: await read($, history), turns: await read($, turns) };
+    const data: PaneData = {
+      history: await read($, history),
+      turns: await read($, turns),
+      tick: await read($, frame),
+    };
     const widgets = ((await read($, layout))?.widgets ?? []).filter(
       (widget) => widget.id in WIDGETS,
     );
