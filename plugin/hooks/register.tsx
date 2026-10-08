@@ -29,7 +29,7 @@ const history = atom({ plugin: "kura", key: "history" } as const, []);
 const turns = atom({ plugin: "kura", key: "turns" } as const, []);
 // session の始めか pane を開いたときに読んだ `kura config` の companion section。
 const layout = atom({ plugin: "kura", key: "layout" } as const, null);
-// spinner の frame。生成を待つものがある間だけ進む。
+// spinner が描く時刻 (ms)。生成を待つものがある間だけ TICK_MS ごとに進む。
 const frame = atom({ plugin: "kura", key: "frame" } as const, 0);
 
 type Elements = ReturnType<EngineInterface["ui"]["resolve"]>;
@@ -66,8 +66,18 @@ function pick<T>(list: T[], id: string, salt: number): T {
   return list[hash % list.length];
 }
 
-function spinner({ Text }: Elements, id: string, tick: number): RenderElement {
+// 本家の spinner と同じく、文言の後ろに経った秒数と何を待っているかを dim で添える。
+function spinner(
+  { Text }: Elements,
+  id: string,
+  now: number,
+  status: string,
+  startedAt?: number,
+): RenderElement {
+  const tick = Math.floor(now / TICK_MS);
   const label = `${pick(WORDS, id, 1)}…`;
+  const seconds =
+    startedAt === undefined ? null : Math.max(0, Math.floor((now - startedAt) / 1000));
   const palette = pick(PALETTES, id, 2);
   // 光は label の左外から右外へ流れ、少し間を置いてまた左から。
   const at = (tick % (label.length + 8)) - 3;
@@ -79,6 +89,7 @@ function spinner({ Text }: Elements, id: string, tick: number): RenderElement {
           {char}
         </Text>
       ))}
+      <Text dimColor>{seconds === null ? ` (${status})` : ` (${seconds}s · ${status})`}</Text>
     </Text>
   );
 }
@@ -102,7 +113,8 @@ function startTicker($: EngineInterface): void {
         ticker = null;
         return;
       }
-      await update($, frame, (n) => n + 1);
+      const now = await $.clock.now();
+      await update($, frame, () => now);
     })().catch(() => {});
   });
 }
@@ -142,12 +154,12 @@ function parseCard(stdout: string): Card | null {
 
 function cardRows(
   elements: Elements,
-  { id, card }: Entry,
+  { id, card, startedAt }: Entry,
   columns: number,
-  tick: number,
+  now: number,
 ): RenderElement {
   const { Box, Text } = elements;
-  if (card.status === "pending") return spinner(elements, id, tick);
+  if (card.status === "pending") return spinner(elements, id, now, "proofreading", startedAt);
   if (card.status === "error") return <Text color="error">[kura] generation failed</Text>;
   if (card.items.length === 0) return <Text dimColor>nothing to flag ✓</Text>;
 
@@ -188,7 +200,7 @@ function cardRows(
 
 // pane は上から widget を積む。各 widget は share の比で pane の行を分け合い、
 // 自分の行数で切られる。どれを何の比で積むかは config の companion.widgets が決める。
-type PaneData = { history: Entry[]; turns: Turn[]; tick: number };
+type PaneData = { history: Entry[]; turns: Turn[]; now: number };
 type Size = { columns: number; rows: number };
 type Draw = (elements: Elements, data: PaneData, size: Size) => RenderElement;
 
@@ -199,7 +211,7 @@ function fixable(list: Entry[]): Entry[] {
   );
 }
 
-function drawRedpen(elements: Elements, { history: list, tick }: PaneData, { columns }: Size) {
+function drawRedpen(elements: Elements, { history: list, now }: PaneData, { columns }: Size) {
   const { Box, Text } = elements;
   // 直すところのある card だけを古い順に — chat のように最新が一番下に来る。item が元の文の
   // 該当部分を持つので、打った prompt は出さない。
@@ -209,21 +221,26 @@ function drawRedpen(elements: Elements, { history: list, tick }: PaneData, { col
       {shown.length === 0 && <Text dimColor>Prompts with something to fix show up here.</Text>}
       {shown.map((entry) => (
         <Box key={entry.id} flexDirection="column">
-          {cardRows(elements, entry, columns, tick)}
+          {cardRows(elements, entry, columns, now)}
         </Box>
       ))}
     </Box>
   );
 }
 
-function summaryRows(elements: Elements, { id, summary }: Turn, tick: number): RenderElement {
+function summaryRows(
+  elements: Elements,
+  { id, summary, startedAt }: Turn,
+  now: number,
+): RenderElement {
   const { Text } = elements;
-  if (isWaiting(summary)) return spinner(elements, id, tick);
+  if (summary.status === "answering") return spinner(elements, id, now, "waiting", startedAt);
+  if (summary.status === "pending") return spinner(elements, id, now, "summarizing", startedAt);
   if (summary.status === "error") return <Text color="error">summary failed</Text>;
   return <Text>{summary.text}</Text>;
 }
 
-function drawTldr(elements: Elements, { turns: list, tick }: PaneData) {
+function drawTldr(elements: Elements, { turns: list, now }: PaneData) {
   const { Box, Text } = elements;
   // redpen と同じく古い順。question は `>` を付けた 1 行、要約はその下に 2 桁下げた kura tldr の 3 行。
   // 何 turn 出るかは領域の高さが決める。
@@ -231,19 +248,26 @@ function drawTldr(elements: Elements, { turns: list, tick }: PaneData) {
     <Box flexDirection="column">
       <Text dimColor>[tldr]</Text>
       {list.length === 0 && <Text dimColor>The next answer is summarized here.</Text>}
-      {list.map((turn, index) => (
-        <Box key={turn.id} flexDirection="column" marginTop={index > 0 ? 1 : 0}>
-          {turn.question.trim() !== "" && (
-            <Text color="suggestion" wrap="truncate-end">
-              {/* 要約ができれば kura tldr がまとめた 1 行、それまでは打った prompt を切って出す。 */}
-              {`> ${(turn.summary.status === "ok" && turn.summary.question) || turn.question.replace(/\s+/g, " ")}`}
-            </Text>
-          )}
-          <Box flexDirection="column" paddingLeft={2}>
-            {summaryRows(elements, turn, tick)}
+      {list.map((turn, index) => {
+        // 待っている間は spinner だけ: 打った prompt は transcript にあるので繰り返さない。
+        // 終われば kura tldr がまとめた 1 行、無ければ打った prompt を切って出す。
+        const question = isWaiting(turn.summary)
+          ? ""
+          : (turn.summary.status === "ok" && turn.summary.question) ||
+            turn.question.replace(/\s+/g, " ").trim();
+        return (
+          <Box key={turn.id} flexDirection="column" marginTop={index > 0 ? 1 : 0}>
+            {question !== "" && (
+              <Text color="suggestion" wrap="truncate-end">
+                {`> ${question}`}
+              </Text>
+            )}
+            <Box flexDirection="column" paddingLeft={question !== "" ? 2 : 0}>
+              {summaryRows(elements, turn, now)}
+            </Box>
           </Box>
-        </Box>
-      ))}
+        );
+      })}
     </Box>
   );
 }
@@ -347,7 +371,7 @@ export const register: Register = (on) => {
         .filter((turn) => turn.id !== undefined && turn.summary?.status !== "answering")
         .map((turn) =>
           !turn.summary || turn.summary.status === "pending"
-            ? { ...turn, summary: { status: "pending" } }
+            ? { ...turn, summary: { status: "pending" }, startedAt: undefined }
             : turn,
         ),
     );
@@ -408,6 +432,8 @@ export const register: Register = (on) => {
       );
     void (async () => {
       if (!(await isEnabled($))) return;
+      // spinner が経った秒数を出す起点。時刻が取れなければ秒数は出さない。
+      const startedAt = await $.clock.now().catch(() => undefined);
       // command は turn にしない。回答中に打った prompt は、その turn の question に足す。
       if (!e.text.startsWith("/")) {
         await update($, turns, (list) => {
@@ -421,12 +447,13 @@ export const register: Register = (on) => {
             question: e.text,
             answer: "",
             summary: { status: "answering" },
+            startedAt,
           };
           return [...list, turn].slice(-HISTORY_LIMIT);
         });
       }
       await update($, history, (list) =>
-        [...list, { id, input: e.text, card: { status: "pending" } } as Entry].slice(
+        [...list, { id, input: e.text, card: { status: "pending" }, startedAt } as Entry].slice(
           -HISTORY_LIMIT,
         ),
       );
@@ -461,8 +488,8 @@ export const register: Register = (on) => {
     const pane = await paneState($);
     if (!pane.isOpen || pane.isInView) return next(e);
 
-    const tick = newest.card.status === "pending" ? await read($, frame) : 0;
-    return cardRows($.ui.resolve(e), newest, e.props.bodyColumns, tick);
+    const now = newest.card.status === "pending" ? await read($, frame) : 0;
+    return cardRows($.ui.resolve(e), newest, e.props.bodyColumns, now);
   });
 
   on("turn.complete", async ($, e, next) => {
@@ -495,7 +522,7 @@ export const register: Register = (on) => {
     const data: PaneData = {
       history: await read($, history),
       turns: await read($, turns),
-      tick: await read($, frame),
+      now: await read($, frame),
     };
     const widgets = ((await read($, layout))?.widgets ?? []).filter(
       (widget) => widget.id in WIDGETS,
