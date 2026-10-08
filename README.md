@@ -101,10 +101,11 @@ $EDITOR "${XDG_CONFIG_HOME:-$HOME/.config}/kura/config.json"
   "redpen": { "model": "opus" },
   "tldr": { "model": "opus" },
   "companion": {
+    "enabled": false,
     "autoOpen": false,
     "columns": null,
     "rows": null,
-    "widgets": [{ "id": "redpen", "share": 6 }, { "id": "tldr", "share": 4 }]
+    "widgets": [{ "id": "redpen", "share": 4 }, { "id": "tldr", "share": 6 }]
   },
   "discord": {
     "webhooks": { "english": "op://vault/item/field", "timeline": "https://discord.com/api/webhooks/..." },
@@ -121,6 +122,7 @@ $EDITOR "${XDG_CONFIG_HOME:-$HOME/.config}/kura/config.json"
 | `codex.model` / `codex.effort` | Codex model / reasoning effort for scheduled generation |
 | `redpen.model` | English feedback card model (default `opus`) |
 | `tldr.model` | Three-line answer summary model (default `opus`) |
+| `companion.enabled` | Generate `redpen` / `tldr` from Claude Code session start; `false` turns the companion off (default `false`) |
 | `companion.autoOpen` | Open the companion pane when a Claude Code session starts (default `false`) |
 | `companion.columns` / `companion.rows` | Companion pane width when docked / height when inline; `null` leaves it to Claude Code |
 | `companion.widgets` | Companion pane widgets, top to bottom, each taking `share` of the rows: `redpen`, `tldr` |
@@ -157,16 +159,18 @@ kura config
 
 - Ships in the `kura` Claude Code plugin; requires `kura` on `PATH`
   (`just setup`) and a Claude Code build with plugin function hooks
-- `redpen` shows the `kura redpen` card of every prompt typed in the session,
-  newest first
-- `tldr` shows `kura tldr` of the latest answer, with the 3 turns before it
-  as context
-- Nothing runs while the pane is closed: no card, no summary
+- Off unless `companion.enabled` is `true`; while off, nothing is generated
+  and `/kura-companion` only says so. `/kura-handoff` works either way
+- From session start, every typed prompt gets a `kura redpen` card and every
+  answer a `kura tldr` summary, whether the pane is open or not — one call
+  each, kept for the session (last 30)
+- `redpen` shows the cards with something to fix, oldest at the top
+- `tldr` shows each turn as the question on one line and its summary, oldest
+  at the top, with the 3 turns before it as summary context
 - While the pane is open but out of view, the newest card shows above the
   prompt instead
-- A summary is made only while the pane is in view — one `tldr` call per
-  answer, per session with the pane in view
-- `companion.*` is read each time the pane opens; reopen it to apply a change
+- `companion.*` is read at session start and each time the pane opens;
+  reopen the pane to apply a change
 - A widget id other than `redpen` / `tldr` is skipped with a toast
 
 ## Handoff

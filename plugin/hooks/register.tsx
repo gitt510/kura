@@ -1,9 +1,10 @@
 // register.tsx — kura companion: Claude Code の横に、打った prompt の英語 feedback (redpen) と
-// 最新の回答の 3 行要約 (tldr) を積む pane。
+// 回答ごとの 3 行要約 (tldr) を積む pane。
 //
 // 生成は kura の subcommand (`kura redpen` / `kura tldr`) が持ち、usage も kura が記録する。
 // この mod は呼んで表示するだけ。配置は `kura config` の companion section が決める。
-// opt-in: pane が開いている間だけ動き、閉じている間は何も生成しない。
+// companion.enabled の間、生成は session の始めから pane と関係なく常に走り、pane はたまった
+// ものをいつでも見せる。enabled でなければ companion は何もしない。
 //
 // /kura-handoff も置く: この session の id を `kura handoff` に渡し、tmux の右に新しい
 // Claude Code を開く。pane を開くのも system prompt を組むのも kura が持つ。
@@ -18,16 +19,14 @@ const COMMAND = "kura-companion";
 const HANDOFF = "kura-handoff";
 const HISTORY_LIMIT = 30;
 // 要約する turn と、kura tldr が context として読む直前の 3 turn。
-const TURN_LIMIT = 4;
+const CONTEXT_TURNS = 4;
 const TIMEOUT_MS = 120_000;
 
 // 打った prompt ごとに 1 entry、古い順。band は最新を、pane は全部を出す。
 const history = atom({ plugin: "kura", key: "history" } as const, []);
-// main loop の question / answer、古い順。
+// main loop の question / answer とその要約、古い順。
 const turns = atom({ plugin: "kura", key: "turns" } as const, []);
-// 最新の回答の要約。pane が見えている間だけ作る。
-const tldr = atom({ plugin: "kura", key: "tldr" } as const, null);
-// pane を開いたときに読んだ `kura config` の companion section。
+// session の始めか pane を開いたときに読んだ `kura config` の companion section。
 const layout = atom({ plugin: "kura", key: "layout" } as const, null);
 
 type Elements = ReturnType<EngineInterface["ui"]["resolve"]>;
@@ -116,23 +115,25 @@ function cardRows({ Box, Text }: Elements, card: Card, columns: number): RenderE
 
 // pane は上から widget を積む。各 widget は share の比で pane の行を分け合い、
 // 自分の行数で切られる。どれを何の比で積むかは config の companion.widgets が決める。
-type PaneData = { history: Entry[]; tldr: Tldr | null };
+type PaneData = { history: Entry[]; turns: Turn[] };
 type Size = { columns: number; rows: number };
 type Draw = (elements: Elements, data: PaneData, size: Size) => RenderElement;
 
+// 直すところのある card。直すところの無い card は pane に出さない。
+function fixable(list: Entry[]): Entry[] {
+  return list.filter((entry) => entry.card.status !== "ok" || entry.card.items.length > 0);
+}
+
 function drawRedpen(elements: Elements, { history: list }: PaneData, { columns }: Size) {
   const { Box, Text } = elements;
-  // 新しい順 — 最新の card が領域の一番上に来る。
+  // 直すところのある card だけを古い順に — chat のように最新が一番下に来る。item が元の文の
+  // 該当部分を持つので、打った prompt は出さない。
+  const shown = fixable(list);
   return (
     <Box flexDirection="column">
-      {list.length === 0 && <Text dimColor>Type a prompt to get its first card.</Text>}
-      {[...list].reverse().map((entry, index) => (
-        <Box flexDirection="column">
-          {index > 0 && <Text dimColor>{"┈".repeat(columns)}</Text>}
-          <Text dimColor wrap="truncate-end">
-            {"❯ "}
-            {entry.input.replace(/\s+/g, " ")}
-          </Text>
+      {shown.length === 0 && <Text dimColor>Prompts with something to fix show up here.</Text>}
+      {shown.map((entry) => (
+        <Box key={entry.id} flexDirection="column">
           {cardRows(elements, entry.card, columns)}
         </Box>
       ))}
@@ -140,21 +141,33 @@ function drawRedpen(elements: Elements, { history: list }: PaneData, { columns }
   );
 }
 
-function drawTldr({ Box, Text }: Elements, { tldr: shown }: PaneData) {
-  const body =
-    shown === null ? (
-      <Text dimColor>The next answer is summarized here.</Text>
-    ) : shown.status === "pending" ? (
-      <Text dimColor>summarizing …</Text>
-    ) : shown.status === "error" ? (
-      <Text color="error">summary failed</Text>
-    ) : (
-      <Text>{shown.text}</Text>
-    );
+function summaryRows({ Text }: Elements, summary: Tldr | null): RenderElement {
+  // null は要約の途中で reload された turn: 要約は作り直さない。
+  if (summary === null) return <Text dimColor>not summarized</Text>;
+  if (summary.status === "pending") return <Text dimColor>summarizing …</Text>;
+  if (summary.status === "error") return <Text color="error">summary failed</Text>;
+  return <Text>{summary.text}</Text>;
+}
+
+function drawTldr(elements: Elements, { turns: list }: PaneData, { columns }: Size) {
+  const { Box, Text } = elements;
+  // redpen と同じく古い順。chat のように question は右寄せの 1 行、要約は左寄せの kura tldr の 3 行。
+  // 何 turn 出るかは領域の高さが決める。
   return (
     <Box flexDirection="column">
       <Text dimColor>[tldr]</Text>
-      {body}
+      {list.length === 0 && <Text dimColor>The next answer is summarized here.</Text>}
+      {list.map((turn, index) => (
+        <Box key={turn.id} flexDirection="column">
+          {index > 0 && <Text dimColor>{"┈".repeat(columns)}</Text>}
+          <Box justifyContent="flex-end" paddingLeft={4} marginBottom={1}>
+            <Text color="suggestion" wrap="truncate-end">
+              {turn.question.replace(/\s+/g, " ")}
+            </Text>
+          </Box>
+          {summaryRows(elements, turn.summary)}
+        </Box>
+      ))}
     </Box>
   );
 }
@@ -166,11 +179,25 @@ async function paneState($: EngineInterface): Promise<{ isOpen: boolean; isInVie
   return { isOpen: !!pane, isInView: !!pane && pane.isPlaced && pane.isShown };
 }
 
+async function loadLayout($: EngineInterface): Promise<Layout> {
+  const config = JSON.parse(await kura($, ["config"])) as { companion: Layout };
+  await update($, layout, () => config.companion);
+  return config.companion;
+}
+
+// 読めていなければ一度だけ読む。読めなければ無効として扱う。
+async function isEnabled($: EngineInterface): Promise<boolean> {
+  try {
+    return ((await read($, layout)) ?? (await loadLayout($))).enabled;
+  } catch {
+    return false;
+  }
+}
+
 // config を読み直してから開く — config の変更は pane を開き直せば効く。
 async function openPane($: EngineInterface): Promise<void> {
-  const config = JSON.parse(await kura($, ["config"])) as { companion: Layout };
-  const companion = config.companion;
-  await update($, layout, () => companion);
+  const companion = await loadLayout($);
+  if (!companion.enabled) throw new Error("companion.enabled is false in kura config");
   const unknown = companion.widgets.filter((widget) => !(widget.id in WIDGETS));
   if (unknown.length > 0) {
     await $.ui.toast(`kura: unknown widget ${unknown.map((w) => w.id).join(", ")} — skipped`);
@@ -203,8 +230,6 @@ async function declare($: EngineInterface): Promise<void> {
 }
 
 export const register: Register = (on) => {
-  // 最新の回答の要約だけを残す。遅れて終わった古い実行は捨てる。
-  let tldrSeq = 0;
   // 最後に打った prompt: 次の回答が答えている question。
   let question = "";
 
@@ -212,11 +237,18 @@ export const register: Register = (on) => {
     await declare($);
     // reload は前の load の実行中の仕事を終わらせる。pending のまま残ったものは片付かない。
     await update($, history, (list) => list.filter((entry) => entry.card.status !== "pending"));
-    await update($, tldr, (value) => (value?.status === "pending" ? null : value));
+    // id の無い turn は要約を turn ごとに持つ前の形: 捨てる。
+    await update($, turns, (list) =>
+      list
+        .filter((turn) => turn.id !== undefined)
+        .map((turn) => (turn.summary?.status === "pending" ? { ...turn, summary: null } : turn)),
+    );
     const done = await next(e);
     void (async () => {
-      const config = JSON.parse(await kura($, ["config"])) as { companion: Layout };
-      if (config.companion.autoOpen && !(await paneState($)).isOpen) await openPane($);
+      const companion = await loadLayout($);
+      if (companion.enabled && companion.autoOpen && !(await paneState($)).isOpen) {
+        await openPane($);
+      }
     })().catch(async (error) => {
       await $.ui.toast(`kura companion: ${error instanceof Error ? error.message : error}`);
     });
@@ -252,7 +284,6 @@ export const register: Register = (on) => {
   on("prompt.submit", async ($, e, next) => {
     if (e.origin?.kind !== "composer") return next(e);
     question = e.text;
-    if (!(await paneState($)).isOpen) return next(e);
 
     // card が prompt を止めないように、失敗はすべてこの task の中で受ける。
     // id は hot reload をまたいで一意 — history は module より長生きし、counter では重なる。
@@ -264,6 +295,7 @@ export const register: Register = (on) => {
           : list.map((entry) => (entry.id === id ? { ...entry, card } : entry)),
       );
     void (async () => {
+      if (!(await isEnabled($))) return;
       await update($, history, (list) =>
         [...list, { id, input: e.text, card: { status: "pending" } } as Entry].slice(
           -HISTORY_LIMIT,
@@ -295,20 +327,30 @@ export const register: Register = (on) => {
   on("turn.complete", async ($, e, next) => {
     const done = await next(e);
     if (e.agentId !== undefined || e.reason !== "answer" || !e.answer.trim()) return done;
-    const pane = await paneState($);
-    if (!pane.isOpen) return done;
+    if (!(await isEnabled($))) return done;
+    // id は hot reload をまたいで一意 — turns は module より長生きする。
+    const id = crypto.randomUUID();
+    const turn: Turn = {
+      id,
+      question,
+      answer: e.answer,
+      summary: { status: "pending" },
+    };
+    await update($, turns, (list) => [...list, turn].slice(-HISTORY_LIMIT));
 
-    const turn: Turn = { question, answer: e.answer };
-    await update($, turns, (list) => [...list, turn].slice(-TURN_LIMIT));
-    if (!pane.isInView) return done;
-
-    const mine = ++tldrSeq;
-    const settle = (value: Tldr) =>
-      mine === tldrSeq ? update($, tldr, () => value) : Promise.resolve();
+    const settle = (summary: Tldr) =>
+      update($, turns, (list) =>
+        list.map((each) => (each.id === id ? { ...each, summary } : each)),
+      );
     void (async () => {
-      await settle({ status: "pending" });
       try {
-        const stdin = JSON.stringify({ turns: await read($, turns) });
+        const context = (await read($, turns))
+          .slice(-CONTEXT_TURNS)
+          .map(({ question, answer }) => ({
+            question,
+            answer,
+          }));
+        const stdin = JSON.stringify({ turns: context });
         const out = JSON.parse(await kura($, ["tldr"], stdin)) as {
           status?: string;
           text?: string;
@@ -327,7 +369,7 @@ export const register: Register = (on) => {
   on("ui.render", { component: "Pane", requestId: PANE }, async ($, e) => {
     const elements = $.ui.resolve(e);
     const { Box, Text } = elements;
-    const data: PaneData = { history: await read($, history), tldr: await read($, tldr) };
+    const data: PaneData = { history: await read($, history), turns: await read($, turns) };
     const widgets = ((await read($, layout))?.widgets ?? []).filter(
       (widget) => widget.id in WIDGETS,
     );
@@ -343,14 +385,15 @@ export const register: Register = (on) => {
       <Box flexDirection="column">
         {widgets.map((widget, index) => {
           const rows = Math.max(1, Math.floor((room * widget.share) / total));
+          const draw = WIDGETS[widget.id];
           return (
             <Box key={widget.id} flexDirection="column">
               {index > 0 && <Text dimColor>{"─".repeat(columns)}</Text>}
-              <Box flexDirection="column" height={rows} overflow="hidden">
-                {/* 自然な高さを保たせて、はみ出しを切る。縮ませると行が領域に押し込まれ、
-                    重なって描かれた。 */}
-                <Box flexDirection="column" flexShrink={0}>
-                  {WIDGETS[widget.id](elements, data, { columns, rows })}
+              <Box flexDirection="column" justifyContent="flex-end" height={rows} overflow="hidden">
+                {/* 収まる間は上から積み、はみ出したら下に寄せて上の古い方を切る: 中身は
+                    最低でも領域の高さを持つ。縮ませると行が領域に押し込まれ、重なって描かれた。 */}
+                <Box flexDirection="column" flexShrink={0} minHeight={rows}>
+                  {draw(elements, data, { columns, rows })}
                 </Box>
               </Box>
             </Box>

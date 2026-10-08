@@ -8,6 +8,7 @@ const CARD = {
 };
 
 const COMPANION = {
+  enabled: true,
   autoOpen: false,
   columns: 64,
   rows: null,
@@ -82,6 +83,11 @@ function engine(on: On, pane: Pane, companion = COMPANION, card = JSON.stringify
   return state;
 }
 
+// kura config の読み出しを除いた、生成の呼び出し。
+function generated(state: Engine) {
+  return state.calls.filter((call) => call.argv[1] !== "config");
+}
+
 async function open($: EngineInterface): Promise<void> {
   await $.command.run({ command: "kura-companion" });
 }
@@ -90,11 +96,12 @@ function typed($: EngineInterface, text: string) {
   return $.prompt.submit({ text, wait: false, origin: { kind: "composer" } });
 }
 
-test("pane が閉じている間は kura を呼ばず、band にも出さない", async ($, on) => {
+test("pane が閉じていても card は作り、band には出さない", async ($, on) => {
   const state = engine(on, "closed");
-  await typed($, "I think kono houhou is good");
+  const text = "I think kono houhou is good";
+  await typed($, text);
   await settle();
-  expect(state.calls).toEqual([]);
+  expect(generated(state)).toEqual([{ argv: ["kura", "redpen"], stdin: text }]);
 
   const ui = await $.ui.mount({ ...BAND, surface: "terminal" });
   expect(await ui.find({ type: "Text", text: /this approach/ })).toBeUndefined();
@@ -114,7 +121,7 @@ test("pane が開いていて見えない間は、打った prompt の card を 
   const text = "I think kono houhou is good";
   await typed($, text);
   await settle();
-  expect(state.calls).toEqual([{ argv: ["kura", "redpen"], stdin: text }]);
+  expect(generated(state)).toEqual([{ argv: ["kura", "redpen"], stdin: text }]);
 
   for (const surface of ["terminal", "desktop"] as const) {
     const ui = await $.ui.mount({ ...BAND, surface });
@@ -158,7 +165,7 @@ test("item は kind ごとにまとまり、長い item は直しを次の行に
   await ui.unmount();
 });
 
-test("pane は config の順に redpen (新しい順) と tldr を積み、band は空ける", async ($, on) => {
+test("pane は config の順に redpen (prompt は出さない) と tldr を積み、band は空ける", async ($, on) => {
   engine(on, "closed");
   await open($);
   await typed($, "first prompt");
@@ -168,15 +175,30 @@ test("pane は config の順に redpen (新しい順) と tldr を積み、band 
   const pane = await $.ui.mount({ ...PANE, surface: "terminal" });
   const text = (await pane.find({ type: "Box" }))?.text ?? "";
   const rule = "┈".repeat(60);
-  expect(text.indexOf("second prompt")).toBeGreaterThanOrEqual(0);
-  expect(text.indexOf(rule)).toBeGreaterThan(text.indexOf("second prompt"));
-  expect(text.indexOf(rule)).toBeLessThan(text.indexOf("first prompt"));
-  expect(text.indexOf("first prompt")).toBeLessThan(text.indexOf("[tldr]"));
+  expect(text).not.toContain("first prompt");
+  // card の間に区切りは無く、item がそのまま続く。
+  expect(text).not.toContain(rule);
+  const first = text.indexOf("this approach");
+  expect(first).toBeGreaterThanOrEqual(0);
+  expect(text.indexOf("this approach", first + 1)).toBeGreaterThan(first);
+  expect(text.indexOf("this approach", first + 1)).toBeLessThan(text.indexOf("[tldr]"));
   await pane.unmount();
 
   const band = await $.ui.mount({ ...BAND, surface: "terminal" });
   expect(await band.find({ type: "Text", text: /this approach/ })).toBeUndefined();
   await band.unmount();
+});
+
+test("直すところの無い card は pane に出さない", async ($, on) => {
+  engine(on, "closed", COMPANION, JSON.stringify({ status: "ok", model: "opus", items: [] }));
+  await open($);
+  await typed($, "fine prompt");
+  await settle();
+
+  const pane = await $.ui.mount({ ...PANE, surface: "terminal" });
+  expect(await pane.find({ type: "Text", text: /nothing to flag/ })).toBeUndefined();
+  expect(await pane.find({ type: "Text", text: /Prompts with something to fix/ })).toBeDefined();
+  await pane.unmount();
 });
 
 test("知らない widget は飛ばし、残りで pane を描く", async ($, on) => {
@@ -191,7 +213,7 @@ test("知らない widget は飛ばし、残りで pane を描く", async ($, on
 
   const pane = await $.ui.mount({ ...PANE, surface: "terminal" });
   expect(await pane.find({ type: "Text", text: /\[tldr\]/ })).toBeDefined();
-  expect(await pane.find({ type: "Text", text: /Type a prompt/ })).toBeUndefined();
+  expect(await pane.find({ type: "Text", text: /Prompts with something to fix/ })).toBeUndefined();
   await pane.unmount();
 });
 
@@ -205,7 +227,7 @@ function answered($: EngineInterface, answer: string) {
   } as never);
 }
 
-test("見えている pane は回答ごとに直前の turn ごと kura tldr に渡し、要約を出す", async ($, on) => {
+test("回答ごとに直前の turn ごと kura tldr に渡し、要約を出す", async ($, on) => {
   const state = engine(on, "closed");
   await open($);
   for (const n of [1, 2, 3, 4, 5]) {
@@ -223,12 +245,48 @@ test("見えている pane は回答ごとに直前の turn ごと kura tldr に
   await pane.unmount();
 });
 
-test("pane が閉じている間は回答を要約しない", async ($, on) => {
-  const state = engine(on, "closed");
-  await typed($, "q");
+test("tldr は turn を古い順に、question 1 行と要約で出す", async ($, on) => {
+  engine(on, "closed");
+  await open($);
+  for (const n of [1, 2, 3, 4]) {
+    await typed($, `question ${n}`);
+    await answered($, `a${n}`);
+  }
+  await settle();
+
+  const pane = await $.ui.mount({ ...PANE, surface: "terminal" });
+  const text = (await pane.find({ type: "Box" }))?.text ?? "";
+  const tldr = text.slice(text.indexOf("[tldr]"));
+  expect(tldr.indexOf("question 1")).toBeLessThan(tldr.indexOf("question 2"));
+  expect(tldr.indexOf("question 2")).toBeLessThan(tldr.indexOf("question 3"));
+  expect(tldr.indexOf("question 3")).toBeLessThan(tldr.indexOf("question 4"));
+  expect(tldr.split("three lines").length - 1).toBe(4);
+  await pane.unmount();
+});
+
+test("pane が閉じている間にたまった card と要約を、開いたときに出す", async ($, on) => {
+  engine(on, "closed");
+  await typed($, "I think kono houhou is good");
   await answered($, "a");
   await settle();
-  expect(state.calls).toEqual([]);
+  await open($);
+
+  const pane = await $.ui.mount({ ...PANE, surface: "terminal" });
+  expect(await pane.find({ type: "Text", text: /this approach/ })).toBeDefined();
+  expect(await pane.find({ type: "Text", text: /three lines/ })).toBeDefined();
+  await pane.unmount();
+});
+
+test("companion.enabled が false なら何も生成せず、pane も開かない", async ($, on) => {
+  const state = engine(on, "closed", { ...COMPANION, enabled: false });
+  await typed($, "I think kono houhou is good");
+  await answered($, "a");
+  await settle();
+  expect(generated(state)).toEqual([]);
+
+  const result = await $.command.run({ command: "kura-companion" });
+  expect(JSON.stringify(result)).toContain("companion.enabled");
+  expect(state.opened).toEqual([]);
 });
 
 test("/kura-handoff はこの session の id を kura handoff に渡すだけ", async ($, on) => {

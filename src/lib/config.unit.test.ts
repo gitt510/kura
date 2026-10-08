@@ -72,21 +72,30 @@ test("secret は参照でなければそのまま、op:// 参照は bake 済み�
   expect(() => resolveSecret("op://vault/other/url", cache)).toThrow("run: just bake-secrets");
 });
 
-test("companion は既定で閉じ、幅と高さは Claude Code に任せ、redpen / tldr を 6:4 で積む", () => {
+test("companion は既定で無効で閉じ、幅と高さは Claude Code に任せ、redpen / tldr を 4:6 で積む", () => {
   expect(parseConfig({}, "config.json").companion).toEqual({
+    enabled: false,
     autoOpen: false,
     columns: null,
     rows: null,
     widgets: [
-      { id: "redpen", share: 6 },
-      { id: "tldr", share: 4 },
+      { id: "redpen", share: 4 },
+      { id: "tldr", share: 6 },
     ],
   });
   const config = parseConfig(
-    { companion: { autoOpen: true, columns: 64, widgets: [{ id: "tldr", share: 1 }] } },
+    {
+      companion: {
+        enabled: true,
+        autoOpen: true,
+        columns: 64,
+        widgets: [{ id: "tldr", share: 1 }],
+      },
+    },
     "config.json",
   );
   expect(config.companion).toEqual({
+    enabled: true,
     autoOpen: true,
     columns: 64,
     rows: null,
@@ -95,6 +104,9 @@ test("companion は既定で閉じ、幅と高さは Claude Code に任せ、red
 });
 
 test("companion の不正な値は項目名付きで拒否する", () => {
+  expect(() => parseConfig({ companion: { enabled: 1 } }, "/c.json")).toThrow(
+    "companion.enabled must be a boolean",
+  );
   expect(() => parseConfig({ companion: { autoOpen: "yes" } }, "/c.json")).toThrow(
     "companion.autoOpen must be a boolean",
   );
