@@ -230,3 +230,13 @@ test("pane が閉じている間は回答を要約しない", async ($, on) => {
   await settle();
   expect(state.calls).toEqual([]);
 });
+
+test("/kura-handoff はこの session の id を kura handoff に渡すだけ", async ($, on) => {
+  const state = engine(on, "closed");
+  on("session.id", async () => ({ value: "9c48e030-f8d5-4a82-a57f-5e0f4dc15b2c" }));
+  await $.command.run({ command: "kura-handoff" });
+  expect(state.calls.map((call) => call.argv)).toEqual([
+    ["kura", "handoff", "9c48e030-f8d5-4a82-a57f-5e0f4dc15b2c"],
+  ]);
+  expect(state.opened).toEqual([]);
+});

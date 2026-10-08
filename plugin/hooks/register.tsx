@@ -4,6 +4,9 @@
 // 生成は kura の subcommand (`kura redpen` / `kura tldr`) が持ち、usage も kura が記録する。
 // この mod は呼んで表示するだけ。配置は `kura config` の companion section が決める。
 // opt-in: pane が開いている間だけ動き、閉じている間は何も生成しない。
+//
+// /kura-handoff も置く: この session の id を `kura handoff` に渡し、tmux の右に新しい
+// Claude Code を開く。pane を開くのも system prompt を組むのも kura が持つ。
 
 import type { EngineInterface, Register, RenderElement } from "claude-code";
 import { atom, read, update } from "claude-code";
@@ -12,6 +15,7 @@ import type { Card, Entry, Item, ItemKind, Layout, Tldr, Turn } from "../types";
 
 const PANE = "kura-companion";
 const COMMAND = "kura-companion";
+const HANDOFF = "kura-handoff";
 const HISTORY_LIMIT = 30;
 // 要約する turn と、kura tldr が context として読む直前の 3 turn。
 const TURN_LIMIT = 4;
@@ -191,6 +195,11 @@ async function declare($: EngineInterface): Promise<void> {
     description: "Toggle the kura companion pane (English feedback and a three-line tldr)",
     immediate: true,
   });
+  await $.command.register({
+    name: HANDOFF,
+    description: "Open a new Claude Code session in a tmux pane, handed this session's id",
+    immediate: true,
+  });
 }
 
 export const register: Register = (on) => {
@@ -227,6 +236,17 @@ export const register: Register = (on) => {
       };
     }
     return { text: "Companion pane opened." };
+  });
+
+  on("command.run", { command: HANDOFF }, async ($) => {
+    const id = await $.session.id();
+    // kura は session の cwd で走り、そこで新しい session を開く。
+    try {
+      await kura($, ["handoff", id]);
+    } catch (error) {
+      return { text: `Handoff failed: ${error instanceof Error ? error.message : error}` };
+    }
+    return { text: `Handed off ${id.slice(0, 8)} to a new pane.` };
   });
 
   on("prompt.submit", async ($, e, next) => {
