@@ -166,13 +166,14 @@ kura config
   each, kept for the session (last 30)
 - `redpen` shows the cards with something to fix, oldest at the top; a card
   with nothing to fix shows `nothing to flag ✓` for 2 seconds
-- `tldr` shows each turn from the moment its prompt is typed: `> question` on
-  one line and the summary below it, oldest at the top, with the 3 turns
-  before it as summary context
-- Once summarized, the question line is the one-line question `kura tldr`
-  returns; until then it is the typed prompt, cut at the pane width
-- A row still waiting shows a spinner; the card and the turn of one prompt
-  share its word and colors
+- `tldr` shows each turn from the moment its prompt is typed, as a spinner
+  until the summary is made; then `> question` on one line and the summary
+  below it, oldest at the top, with the 3 turns before it as summary context
+- The question line is the one-line question `kura tldr` returns, or the
+  typed prompt cut at the pane width when it returns none
+- A row still waiting shows a spinner with the seconds since the prompt and
+  what it waits on (`waiting`, `summarizing`, `proofreading`); the card and
+  the turn of one prompt share its word and colors
 - A summary cut off by a plugin reload is made again at the next session start
 - While the pane is open but out of view, the newest card shows above the
   prompt instead

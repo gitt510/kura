@@ -338,10 +338,12 @@ test("生成を待つ間は文言と記号の spinner を出す", async ($, on) 
   const words = text.match(/(Pondering|Distilling|Brewing|Mulling|Polishing|Simmering)…/g) ?? [];
   expect(words.length).toBe(2);
   expect(words[0]).toBe(words[1]);
+  expect(text).toMatch(/\((\d+s · )?proofreading\)/);
+  expect(text).toMatch(/\((\d+s · )?summarizing\)/);
   await pane.unmount();
 });
 
-test("tldr は prompt を打った時点で question と回答待ちの spinner を出す", async ($, on) => {
+test("tldr は prompt を打った時点で回答待ちの spinner だけを出し、prompt は出さない", async ($, on) => {
   engine(on, "closed");
   await open($);
   await typed($, "what is kura?");
@@ -349,7 +351,8 @@ test("tldr は prompt を打った時点で question と回答待ちの spinner 
 
   const pane = await $.ui.mount({ ...PANE, surface: "terminal" });
   const text = (await pane.find({ type: "Box" }))?.text ?? "";
-  expect(text).toContain("what is kura?");
+  expect(text).not.toContain("what is kura?");
+  expect(text).toMatch(/…\s\((\d+s · )?waiting\)/);
   expect(text).toMatch(/(Pondering|Distilling|Brewing|Mulling|Polishing|Simmering)…/);
   await pane.unmount();
 });
