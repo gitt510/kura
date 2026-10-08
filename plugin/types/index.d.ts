@@ -1,10 +1,15 @@
 export type ItemKind = "romaji" | "grammar" | "natural";
 export type Item = { kind: ItemKind; from: string; to: string };
 export type Card = { status: "pending" } | { status: "ok"; items: Item[] } | { status: "error" };
-export type Entry = { id: string; input: string; card: Card };
-export type Tldr = { status: "pending" } | { status: "ok"; text: string } | { status: "error" };
-// summary は pane が見えていなかった turn では null: 要約を作っていない。
-export type Turn = { id: string; question: string; answer: string; summary: Tldr | null };
+// isFlashing の間は、直すところの無い card も pane に一瞬だけ出す。
+export type Entry = { id: string; input: string; card: Card; isFlashing?: boolean };
+// answering は main loop が回答している間、pending は要約している間。
+export type Tldr =
+  | { status: "answering" }
+  | { status: "pending" }
+  | { status: "ok"; text: string; question?: string }
+  | { status: "error" };
+export type Turn = { id: string; question: string; answer: string; summary: Tldr };
 // `kura config` の companion section。null は Claude Code の既定に任せる。
 export type Layout = {
   enabled: boolean;
@@ -20,6 +25,7 @@ declare module "claude-code" {
       history: Entry[];
       turns: Turn[];
       layout: Layout | null;
+      frame: number;
     };
   }
 }

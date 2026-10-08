@@ -1,5 +1,5 @@
 import type { EngineInterface, On, RenderElement } from "claude-code";
-import { expect, test } from "claude-code/testing";
+import { expect, mock, test } from "claude-code/testing";
 
 const CARD = {
   status: "ok",
@@ -46,13 +46,22 @@ type Pane = "closed" | "hidden" | "shown";
 type Engine = { calls: { argv: string[]; stdin: string }[]; opened: unknown[]; pane: Pane };
 
 // mod の下で engine が答えるもの: kura の返答、prompt、空の描画、開いている pane。
-function engine(on: On, pane: Pane, companion = COMPANION, card = JSON.stringify(CARD)): Engine {
+// isHanging なら redpen / tldr は返らないまま待つ。
+function engine(
+  on: On,
+  pane: Pane,
+  companion = COMPANION,
+  card = JSON.stringify(CARD),
+  isHanging = false,
+  tldr: object = { status: "ok", text: "three lines" },
+): Engine {
   const state: Engine = { calls: [], opened: [], pane };
   on("process.run", async (_$, e) => {
     state.calls.push({ argv: [...e.argv], stdin: e.init?.stdin ?? "" });
     const command = e.argv[1];
     if (command === "config") return ran(JSON.stringify({ companion }));
-    if (command === "tldr") return ran(JSON.stringify({ status: "ok", text: "three lines" }));
+    if (isHanging) return new Promise<never>(() => {});
+    if (command === "tldr") return ran(JSON.stringify(tldr));
     return ran(card);
   });
   on("prompt.submit", async (_$, e) => ({ text: e.text }));
@@ -175,7 +184,7 @@ test("pane は config の順に redpen (prompt は出さない) と tldr を積�
   const pane = await $.ui.mount({ ...PANE, surface: "terminal" });
   const text = (await pane.find({ type: "Box" }))?.text ?? "";
   const rule = "┈".repeat(60);
-  expect(text).not.toContain("first prompt");
+  expect(text.slice(0, text.indexOf("[tldr]"))).not.toContain("first prompt");
   // card の間に区切りは無く、item がそのまま続く。
   expect(text).not.toContain(rule);
   const first = text.indexOf("this approach");
@@ -189,13 +198,16 @@ test("pane は config の順に redpen (prompt は出さない) と tldr を積�
   await band.unmount();
 });
 
-test("直すところの無い card は pane に出さない", async ($, on) => {
+test("直すところの無い card は一瞬だけ出して、pane から消す", async ($, on) => {
+  const clock = mock.clock(on);
   engine(on, "closed", COMPANION, JSON.stringify({ status: "ok", model: "opus", items: [] }));
   await open($);
   await typed($, "fine prompt");
   await settle();
 
   const pane = await $.ui.mount({ ...PANE, surface: "terminal" });
+  expect(await pane.find({ type: "Text", text: /nothing to flag/ })).toBeDefined();
+  await clock.advance(2_000);
   expect(await pane.find({ type: "Text", text: /nothing to flag/ })).toBeUndefined();
   expect(await pane.find({ type: "Text", text: /Prompts with something to fix/ })).toBeDefined();
   await pane.unmount();
@@ -232,6 +244,7 @@ test("回答ごとに直前の turn ごと kura tldr に渡し、要約を出す
   await open($);
   for (const n of [1, 2, 3, 4, 5]) {
     await typed($, `q${n}`);
+    await settle();
     await answered($, `a${n}`);
   }
   await settle();
@@ -250,6 +263,7 @@ test("tldr は turn を古い順に、question 1 行と要約で出す", async (
   await open($);
   for (const n of [1, 2, 3, 4]) {
     await typed($, `question ${n}`);
+    await settle();
     await answered($, `a${n}`);
   }
   await settle();
@@ -264,9 +278,29 @@ test("tldr は turn を古い順に、question 1 行と要約で出す", async (
   await pane.unmount();
 });
 
+test("要約ができたら、question は kura tldr がまとめた 1 行で出す", async ($, on) => {
+  engine(on, "closed", COMPANION, JSON.stringify(CARD), false, {
+    status: "ok",
+    text: "three lines",
+    question: "asked about kura",
+  });
+  await open($);
+  await typed($, "a very long prompt about kura that goes on and on");
+  await settle();
+  await answered($, "a");
+  await settle();
+
+  const pane = await $.ui.mount({ ...PANE, surface: "terminal" });
+  const text = (await pane.find({ type: "Box" }))?.text ?? "";
+  expect(text).toContain("> asked about kura");
+  expect(text).not.toContain("goes on and on");
+  await pane.unmount();
+});
+
 test("pane が閉じている間にたまった card と要約を、開いたときに出す", async ($, on) => {
   engine(on, "closed");
   await typed($, "I think kono houhou is good");
+  await settle();
   await answered($, "a");
   await settle();
   await open($);
@@ -280,6 +314,7 @@ test("pane が閉じている間にたまった card と要約を、開いたと
 test("companion.enabled が false なら何も生成せず、pane も開かない", async ($, on) => {
   const state = engine(on, "closed", { ...COMPANION, enabled: false });
   await typed($, "I think kono houhou is good");
+  await settle();
   await answered($, "a");
   await settle();
   expect(generated(state)).toEqual([]);
@@ -287,6 +322,60 @@ test("companion.enabled が false なら何も生成せず、pane も開かな�
   const result = await $.command.run({ command: "kura-companion" });
   expect(JSON.stringify(result)).toContain("companion.enabled");
   expect(state.opened).toEqual([]);
+});
+
+test("生成を待つ間は文言と記号の spinner を出す", async ($, on) => {
+  engine(on, "closed", COMPANION, JSON.stringify(CARD), true);
+  await open($);
+  await typed($, "I think kono houhou is good");
+  await settle();
+  await answered($, "a");
+  await settle();
+
+  const pane = await $.ui.mount({ ...PANE, surface: "terminal" });
+  const text = (await pane.find({ type: "Box" }))?.text ?? "";
+  // 同じ prompt の card と turn は同じ文言の spinner になる。
+  const words = text.match(/(Pondering|Distilling|Brewing|Mulling|Polishing|Simmering)…/g) ?? [];
+  expect(words.length).toBe(2);
+  expect(words[0]).toBe(words[1]);
+  await pane.unmount();
+});
+
+test("tldr は prompt を打った時点で question と回答待ちの spinner を出す", async ($, on) => {
+  engine(on, "closed");
+  await open($);
+  await typed($, "what is kura?");
+  await settle();
+
+  const pane = await $.ui.mount({ ...PANE, surface: "terminal" });
+  const text = (await pane.find({ type: "Box" }))?.text ?? "";
+  expect(text).toContain("what is kura?");
+  expect(text).toMatch(/(Pondering|Distilling|Brewing|Mulling|Polishing|Simmering)…/);
+  await pane.unmount();
+});
+
+test("中断した turn は tldr から消し、command は turn にしない", async ($, on) => {
+  const state = engine(on, "closed");
+  await open($);
+  await typed($, "/reload-plugins");
+  await typed($, "never mind");
+  await settle();
+  await $.turn.complete({
+    answer: "",
+    durationMs: 1,
+    isAborted: true,
+    turnId: crypto.randomUUID(),
+    reason: "aborted",
+  } as never);
+  await settle();
+
+  const pane = await $.ui.mount({ ...PANE, surface: "terminal" });
+  expect(await pane.find({ type: "Text", text: /never mind|reload-plugins/ })).toBeUndefined();
+  expect(
+    await pane.find({ type: "Text", text: /The next answer is summarized here/ }),
+  ).toBeDefined();
+  await pane.unmount();
+  expect(state.calls.filter((call) => call.argv[1] === "tldr")).toEqual([]);
 });
 
 test("/kura-handoff はこの session の id を kura handoff に渡すだけ", async ($, on) => {
