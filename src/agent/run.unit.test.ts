@@ -7,15 +7,15 @@ import {
   buildCodexCommand,
   parseClaudeJson,
   parseCodexJsonl,
-  resolveClaudeOptions,
-  resolveCodexOptions,
-  resolveGenerator,
+  resolveGeneration,
+  resolvePromptGeneration,
   skillPrompt,
 } from "./run.ts";
 
 function config(patch: Partial<KuraConfig>): KuraConfig {
   return { ...defaultConfig(), ...patch };
 }
+void config;
 
 const WORK_DIR = "/tmp/kura-timeline";
 const ALLOWED_TOOLS = [
@@ -24,31 +24,35 @@ const ALLOWED_TOOLS = [
   `Read(/${KURA_ROOT}/**)`,
 ].join(",");
 
-test("generator は未指定なら Claude、指定時は Codex を選ぶ", () => {
-  expect(resolveGenerator(defaultConfig())).toBe("claude");
-  expect(resolveGenerator(config({ generator: "codex" }))).toBe("codex");
-});
-
-test("未知の generator は拒否する", () => {
-  expect(() => resolveGenerator(config({ generator: "other" }))).toThrow(
-    'generator must be "claude" or "codex"',
-  );
-});
-
-test("Claude の model / effort を config から解決する", () => {
-  expect(
-    resolveClaudeOptions(config({ claude: { model: "claude-fable-5", effort: "high" } })),
-  ).toEqual({ model: "claude-fable-5", effort: "high" });
-  expect(resolveClaudeOptions(defaultConfig())).toEqual({
-    model: null,
-    effort: null,
+test("feature の生成設定を agent ごとの option に解決する", () => {
+  expect(resolveGeneration("timeline", defaultConfig().features.timeline)).toEqual({
+    agent: "claude",
+    options: { model: null, effort: null },
   });
+  expect(
+    resolveGeneration("timeline", { agent: "claude", model: "claude-fable-5", effort: "high" }),
+  ).toEqual({ agent: "claude", options: { model: "claude-fable-5", effort: "high" } });
+  expect(
+    resolveGeneration("timeline", { agent: "codex", model: "gpt-5.6", effort: "high" }),
+  ).toEqual({ agent: "codex", options: { model: "gpt-5.6", effort: "high" } });
 });
 
-test("未知の Claude effort は拒否する", () => {
-  expect(() => resolveClaudeOptions(config({ claude: { model: null, effort: "ultra" } }))).toThrow(
-    "claude.effort must be one of",
-  );
+test("effort は agent ごとの語彙で検証し、feature 名付きで拒否する", () => {
+  expect(() =>
+    resolveGeneration("timeline", { agent: "claude", model: null, effort: "ultra" }),
+  ).toThrow("timeline.effort must be one of");
+  expect(() =>
+    resolveGeneration("english", { agent: "codex", model: null, effort: "extreme" }),
+  ).toThrow("english.effort must be one of");
+});
+
+test("prompt 一発の feature は claude 以外を拒否する", () => {
+  expect(
+    resolvePromptGeneration("redpen", { agent: "claude", model: "opus", effort: null }),
+  ).toEqual({ model: "opus", effort: null });
+  expect(() =>
+    resolvePromptGeneration("redpen", { agent: "codex", model: null, effort: null }),
+  ).toThrow('redpen.agent must be "claude"');
 });
 
 test("Claude command は model / effort が明示されたときだけ flag を注入する", () => {
@@ -98,23 +102,6 @@ test("Claude command は permission bypass を持たない", () => {
     WORK_DIR,
   );
   expect(command).not.toContain("--dangerously-skip-permissions");
-});
-
-test("Codex の model / effort を config から解決する", () => {
-  expect(resolveCodexOptions(config({ codex: { model: "gpt-5.6", effort: "high" } }))).toEqual({
-    model: "gpt-5.6",
-    effort: "high",
-  });
-  expect(resolveCodexOptions(defaultConfig())).toEqual({
-    model: null,
-    effort: null,
-  });
-});
-
-test("未知の Codex effort は拒否する", () => {
-  expect(() => resolveCodexOptions(config({ codex: { model: null, effort: "extreme" } }))).toThrow(
-    "codex.effort must be one of",
-  );
 });
 
 test("Codex command は model / effort をその invocation だけに上書きする", () => {

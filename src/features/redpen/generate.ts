@@ -9,7 +9,7 @@
 // 英文を組み立てる時の parts — だから kana / 漢字の日本語も対象外。romaji は
 // 「英文を組もうとして単語が出てこず挫折した跡」なので、そこだけ拾う。
 
-import { type ClaudePrompt, runClaudePrompt } from "../../agent/run.ts";
+import { type ClaudePrompt, resolvePromptGeneration, runClaudePrompt } from "../../agent/run.ts";
 import { type KuraConfig, loadConfig } from "../../config.ts";
 
 export interface GenerateInput {
@@ -37,9 +37,10 @@ export interface GenerateResult {
   status: "ok" | "error";
 }
 
-// 速さより質 — parts の切り方と訳語の自然さが価値なので既定は opus。
-export function resolveRedpenModel(config: KuraConfig = loadConfig()): string {
-  return config["redpen"].model;
+// 速さより質 — parts の切り方と訳語の自然さが価値なので既定は opus (config の既定値)。
+// null は CLI の既定に任せる。
+export function resolveRedpenModel(config: KuraConfig = loadConfig()): string | null {
+  return resolvePromptGeneration("redpen", config.features.redpen).model;
 }
 
 const CONTEXT_CLIP = 1200;
@@ -101,7 +102,12 @@ export async function generateCard(job: GenerateInput): Promise<GenerateResult> 
   const model = resolveRedpenModel();
   let run;
   try {
-    run = await runClaudePrompt("redpen", buildPrompt(job), model);
+    run = await runClaudePrompt(
+      "redpen",
+      buildPrompt(job),
+      model,
+      resolvePromptGeneration("redpen", loadConfig().features.redpen).effort,
+    );
   } catch {
     return { items: null, model, status: "error" }; // claude CLI が無い
   }

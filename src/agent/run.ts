@@ -1,5 +1,5 @@
 import { existsSync } from "node:fs";
-import { type KuraConfig, loadConfig } from "../config.ts";
+import { type Generation, loadConfig, type PublishedFeature } from "../config.ts";
 import { KURA_ROOT } from "../storage.ts";
 import { type AgentUsage, recordUsage } from "./usage.ts";
 
@@ -54,12 +54,6 @@ interface ParsedAgentOutput {
   usage: AgentUsage | null; // 出力に usage が無い / parse 失敗なら null
 }
 
-export function resolveGenerator(config: KuraConfig = loadConfig()): Generator {
-  const value = config.generator;
-  if (value === "claude" || value === "codex") return value;
-  throw new Error(`generator must be "claude" or "codex" (got: ${value})`);
-}
-
 const CLAUDE_EFFORTS = new Set<ClaudeEffort>(["low", "medium", "high", "xhigh", "max"]);
 
 const CODEX_EFFORTS = new Set<CodexEffort>([
@@ -73,24 +67,29 @@ const CODEX_EFFORTS = new Set<CodexEffort>([
   "ultra",
 ]);
 
-export function resolveClaudeOptions(config: KuraConfig = loadConfig()): ClaudeOptions {
-  const { model, effort: rawEffort } = config.claude;
-  if (rawEffort && !CLAUDE_EFFORTS.has(rawEffort as ClaudeEffort)) {
-    throw new Error(
-      `claude.effort must be one of ${[...CLAUDE_EFFORTS].join(", ")} (got: ${rawEffort})`,
-    );
-  }
-  return { model, effort: rawEffort as ClaudeEffort | null };
-}
+export type ResolvedGeneration =
+  | { agent: "claude"; options: ClaudeOptions }
+  | { agent: "codex"; options: CodexOptions };
 
-export function resolveCodexOptions(config: KuraConfig = loadConfig()): CodexOptions {
-  const { model, effort: rawEffort } = config.codex;
-  if (rawEffort && !CODEX_EFFORTS.has(rawEffort as CodexEffort)) {
+// feature の生成設定を agent ごとの option に解決する。effort は agent ごとの語彙で検証する。
+export function resolveGeneration(
+  feature: string,
+  { agent, model, effort }: Generation,
+): ResolvedGeneration {
+  if (agent === "claude") {
+    if (effort && !CLAUDE_EFFORTS.has(effort as ClaudeEffort)) {
+      throw new Error(
+        `${feature}.effort must be one of ${[...CLAUDE_EFFORTS].join(", ")} for claude (got: ${effort})`,
+      );
+    }
+    return { agent, options: { model, effort: effort as ClaudeEffort | null } };
+  }
+  if (effort && !CODEX_EFFORTS.has(effort as CodexEffort)) {
     throw new Error(
-      `codex.effort must be one of ${[...CODEX_EFFORTS].join(", ")} (got: ${rawEffort})`,
+      `${feature}.effort must be one of ${[...CODEX_EFFORTS].join(", ")} for codex (got: ${effort})`,
     );
   }
-  return { model, effort: rawEffort as CodexEffort | null };
+  return { agent, options: { model, effort: effort as CodexEffort | null } };
 }
 
 // agent の binary を知るのはこの module だけ — spawn 経路を 1 本に保ち、
@@ -260,7 +259,8 @@ export interface ClaudePrompt {
 export function buildClaudePromptCommand(
   executable: string,
   { system, prompt }: ClaudePrompt,
-  model: string,
+  model: string | null,
+  effort: ClaudeEffort | null = null,
 ): string[] {
   return [
     executable,
@@ -276,24 +276,37 @@ export function buildClaudePromptCommand(
     "",
     "--output-format",
     "json",
-    "--model",
-    model,
+    ...(model ? ["--model", model] : []),
+    ...(effort ? ["--effort", effort] : []),
   ];
 }
 
 // tool を一切許さない 1 回の対話を Claude で実行する (非同期)。
 // skill 契約も generator 選択も持たない代わりに、model は呼び手が明示する。
+// prompt 一発の生成 (redpen / tldr)。system prompt と出力 JSON の契約が Claude 前提なので claude 固定。
+export function resolvePromptGeneration(feature: string, generation: Generation): ClaudeOptions {
+  const resolved = resolveGeneration(feature, generation);
+  if (resolved.agent !== "claude") {
+    throw new Error(`${feature}.agent must be "claude" (got: ${resolved.agent})`);
+  }
+  return resolved.options;
+}
+
 export async function runClaudePrompt(
   feature: string,
   input: ClaudePrompt,
-  model: string,
+  model: string | null,
+  effort: ClaudeEffort | null = null,
 ): Promise<ClaudePromptRun> {
-  const child = Bun.spawn(buildClaudePromptCommand(agentExecutable("claude"), input, model), {
-    env: agentEnv(),
-    stdin: "ignore",
-    stdout: "pipe",
-    stderr: "pipe",
-  });
+  const child = Bun.spawn(
+    buildClaudePromptCommand(agentExecutable("claude"), input, model, effort),
+    {
+      env: agentEnv(),
+      stdin: "ignore",
+      stdout: "pipe",
+      stderr: "pipe",
+    },
+  );
   const [raw, stderr] = await Promise.all([
     new Response(child.stdout).text(),
     new Response(child.stderr).text(),
@@ -318,10 +331,16 @@ export async function runClaudePrompt(
 // Claude は単一 JSON、Codex は JSONL。途中で接続断・不正出力になった場合は ok=false に倒し、
 // 呼び手が stamp を書かず次の trigger で再試行できるようにする。
 // workDir = その skill に読み書きを許す唯一の交換 directory。
-export function runSkillJson(skill: string, workDir: string, args: string[] = []): AgentJsonRun {
-  const agent = resolveGenerator();
-  const claudeOptions = agent === "claude" ? resolveClaudeOptions() : null;
-  const codexOptions = agent === "codex" ? resolveCodexOptions() : null;
+export function runSkillJson(
+  skill: PublishedFeature,
+  workDir: string,
+  args: string[] = [],
+  generation: Generation = loadConfig().features[skill],
+): AgentJsonRun {
+  const resolved = resolveGeneration(skill, generation);
+  const { agent } = resolved;
+  const claudeOptions = resolved.agent === "claude" ? resolved.options : null;
+  const codexOptions = resolved.agent === "codex" ? resolved.options : null;
   const prompt = skillPrompt(agent, skill, args);
   const command =
     agent === "claude"

@@ -20,7 +20,7 @@ key at its default. Fails if the file already exists.
 `,
   "bake-secrets": `usage: kura bake-secrets
 
-Resolve every op:// reference under discord.webhooks in config.json through
+Resolve every op:// reference in features.<name>.publish.discord.webhook in config.json through
 1Password (op read) into the state dir's secrets.json (mode 600), which the
 publish jobs read. Run it again after changing a reference.
 `,
@@ -114,7 +114,7 @@ Turn one prompt read from stdin into an English feedback card and print it
 as JSON: {status, model, items}, each item {kind, from, to} with kind one of
 romaji, grammar, natural. Prompts under 3 characters or starting with <, /
 or ! print {"status":"skipped"}. Nothing is stored. The model is
-redpen.model in config.json (default opus).
+features.redpen.model in config.json (default opus).
 `,
   tldr: `usage: kura tldr < turns.json
 

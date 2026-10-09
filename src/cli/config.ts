@@ -1,7 +1,14 @@
 // config.ts — config.json の表示・初期化と、1Password 参照の secrets.json への bake。
 
 import { existsSync } from "node:fs";
-import { configPath, defaultConfig, loadConfig, redactConfig, saveConfig } from "../config.ts";
+import {
+  configPath,
+  defaultConfig,
+  loadConfig,
+  PUBLISHED_FEATURES,
+  redactConfig,
+  saveConfig,
+} from "../config.ts";
 import { isSecretReference, secretsPath, writePrivateJson } from "../secrets.ts";
 
 type ConfigCommand = "config" | "init-config" | "bake-secrets";
@@ -21,7 +28,10 @@ function initConfig(): number {
 }
 
 function bakeSecrets(): number {
-  const references = Object.values(loadConfig().discord.webhooks).filter(isSecretReference);
+  const { features } = loadConfig();
+  const references = PUBLISHED_FEATURES.map((name) => features[name].publish.discord.webhook)
+    .filter((value): value is string => !!value)
+    .filter(isSecretReference);
   if (references.length === 0) {
     throw new Error(`no op:// reference in ${configPath()} — nothing to bake`);
   }

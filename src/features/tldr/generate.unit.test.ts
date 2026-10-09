@@ -48,5 +48,13 @@ test("parseTldrInput は turns の形を検証する", () => {
 
 test("model は config の tldr.model、無ければ opus", () => {
   expect(resolveTldrModel(defaultConfig())).toBe("opus");
-  expect(resolveTldrModel({ ...defaultConfig(), tldr: { model: "sonnet" } })).toBe("sonnet");
+  expect(
+    resolveTldrModel({
+      ...defaultConfig(),
+      features: {
+        ...defaultConfig().features,
+        tldr: { agent: "claude", model: "sonnet", effort: null },
+      },
+    }),
+  ).toBe("sonnet");
 });

@@ -139,7 +139,7 @@ test("teardown は history source・feature control・entrypoint を除去し、
     mkdirSync(configDir, { recursive: true });
     writeFileSync(
       join(configDir, "config.json"),
-      JSON.stringify({ generator: "codex", publish: { enabled: ["timeline"] } }),
+      JSON.stringify({ features: { timeline: { agent: "codex", publish: { enabled: true } } } }),
     );
 
     const result = runWithHome(home, bin, "kura.timeline", "teardown");
@@ -149,8 +149,8 @@ test("teardown は history source・feature control・entrypoint を除去し、
     expect(() => lstatSync(timelineJob)).toThrow();
     expect(readFileSync(claudeSettings, "utf-8")).not.toContain(".local/bin/kura");
     const config = JSON.parse(readFileSync(join(configDir, "config.json"), "utf-8"));
-    expect(config.publish).toEqual({ enabled: [] });
-    expect(config.generator).toBe("codex");
+    expect(config.features.timeline.publish.enabled).toBe(false);
+    expect(config.features.timeline.agent).toBe("codex");
     expect(readFileSync(join(stateDir, "history.db"), "utf-8")).toBe("data");
     expect(output(result)).toContain(`retained state: ${stateDir}`);
     expect(output(result)).toContain(`retained config: ${configDir}`);
@@ -173,7 +173,7 @@ test("teardown は ownership の preflight に失敗したら何も停止しな�
     mkdirSync(configDir, { recursive: true });
     writeFileSync(
       join(configDir, "config.json"),
-      JSON.stringify({ publish: { enabled: ["timeline"] } }),
+      JSON.stringify({ features: { timeline: { publish: { enabled: true } } } }),
     );
     mkdirSync(join(home, "Library", "LaunchAgents"), { recursive: true });
     writeFileSync(foreignJob, "foreign");
@@ -183,9 +183,10 @@ test("teardown は ownership の preflight に失敗したら何も停止しな�
     expect(output(result)).toContain(`refusing to remove existing path: ${foreignJob}`);
     expect(readlinkSync(runtime)).toBe(repo);
     expect(readFileSync(claudeSettings, "utf-8")).toContain(".local/bin/kura");
-    expect(JSON.parse(readFileSync(join(configDir, "config.json"), "utf-8")).publish).toEqual({
-      enabled: ["timeline"],
-    });
+    expect(
+      JSON.parse(readFileSync(join(configDir, "config.json"), "utf-8")).features.timeline.publish
+        .enabled,
+    ).toBe(true);
   } finally {
     rmSync(home, { recursive: true, force: true });
   }
@@ -205,9 +206,14 @@ test("status は setup と features を表形式で表示する", () => {
     writeFileSync(
       join(configDir, "config.json"),
       JSON.stringify({
-        generator: "codex",
-        codex: { model: "gpt-test", effort: "high" },
-        publish: { enabled: ["timeline"] },
+        features: {
+          timeline: {
+            agent: "codex",
+            model: "gpt-test",
+            effort: "high",
+            publish: { enabled: true },
+          },
+        },
       }),
     );
 
@@ -220,9 +226,14 @@ test("status は setup と features を表形式で表示する", () => {
     expect(text).toMatch(/history\.db\s+│ PRESENT\s+│/);
     expect(text).toMatch(/history\/claude\s+│ ENABLED\s+│ Stop \+ UserPromptSubmit hooks/);
     expect(text).toMatch(/history\/codex\s+│ DISABLED\s+│ Stop hook/);
-    expect(text).toContain("Features  codex · gpt-test · high  (config)");
-    expect(text).toMatch(/timeline\s+│ PRESENT\s+│ ENABLED\s+│ ENABLED/);
-    expect(text).toMatch(/english\s+│ NOT CREATED\s+│ DISABLED\s+│ DISABLED/);
+    expect(text).toMatch(/timeline\s+│ codex · gpt-test · high\s+│/);
+    expect(text).toMatch(/english\s+│ claude · CLI default · CLI default\s+│/);
+    expect(text).toMatch(
+      /timeline\s+│ codex · gpt-test · high\s+│ PRESENT\s+│ ENABLED\s+│ ENABLED/,
+    );
+    expect(text).toMatch(
+      /english\s+│ claude · CLI default · CLI default\s+│ NOT CREATED\s+│ DISABLED\s+│ DISABLED/,
+    );
   } finally {
     rmSync(home, { recursive: true, force: true });
   }

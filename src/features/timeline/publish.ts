@@ -2,14 +2,15 @@
 //
 // orchestrator (hourly-job) が publishTimeline() を import して使う。CLI でも叩ける（手動再送）。
 //   - データは timeline.db から引く (DB が真実)。要約 (insert) は別責務。
-//   - timeline 専用 webhook (config の discord.webhooks.timeline)。username / avatar は生成 model 別。
-//     旧 row (gen_model 無し) は "Timeline ⏱" と webhook 既定 avatar に fallback。帯色 blurple。
+//   - webhook と avatar は config の features.timeline.publish.discord。username は生成 provenance、
+//     旧 row (gen_model 無し) は "Timeline ⏱"。avatar 未設定なら webhook 既定の avatar。帯色 blurple。
 //   - 外部送信なので非冪等。冪等ガードは published_at。
 //
 // schema / 型 / 接続は同居の ./db.ts が所有する。webhook URL は出力に絶対出さない。
 
 import { basename } from "node:path";
 import type { HourTarget } from "../../clock.ts";
+import { loadConfig } from "../../config.ts";
 import { discordIdentity } from "../../discord/identity.ts";
 import { fitDiscordFields } from "../../discord/payload.ts";
 import { postDiscord } from "../../discord/webhook.ts";
@@ -36,6 +37,7 @@ interface Row {
 // timeline.db の 1 hour を配信する。投稿できたら published、既 publish は skipped を
 // 返す（正常系）。POST 失敗は throw（呼び手が扱う）。
 export async function publishTimeline(target: HourTarget): Promise<PublishResult> {
+  const { avatar } = loadConfig().features.timeline.publish.discord;
   const { windowStart } = target;
   const db = openTimeline();
   try {
@@ -71,7 +73,7 @@ export async function publishTimeline(target: HourTarget): Promise<PublishResult
     }
 
     const payload = {
-      ...discordIdentity(row.gen_model, row.gen_effort, "Timeline ⏱"),
+      ...discordIdentity(row.gen_model, row.gen_effort, "Timeline ⏱", avatar),
       embeds: [
         {
           title,

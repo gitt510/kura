@@ -96,47 +96,49 @@ $EDITOR "${XDG_CONFIG_HOME:-$HOME/.config}/kura/config.json"
 
 ```json
 {
-  "generator": "claude",
-  "claude": { "model": null, "effort": null },
-  "codex": { "model": null, "effort": null },
-  "redpen": { "model": "opus" },
-  "tldr": { "model": "opus" },
-  "companion": {
-    "enabled": false,
-    "autoOpen": false,
-    "columns": null,
-    "rows": null,
-    "widgets": [{ "id": "redpen", "share": 4 }, { "id": "tldr", "share": 6 }]
+  "features": {
+    "redpen": { "agent": "claude", "model": "opus", "effort": null },
+    "tldr": { "agent": "claude", "model": "opus", "effort": null },
+    "timeline": {
+      "agent": "claude", "model": null, "effort": null,
+      "publish": { "enabled": false, "discord": { "webhook": null, "avatar": null } }
+    },
+    "english": {
+      "agent": "claude", "model": null, "effort": null,
+      "publish": { "enabled": false, "discord": { "webhook": null, "avatar": null } }
+    }
   },
-  "discord": {
-    "webhooks": { "english": "op://vault/item/field", "timeline": "https://discord.com/api/webhooks/..." },
-    "avatars": { "claude": "https://...", "gpt": "https://..." }
-  },
-  "publish": { "enabled": [] }
+  "mod": {
+    "companion": {
+      "enabled": false,
+      "autoOpen": false,
+      "columns": null,
+      "rows": null,
+      "widgets": [{ "id": "redpen", "share": 4 }, { "id": "tldr", "share": 6 }]
+    }
+  }
 }
 ```
 
 | Key | Consumer |
 | --- | --- |
-| `generator` | Scheduled generation agent: `claude` (default) or `codex` |
-| `claude.model` / `claude.effort` | Claude model / effort for scheduled generation |
-| `codex.model` / `codex.effort` | Codex model / reasoning effort for scheduled generation |
-| `redpen.model` | English feedback card model (default `opus`) |
-| `tldr.model` | Three-line answer summary model (default `opus`) |
-| `companion.enabled` | Generate `redpen` / `tldr` from Claude Code session start; `false` turns the companion off (default `false`) |
-| `companion.autoOpen` | Open the companion pane when a Claude Code session starts (default `false`) |
-| `companion.columns` / `companion.rows` | Companion pane width when docked / height when inline; `null` leaves it to Claude Code |
-| `companion.widgets` | Companion pane widgets, top to bottom, each taking `share` of the rows: `redpen`, `tldr` |
-| `discord.webhooks.<feature>` | Discord webhook for `english` / `timeline` |
-| `discord.avatars.<family>` | Discord avatar per model family (`claude`, `gpt`, …) |
-| `publish.enabled` | Features with Discord delivery opted in |
+| `features.<name>.agent` | CLI that generates the feature: `claude` (default) or `codex`; `redpen` / `tldr` accept `claude` only (rejected at load) |
+| `features.<name>.model` | Model for that feature; omitted means the feature default (`redpen` / `tldr`: `opus`, others: CLI default), `null` means the CLI default |
+| `features.<name>.effort` | Effort for that feature in the agent's own vocabulary; `null` leaves it to the CLI |
+| `features.<timeline\|english>.publish.enabled` | Discord delivery opted in; written by `kura publish` |
+| `features.<timeline\|english>.publish.discord.webhook` | Discord webhook URL or `op://` reference |
+| `features.<timeline\|english>.publish.discord.avatar` | Avatar URL for that feature's Discord posts |
+| `mod.companion.enabled` | Generate `redpen` / `tldr` from Claude Code session start; `false` turns the companion off (default `false`) |
+| `mod.companion.autoOpen` | Open the companion pane when a Claude Code session starts (default `false`) |
+| `mod.companion.columns` / `mod.companion.rows` | Companion pane width when docked / height when inline; `null` leaves it to Claude Code |
+| `mod.companion.widgets` | Companion pane widgets, top to bottom, each taking `share` of the rows: `redpen`, `tldr` |
 
-- `claude.*` / `codex.*` apply only to scheduled generation, and only while
-  their agent is selected; normal CLI usage is untouched
+- `features.<name>.model` / `effort` apply only to that feature's generation; normal CLI usage is untouched
 - `null` model / effort injects no flag; the CLI's own default applies
+- A key the schema does not know is rejected at load with its path (`features.timeline has unknown key "webhok"`)
 - Invalid effort values are rejected at run time with the accepted list
 - A webhook alone does not enable delivery; `just publish enable <feature>`
-  adds the feature to `publish.enabled`
+  sets `features.<feature>.publish.enabled` to `true`
 - A webhook may be a 1Password reference (`op://...`); `just bake-secrets`
   resolves every reference into `~/.local/state/kura/secrets.json` (mode 600),
   which delivery reads, so scheduled jobs need no 1Password sign-in
@@ -160,7 +162,7 @@ kura config
 
 - Ships in the `kura` Claude Code plugin; requires `kura` on `PATH`
   (`just setup`) and a Claude Code build with plugin function hooks
-- Off unless `companion.enabled` is `true`; while off, nothing is generated
+- Off unless `mod.companion.enabled` is `true`; while off, nothing is generated
   and `/kura-companion` only says so. `/kura-handoff` works either way
 - From session start, every typed prompt gets a `kura redpen` card and every
   answer a `kura tldr` summary, whether the pane is open or not — one call
@@ -178,7 +180,7 @@ kura config
 - A summary cut off by a plugin reload is made again at the next session start
 - While the pane is open but out of view, the newest card shows above the
   prompt instead
-- `companion.*` is read at session start and each time the pane opens;
+- `mod.companion.*` is read at session start and each time the pane opens;
   reopen the pane to apply a change
 - A widget id other than `redpen` / `tldr` is skipped with a toast
 
@@ -266,8 +268,8 @@ just usage --days=7
   connection) reports no token counts and records nothing
 - Cost comes from the agent's own output: the Claude CLI reports it, Codex's
   public events carry token counts only, so Codex rows show `-`
-- With `"generator": "codex"`, every scheduled feature shows `-`;
-  `redpen` and `tldr` always run Claude and always report cost
+- A feature with `"agent": "codex"` shows `-`; `redpen` and `tldr` run Claude
+  and always report cost
 - Claude's figure is what the API would charge for those tokens; under a
   subscription plan it is not an additional charge
 - Recording is fail-open: a storage failure prints one line and never fails

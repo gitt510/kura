@@ -15,6 +15,7 @@ import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { type Provenance, runProvenance } from "../agent/provenance.ts";
 import { runSkillJson } from "../agent/run.ts";
 import { type HourTarget, resolveHourArgs } from "../clock.ts";
+import type { PublishedFeature } from "../config.ts";
 import { getHourWindow, type HourWindow } from "../history/query.ts";
 
 // publish の結果。skipped は正常系（空生成物・配信済み）で、失敗は throw で表す。
@@ -24,7 +25,7 @@ export type PublishResult =
 
 // feature 間の差分だけを注入する interface。T = LLM が生成する JSON の型。
 export interface HourlyFeature<T> {
-  name: string; // log 名 / tmp path / skill 起動 (`/${name}`) を兼ねる
+  name: PublishedFeature; // log 名 / tmp path / skill 起動 (`/${name}`) / config の features.<name> を兼ねる
   isGenerated(windowStart: string): boolean;
   parseGenerated(value: unknown): T;
   // 素材 (messages.json) を差し替える（決定論）。window に feature 固有の材料

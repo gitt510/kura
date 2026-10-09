@@ -2,8 +2,8 @@
 
 import { existsSync, lstatSync, readlinkSync } from "node:fs";
 import { join, resolve } from "node:path";
-import { resolveClaudeOptions, resolveCodexOptions, resolveGenerator } from "../agent/run.ts";
-import { configPath } from "../config.ts";
+import { resolveGeneration } from "../agent/run.ts";
+import { configPath, loadConfig } from "../config.ts";
 import { isPublishEnabled, type PublishFeature } from "../publish/policy.ts";
 import { paint, type Row, renderTable, stateColor } from "./terminal.ts";
 
@@ -72,20 +72,14 @@ function databaseState(stateDir: string, feature: string): State {
   return existsSync(join(stateDir, `${feature}.db`)) ? "PRESENT" : "NOT CREATED";
 }
 
-function runtimeSummary(): {
-  generator: string;
-  model: string;
-  effort: string;
-  source: string;
-} {
-  const generator = resolveGenerator();
-  const options = generator === "claude" ? resolveClaudeOptions() : resolveCodexOptions();
-  return {
-    generator,
-    model: options.model ?? "CLI default",
-    effort: options.effort ?? "CLI default",
-    source: existsSync(configPath()) ? "config" : "default",
-  };
+// feature の生成設定を 1 cell に: `codex · gpt-5.6 · high`。null は CLI の既定。
+function generationState(feature: PublishFeature): string {
+  try {
+    const { agent, options } = resolveGeneration(feature, loadConfig().features[feature]);
+    return `${agent} · ${options.model ?? "CLI default"} · ${options.effort ?? "CLI default"}`;
+  } catch {
+    return "ERROR";
+  }
 }
 
 function tableCell(padded: string, raw: string, _rowIndex: number, columnIndex: number): string {
@@ -120,36 +114,24 @@ function renderStatus(): number {
     )}\n\n`,
   );
 
-  try {
-    const selected = runtimeSummary();
-    process.stdout.write(
-      `${paint.bold("Features")}  ${paint.cyan(selected.generator)} · ` +
-        `${paint.cyan(selected.model)} · ${paint.cyan(selected.effort)}  ` +
-        `${paint.dim(`(${selected.source})`)}\n`,
-    );
-  } catch (error) {
-    process.stdout.write(
-      `${paint.bold("Features")}  ${paint.red("RUNTIME ERROR")}  ` +
-        `${paint.dim(error instanceof Error ? error.message : String(error))}\n`,
-    );
-  }
-
   const featureRows: Row[] = [
     [
       "timeline",
+      generationState("timeline"),
       databaseState(stateDir, "timeline"),
       managerState(jobs, "timeline"),
       publishState("timeline"),
     ],
     [
       "english",
+      generationState("english"),
       databaseState(stateDir, "english"),
       managerState(jobs, "english"),
       publishState("english"),
     ],
   ];
   process.stdout.write(
-    `${renderTable(["Feature", "Database", "Schedule", "Publish"], featureRows, tableCell)}\n`,
+    `${renderTable(["Feature", "Agent", "Database", "Schedule", "Publish"], featureRows, tableCell)}\n`,
   );
   return 0;
 }

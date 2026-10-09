@@ -58,11 +58,12 @@ if (actionArg === "enable") {
   const feature = targets[0]!;
   let webhook: string | undefined;
   try {
-    webhook = loadConfig().discord.webhooks[feature];
+    webhook = loadConfig().features[feature].publish.discord.webhook ?? undefined;
   } catch (error) {
     runtimeError(`config を読めない: ${error}`);
   }
-  if (!webhook) runtimeError(`discord.webhooks.${feature} is required before enabling publish`);
+  if (!webhook)
+    runtimeError(`features.${feature}.publish.discord.webhook is required before enabling publish`);
 }
 
 try {
