@@ -7,8 +7,8 @@
 // 長い question をそのまま出せないので、その 1 行を question の代わりに出す。
 // tool は使わせない。失敗した呼び出しは status "error" で返し、retry しない。
 
+import { type ClaudePrompt, runClaudePrompt } from "../../agent/run.ts";
 import { type KuraConfig, loadConfig } from "../../config.ts";
-import { type ClaudePrompt, runClaudePrompt } from "../../lib/agent.ts";
 
 export interface Turn {
   question: string;

@@ -5,7 +5,7 @@
 // 読み出し元の会話 raw は別 DB (history/history.db, reader: history/query.ts)。
 
 import type { Database } from "bun:sqlite";
-import { legacyDbPath, openStateDatabase, stateDbPath, tableColumns } from "../../lib/storage.ts";
+import { legacyDbPath, openStateDatabase, stateDbPath, tableColumns } from "../../storage.ts";
 
 // schema は code と同居、DB は runtime state に置く。旧 checkout 内 DB は初回 import 時に移行する。
 export const TIMELINE_DB = stateDbPath("timeline.db", legacyDbPath("timeline", "timeline.db"));

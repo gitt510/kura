@@ -6,7 +6,7 @@
 
 import { existsSync, readFileSync } from "node:fs";
 import { z } from "zod";
-import { isSecretReference, writePrivateJson } from "./lib/secrets.ts";
+import { isSecretReference, writePrivateJson } from "./secrets.ts";
 
 type Environment = Readonly<Record<string, string | undefined>>;
 
@@ -30,7 +30,7 @@ const names = z
 const object = (shape: z.ZodRawShape) =>
   z.object(shape, { error: "must be an object" }).prefault({});
 
-// generator / effort の値の妥当性は使う側 (lib/agent.ts) が検証する。ここは形だけ。
+// generator / effort の値の妥当性は使う側 (agent/run.ts) が検証する。ここは形だけ。
 const agent = object({ model: text, effort: text });
 const model = (fallback: string) => object({ model: text.transform((value) => value ?? fallback) });
 

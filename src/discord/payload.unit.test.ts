@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { fitDiscordFields, truncateDiscordText } from "./discord-payload.ts";
+import { fitDiscordFields, truncateDiscordText } from "./payload.ts";
 
 test("Discord field の個別上限と embed 合計上限へ切り詰める", () => {
   const fields = Array.from({ length: 30 }, (_, i) => ({

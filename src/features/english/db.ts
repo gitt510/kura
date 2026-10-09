@@ -6,7 +6,7 @@
 
 import { Database } from "bun:sqlite";
 import { existsSync } from "node:fs";
-import { legacyDbPath, openStateDatabase, stateDbPath, tableColumns } from "../../lib/storage.ts";
+import { legacyDbPath, openStateDatabase, stateDbPath, tableColumns } from "../../storage.ts";
 
 // schema は code と同居、DB は runtime state に置く。旧 checkout 内 DB は初回 import 時に移行する。
 export const ENGLISH_DB = stateDbPath("english.db", legacyDbPath("english", "english.db"));

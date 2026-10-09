@@ -9,12 +9,12 @@
 // schema / 型 / 接続は同居の ./db.ts が所有する。webhook URL は出力に絶対出さない。
 
 import { basename } from "node:path";
-import type { HourTarget } from "../../lib/clock.ts";
-import { postDiscord } from "../../lib/discord.ts";
-import { discordIdentity } from "../../lib/discord-identity.ts";
-import { fitDiscordFields } from "../../lib/discord-payload.ts";
-import type { PublishResult } from "../../lib/hourly-job.ts";
-import { parseJsonArray } from "../../lib/json.ts";
+import type { HourTarget } from "../../clock.ts";
+import { discordIdentity } from "../../discord/identity.ts";
+import { fitDiscordFields } from "../../discord/payload.ts";
+import { postDiscord } from "../../discord/webhook.ts";
+import { parseJsonArray } from "../../json.ts";
+import type { PublishResult } from "../hourly-job.ts";
 import { markPublished, openTimeline } from "./db.ts";
 
 interface Row {

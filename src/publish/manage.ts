@@ -7,7 +7,7 @@ import {
   PUBLISH_FEATURES,
   type PublishFeature,
   setPublishEnabled,
-} from "../lib/publish-policy.ts";
+} from "./policy.ts";
 
 type Action = "enable" | "disable" | "status" | "check";
 const actions = ["enable", "disable", "status", "check"] as const;

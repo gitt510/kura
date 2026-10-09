@@ -3,7 +3,7 @@
 // orchestrator (hourly-job) が publishEnglish() を import して使う。CLI でも叩ける（手動再送）。
 //   - データは english.db から引く (DB が真実)。カード生成 (insert) は別責務。
 //   - english 専用 webhook (config の discord.webhooks.english)。username は生成 provenance
-//     ("claude-fable-5 (high)")・avatar は model 別 (lib/discord-identity.ts)・帯色 green。
+//     ("claude-fable-5 (high)")・avatar は model 別 (discord/identity.ts)・帯色 green。
 //     旧 row (gen_model 無し) は "English Feed" と webhook 既定 avatar に fallback。
 //   - 外部送信なので非冪等。冪等ガードは published_at。
 //
@@ -19,12 +19,12 @@
 //
 // schema / 型 / 接続は同居の ./db.ts が所有する。webhook URL は出力に絶対出さない。
 
-import type { HourTarget } from "../../lib/clock.ts";
-import { postDiscord } from "../../lib/discord.ts";
-import { discordIdentity } from "../../lib/discord-identity.ts";
-import { fitDiscordFields } from "../../lib/discord-payload.ts";
-import type { PublishResult } from "../../lib/hourly-job.ts";
-import { parseJsonArray } from "../../lib/json.ts";
+import type { HourTarget } from "../../clock.ts";
+import { discordIdentity } from "../../discord/identity.ts";
+import { fitDiscordFields } from "../../discord/payload.ts";
+import { postDiscord } from "../../discord/webhook.ts";
+import { parseJsonArray } from "../../json.ts";
+import type { PublishResult } from "../hourly-job.ts";
 import { type Card, markPublished, openEnglishDb } from "./db.ts";
 
 interface Row {

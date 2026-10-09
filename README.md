@@ -260,7 +260,7 @@ just usage --days=7
 - `--days=N` limits the table to calls from the last N days; the default
   covers all recorded calls
 - One row per call in `usage.db`, written by the agent runner
-  (`src/lib/agent.ts`) — features never touch usage themselves
+  (`src/agent/run.ts`) — features never touch usage themselves
 - Calls the agent reported as errors are recorded too — the tokens are spent
   either way — but a call that produced no parseable output (crash, dropped
   connection) reports no token counts and records nothing
@@ -302,7 +302,7 @@ just status
 ## Security
 
 - Scheduled generation runs repo-owned, fixed skills through the configured
-  agent (`src/lib/agent.ts`)
+  agent (`src/agent/run.ts`)
 - Scheduled jobs run from the checkout directory (`src/launchd/run.sh`)
 - Both agents do the same work: read the materials JSON from the feature's
   exchange directory under `/tmp` and write `generated.json` back to it
@@ -322,7 +322,7 @@ just status
 - Unattended runs have stdin closed
 - Webhook URLs are never stored in the checkout; keep them in the process
   environment or the XDG config
-- Review `src/features/*/skills/` and `src/lib/agent.ts` before enabling
+- Review `src/features/*/skills/` and `src/agent/run.ts` before enabling
   scheduled generation
 
 ## Privacy and data

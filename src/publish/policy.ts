@@ -1,4 +1,4 @@
-// publish-policy.ts — external publish の明示 opt-in。config.json の publish.enabled が正本。
+// policy.ts — external publish の明示 opt-in。config.json の publish.enabled が正本。
 
 import { existsSync } from "node:fs";
 import { configPath, loadConfig, saveConfig } from "../config.ts";

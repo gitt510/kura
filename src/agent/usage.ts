@@ -5,7 +5,7 @@
 // stderr に 1 行残して処理を続ける。
 
 import type { Database } from "bun:sqlite";
-import { legacyDbPath, openStateDatabase, stateDbPath } from "./storage.ts";
+import { legacyDbPath, openStateDatabase, stateDbPath } from "../storage.ts";
 
 // agent の公開出力から読み取った 1 call 分の消費量。
 export interface AgentUsage {
