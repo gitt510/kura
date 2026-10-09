@@ -59,7 +59,7 @@ function engine(
   on("process.run", async (_$, e) => {
     state.calls.push({ argv: [...e.argv], stdin: e.init?.stdin ?? "" });
     const command = e.argv[1];
-    if (command === "config") return ran(JSON.stringify({ companion }));
+    if (command === "config") return ran(JSON.stringify({ mod: { companion } }));
     if (isHanging) return new Promise<never>(() => {});
     if (command === "tldr") return ran(JSON.stringify(tldr));
     return ran(card);

@@ -26,18 +26,27 @@ const ALLOWED_TOOLS = [
 
 test("generator は未指定なら Claude、指定時は Codex を選ぶ", () => {
   expect(resolveGenerator(defaultConfig())).toBe("claude");
-  expect(resolveGenerator(config({ generator: "codex" }))).toBe("codex");
+  expect(
+    resolveGenerator(config({ agent: { ...defaultConfig().agent, generator: "codex" } })),
+  ).toBe("codex");
 });
 
 test("未知の generator は拒否する", () => {
-  expect(() => resolveGenerator(config({ generator: "other" }))).toThrow(
-    'generator must be "claude" or "codex"',
-  );
+  expect(() =>
+    resolveGenerator(config({ agent: { ...defaultConfig().agent, generator: "other" } })),
+  ).toThrow('generator must be "claude" or "codex"');
 });
 
 test("Claude の model / effort を config から解決する", () => {
   expect(
-    resolveClaudeOptions(config({ claude: { model: "claude-fable-5", effort: "high" } })),
+    resolveClaudeOptions(
+      config({
+        agent: {
+          ...defaultConfig().agent,
+          claude: { model: "claude-fable-5", effort: "high", avatar: null },
+        },
+      }),
+    ),
   ).toEqual({ model: "claude-fable-5", effort: "high" });
   expect(resolveClaudeOptions(defaultConfig())).toEqual({
     model: null,
@@ -46,9 +55,13 @@ test("Claude の model / effort を config から解決する", () => {
 });
 
 test("未知の Claude effort は拒否する", () => {
-  expect(() => resolveClaudeOptions(config({ claude: { model: null, effort: "ultra" } }))).toThrow(
-    "claude.effort must be one of",
-  );
+  expect(() =>
+    resolveClaudeOptions(
+      config({
+        agent: { ...defaultConfig().agent, claude: { model: null, effort: "ultra", avatar: null } },
+      }),
+    ),
+  ).toThrow("claude.effort must be one of");
 });
 
 test("Claude command は model / effort が明示されたときだけ flag を注入する", () => {
@@ -101,7 +114,16 @@ test("Claude command は permission bypass を持たない", () => {
 });
 
 test("Codex の model / effort を config から解決する", () => {
-  expect(resolveCodexOptions(config({ codex: { model: "gpt-5.6", effort: "high" } }))).toEqual({
+  expect(
+    resolveCodexOptions(
+      config({
+        agent: {
+          ...defaultConfig().agent,
+          codex: { model: "gpt-5.6", effort: "high", avatar: null },
+        },
+      }),
+    ),
+  ).toEqual({
     model: "gpt-5.6",
     effort: "high",
   });
@@ -112,9 +134,16 @@ test("Codex の model / effort を config から解決する", () => {
 });
 
 test("未知の Codex effort は拒否する", () => {
-  expect(() => resolveCodexOptions(config({ codex: { model: null, effort: "extreme" } }))).toThrow(
-    "codex.effort must be one of",
-  );
+  expect(() =>
+    resolveCodexOptions(
+      config({
+        agent: {
+          ...defaultConfig().agent,
+          codex: { model: null, effort: "extreme", avatar: null },
+        },
+      }),
+    ),
+  ).toThrow("codex.effort must be one of");
 });
 
 test("Codex command は model / effort をその invocation だけに上書きする", () => {

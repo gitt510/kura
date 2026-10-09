@@ -2,7 +2,7 @@
 // 回答ごとの 3 行要約 (tldr) を積む pane。
 //
 // 生成は kura の subcommand (`kura redpen` / `kura tldr`) が持ち、usage も kura が記録する。
-// この mod は呼んで表示するだけ。配置は `kura config` の companion section が決める。
+// この mod は呼んで表示するだけ。配置は `kura config` の mod.companion section が決める。
 // companion.enabled の間、生成は session の始めから pane と関係なく常に走り、pane はたまった
 // ものをいつでも見せる。enabled でなければ companion は何もしない。
 //
@@ -27,7 +27,7 @@ const FLASH_MS = 2_000;
 const history = atom({ plugin: "kura", key: "history" } as const, []);
 // main loop の question / answer とその要約、古い順。turn は prompt を打った時点で積み、回答で埋める。
 const turns = atom({ plugin: "kura", key: "turns" } as const, []);
-// session の始めか pane を開いたときに読んだ `kura config` の companion section。
+// session の始めか pane を開いたときに読んだ `kura config` の mod.companion section。
 const layout = atom({ plugin: "kura", key: "layout" } as const, null);
 // spinner が描く時刻 (ms)。生成を待つものがある間だけ TICK_MS ごとに進む。
 const frame = atom({ plugin: "kura", key: "frame" } as const, 0);
@@ -280,9 +280,9 @@ async function paneState($: EngineInterface): Promise<{ isOpen: boolean; isInVie
 }
 
 async function loadLayout($: EngineInterface): Promise<Layout> {
-  const config = JSON.parse(await kura($, ["config"])) as { companion: Layout };
-  await update($, layout, () => config.companion);
-  return config.companion;
+  const config = JSON.parse(await kura($, ["config"])) as { mod: { companion: Layout } };
+  await update($, layout, () => config.mod.companion);
+  return config.mod.companion;
 }
 
 // 読めていなければ一度だけ読む。読めなければ無効として扱う。
@@ -297,7 +297,7 @@ async function isEnabled($: EngineInterface): Promise<boolean> {
 // config を読み直してから開く — config の変更は pane を開き直せば効く。
 async function openPane($: EngineInterface): Promise<void> {
   const companion = await loadLayout($);
-  if (!companion.enabled) throw new Error("companion.enabled is false in kura config");
+  if (!companion.enabled) throw new Error("mod.companion.enabled is false in kura config");
   const unknown = companion.widgets.filter((widget) => !(widget.id in WIDGETS));
   if (unknown.length > 0) {
     await $.ui.toast(`kura: unknown widget ${unknown.map((w) => w.id).join(", ")} — skipped`);
@@ -528,7 +528,7 @@ export const register: Register = (on) => {
       (widget) => widget.id in WIDGETS,
     );
     if (widgets.length === 0)
-      return <Text dimColor>No widget to show — see companion.widgets.</Text>;
+      return <Text dimColor>No widget to show — see mod.companion.widgets.</Text>;
 
     const columns = e.props.bodyColumns;
     const gaps = widgets.length - 1;

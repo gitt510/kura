@@ -2,7 +2,7 @@
 //
 // orchestrator (hourly-job) が publishTimeline() を import して使う。CLI でも叩ける（手動再送）。
 //   - データは timeline.db から引く (DB が真実)。要約 (insert) は別責務。
-//   - timeline 専用 webhook (config の discord.webhooks.timeline)。username / avatar は生成 model 別。
+//   - timeline 専用 webhook (config の features.timeline.webhook)。username / avatar は生成 model 別。
 //     旧 row (gen_model 無し) は "Timeline ⏱" と webhook 既定 avatar に fallback。帯色 blurple。
 //   - 外部送信なので非冪等。冪等ガードは published_at。
 //

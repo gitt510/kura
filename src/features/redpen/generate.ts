@@ -39,7 +39,7 @@ export interface GenerateResult {
 
 // 速さより質 — parts の切り方と訳語の自然さが価値なので既定は opus。
 export function resolveRedpenModel(config: KuraConfig = loadConfig()): string {
-  return config["redpen"].model;
+  return config.features.redpen.model;
 }
 
 const CONTEXT_CLIP = 1200;

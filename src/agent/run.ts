@@ -55,7 +55,7 @@ interface ParsedAgentOutput {
 }
 
 export function resolveGenerator(config: KuraConfig = loadConfig()): Generator {
-  const value = config.generator;
+  const value = config.agent.generator;
   if (value === "claude" || value === "codex") return value;
   throw new Error(`generator must be "claude" or "codex" (got: ${value})`);
 }
@@ -74,7 +74,7 @@ const CODEX_EFFORTS = new Set<CodexEffort>([
 ]);
 
 export function resolveClaudeOptions(config: KuraConfig = loadConfig()): ClaudeOptions {
-  const { model, effort: rawEffort } = config.claude;
+  const { model, effort: rawEffort } = config.agent.claude;
   if (rawEffort && !CLAUDE_EFFORTS.has(rawEffort as ClaudeEffort)) {
     throw new Error(
       `claude.effort must be one of ${[...CLAUDE_EFFORTS].join(", ")} (got: ${rawEffort})`,
@@ -84,7 +84,7 @@ export function resolveClaudeOptions(config: KuraConfig = loadConfig()): ClaudeO
 }
 
 export function resolveCodexOptions(config: KuraConfig = loadConfig()): CodexOptions {
-  const { model, effort: rawEffort } = config.codex;
+  const { model, effort: rawEffort } = config.agent.codex;
   if (rawEffort && !CODEX_EFFORTS.has(rawEffort as CodexEffort)) {
     throw new Error(
       `codex.effort must be one of ${[...CODEX_EFFORTS].join(", ")} (got: ${rawEffort})`,

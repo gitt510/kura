@@ -4,7 +4,7 @@
 // avatar URL が無い model family は webhook 自体の既定 avatar に倒れる。
 
 import { provenanceName } from "../agent/provenance.ts";
-import { loadConfig } from "../config.ts";
+import { type KuraConfig, loadConfig } from "../config.ts";
 import { truncateDiscordText } from "./payload.ts";
 
 export interface DiscordIdentity {
@@ -22,6 +22,14 @@ function familyOf(model: string): string | null {
   return /^[a-z0-9_]+$/.test(head) ? head : null;
 }
 
+// model family (model 名の先頭) → その family を生成する agent の avatar。
+export function avatarsOf(config: KuraConfig): Avatars {
+  const avatars: Avatars = {};
+  if (config.agent.claude.avatar) avatars.claude = config.agent.claude.avatar;
+  if (config.agent.codex.avatar) avatars.gpt = config.agent.codex.avatar;
+  return avatars;
+}
+
 function modelAvatar(model: string | null, avatars: Avatars): string | undefined {
   if (!model) return undefined;
   const family = familyOf(model);
@@ -32,7 +40,7 @@ export function discordIdentity(
   model: string | null,
   effort: string | null,
   fallbackUsername: string,
-  avatars: Avatars = loadConfig().discord.avatars,
+  avatars: Avatars = avatarsOf(loadConfig()),
 ): DiscordIdentity {
   const username = truncateDiscordText(
     provenanceName(model, effort) ?? fallbackUsername,

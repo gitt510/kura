@@ -61,5 +61,10 @@ test("kind 不明や from / to 欠落の要素は落とし、5 件で切る", ()
 
 test("model は config の redpen.model、無ければ opus", () => {
   expect(resolveRedpenModel(defaultConfig())).toBe("opus");
-  expect(resolveRedpenModel({ ...defaultConfig(), redpen: { model: "sonnet" } })).toBe("sonnet");
+  expect(
+    resolveRedpenModel({
+      ...defaultConfig(),
+      features: { ...defaultConfig().features, redpen: { model: "sonnet" } },
+    }),
+  ).toBe("sonnet");
 });

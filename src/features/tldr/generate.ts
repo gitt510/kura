@@ -30,7 +30,7 @@ export const CONTEXT_TURNS = 3;
 const CONTEXT_CLIP = 1500;
 
 export function resolveTldrModel(config: KuraConfig = loadConfig()): string {
-  return config.tldr.model;
+  return config.features.tldr.model;
 }
 
 function isTurn(value: unknown): value is Turn {

@@ -23,7 +23,7 @@ export type Turn = {
   summary: Tldr;
   startedAt?: number;
 };
-// `kura config` の companion section。null は Claude Code の既定に任せる。
+// `kura config` の mod.companion section。null は Claude Code の既定に任せる。
 export type Layout = {
   enabled: boolean;
   autoOpen: boolean;
