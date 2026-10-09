@@ -41,18 +41,16 @@ test("書かれていない項目は既定値で埋め、空文字は未設定�
     agent: "codex",
     model: "gpt-5.6",
     effort: null,
-    publish: false,
-    webhook: null,
+    publish: { enabled: false, discord: { webhook: null, avatar: null } },
   });
   expect(config.features.english).toEqual({
     agent: "claude",
     model: null,
     effort: null,
-    publish: false,
-    webhook: null,
+    publish: { enabled: false, discord: { webhook: null, avatar: null } },
   });
   expect(config.features.redpen).toEqual({ agent: "claude", model: "opus", effort: null });
-  expect(config.agent).toEqual({ claude: { avatar: null }, codex: { avatar: null } });
+  expect(Object.keys(config)).toEqual(["features", "mod"]);
   expect(
     parseConfig({ features: { redpen: { model: "  " } } }, "config.json").features.redpen.model,
   ).toBe("opus");
@@ -65,15 +63,15 @@ test("型の違う項目は path と項目名付きで拒否する", () => {
   expect(() => parseConfig({ features: { redpen: { agent: "gemini" } } }, "c.json")).toThrow(
     'features.redpen.agent must be "claude" or "codex"',
   );
-  expect(() => parseConfig({ features: { timeline: { publish: "yes" } } }, "c.json")).toThrow(
-    "features.timeline.publish must be a boolean",
-  );
+  expect(() =>
+    parseConfig({ features: { timeline: { publish: { enabled: "yes" } } } }, "c.json"),
+  ).toThrow("features.timeline.publish.enabled must be a boolean");
 });
 
 test("saveConfig は 0600 で書き、loadConfig で同じ値に戻る", () => {
   const path = join(tempDir(), "kura", "config.json");
   const config = defaultConfig();
-  config.features.timeline.publish = true;
+  config.features.timeline.publish.enabled = true;
   saveConfig(config, path);
   expect(statSync(path).mode & 0o777).toBe(0o600);
   expect(loadConfig(path)).toEqual(config);
@@ -129,10 +127,12 @@ test("companion の不正な値は項目名付きで拒否する", () => {
 
 test("redactConfig は参照でない webhook だけを伏せる", () => {
   const config = defaultConfig();
-  config.features.english.webhook = "op://Dev/Discord/english/webhook";
-  config.features.timeline.webhook = "https://discord.com/api/webhooks/1/secret";
+  config.features.english.publish.discord.webhook = "op://Dev/Discord/english/webhook";
+  config.features.timeline.publish.discord.webhook = "https://discord.com/api/webhooks/1/secret";
   const shown = redactConfig(config).features;
-  expect(shown.english.webhook).toBe("op://Dev/Discord/english/webhook");
-  expect(shown.timeline.webhook).toBe("<redacted>");
-  expect(config.features.timeline.webhook).toBe("https://discord.com/api/webhooks/1/secret");
+  expect(shown.english.publish.discord.webhook).toBe("op://Dev/Discord/english/webhook");
+  expect(shown.timeline.publish.discord.webhook).toBe("<redacted>");
+  expect(config.features.timeline.publish.discord.webhook).toBe(
+    "https://discord.com/api/webhooks/1/secret",
+  );
 });

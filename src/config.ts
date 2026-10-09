@@ -32,8 +32,15 @@ const generationShape = (model: string | null) => ({
   effort: text,
 });
 const generation = (model: string | null) => object(generationShape(model));
-// 配信する feature。webhook は URL か op:// 参照。publish は `kura publish` が書く明示 opt-in。
-const published = object({ ...generationShape(null), publish: flag.default(false), webhook: text });
+// 配信する feature。publish.enabled は `kura publish` が書く明示 opt-in。
+// discord.webhook は URL か op:// 参照、discord.avatar は投稿者アイコンの URL。
+const published = object({
+  ...generationShape(null),
+  publish: object({
+    enabled: flag.default(false),
+    discord: object({ webhook: text, avatar: text }),
+  }),
+});
 
 const isWidget = (value: unknown): value is { id: string; share: number } =>
   !!value &&
@@ -42,13 +49,9 @@ const isWidget = (value: unknown): value is { id: string; share: number } =>
   (value as { id: string }).id.trim() !== "" &&
   count.safeParse((value as { share?: unknown }).share).success;
 
-// root は「誰のための設定か」で 3 つ: agent (CLI そのものの事実)、features (機能ごと)、mod (Claude Code mod)。
+// root は「誰のための設定か」で 2 つ: features (機能ごと)、mod (Claude Code mod)。
 const Config = z.object(
   {
-    agent: object({
-      claude: object({ avatar: text }), // Discord 投稿に出すその agent の画像 URL
-      codex: object({ avatar: text }),
-    }),
     features: object({
       redpen: generation("opus"), // 速さより質 — 既定は opus
       tldr: generation("opus"),
@@ -130,9 +133,14 @@ export type PublishedFeature = (typeof PUBLISHED_FEATURES)[number];
 export function redactConfig(config: KuraConfig): KuraConfig {
   const features = { ...config.features };
   for (const name of PUBLISHED_FEATURES) {
-    const { webhook } = features[name];
-    if (webhook && !isSecretReference(webhook))
-      features[name] = { ...features[name], webhook: "<redacted>" };
+    const { publish } = features[name];
+    const { webhook } = publish.discord;
+    if (webhook && !isSecretReference(webhook)) {
+      features[name] = {
+        ...features[name],
+        publish: { ...publish, discord: { ...publish.discord, webhook: "<redacted>" } },
+      };
+    }
   }
   return { ...config, features };
 }

@@ -20,7 +20,7 @@ key at its default. Fails if the file already exists.
 `,
   "bake-secrets": `usage: kura bake-secrets
 
-Resolve every op:// reference in features.<name>.webhook in config.json through
+Resolve every op:// reference in features.<name>.publish.discord.webhook in config.json through
 1Password (op read) into the state dir's secrets.json (mode 600), which the
 publish jobs read. Run it again after changing a reference.
 `,
