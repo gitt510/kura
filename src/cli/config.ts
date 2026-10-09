@@ -1,16 +1,8 @@
 // config.ts — config.json の表示・初期化と、1Password 参照の secrets.json への bake。
 
 import { existsSync } from "node:fs";
-import {
-  configPath,
-  defaultConfig,
-  isSecretReference,
-  loadConfig,
-  redactConfig,
-  saveConfig,
-  secretsPath,
-  writePrivateJson,
-} from "../lib/config.ts";
+import { configPath, defaultConfig, loadConfig, redactConfig, saveConfig } from "../lib/config.ts";
+import { isSecretReference, secretsPath, writePrivateJson } from "../lib/secrets.ts";
 
 type ConfigCommand = "config" | "init-config" | "bake-secrets";
 

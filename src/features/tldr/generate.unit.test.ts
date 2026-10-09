@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { parseConfig } from "../../lib/config.ts";
+import { defaultConfig } from "../../lib/config.ts";
 import { ASK, buildPrompt, parseTldrInput, resolveTldrModel, splitReply } from "./generate.ts";
 
 const turn = (n: number) => ({ question: `q${n}`, answer: `a${n}` });
@@ -47,8 +47,6 @@ test("parseTldrInput は turns の形を検証する", () => {
 });
 
 test("model は config の tldr.model、無ければ opus", () => {
-  expect(resolveTldrModel(parseConfig({}, "config.json"))).toBe("opus");
-  expect(resolveTldrModel(parseConfig({ tldr: { model: "sonnet" } }, "config.json"))).toBe(
-    "sonnet",
-  );
+  expect(resolveTldrModel(defaultConfig())).toBe("opus");
+  expect(resolveTldrModel({ ...defaultConfig(), tldr: { model: "sonnet" } })).toBe("sonnet");
 });

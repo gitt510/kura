@@ -14,6 +14,7 @@ _default:
 # Set up local entrypoints without enabling history sources or features.
 [group('setup')]
 setup:
+    @bun install --frozen-lockfile --cwd "{{repo}}"
     @bun "{{repo}}/src/cli.ts" setup
 
 # Create config.json with every key at its default. Never overwrites.
