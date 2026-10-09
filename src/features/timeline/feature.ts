@@ -1,8 +1,8 @@
 // feature.ts — timeline の hourly job 定義。`kura timeline` (src/cli/hourly.ts) が実行する。
 // orchestrator (hourly-job) に素材取得・DB 書き込み・配信を委ね、LLM には生成だけ任せる。
 
-import type { HourlyFeature } from "../../lib/hourly-job.ts";
-import { isPublishEnabled } from "../../lib/publish-policy.ts";
+import { isPublishEnabled } from "../../publish/policy.ts";
+import type { HourlyFeature } from "../hourly-job.ts";
 import { openTimeline } from "./db.ts";
 import { insertTimeline, parseTimelineGenerated, type TimelineGenerated } from "./insert.ts";
 import { publishTimeline } from "./publish.ts";

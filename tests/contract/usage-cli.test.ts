@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 const cli = join(import.meta.dir, "..", "..", "src", "cli.ts");
-const usageLib = join(import.meta.dir, "..", "..", "src", "lib", "usage.ts");
+const usageModule = join(import.meta.dir, "..", "..", "src", "agent", "usage.ts");
 
 function run(args: string[], stateHome: string) {
   return Bun.spawnSync([process.execPath, cli, "usage", ...args], {
@@ -15,7 +15,7 @@ function run(args: string[], stateHome: string) {
 // usage.db に 1 call を direct insert する (LLM を呼ばずに記録経路を通す)。
 function seed(stateHome: string, feature: string, createdAt: string) {
   const script = `
-    const { openUsageDb, insertCall } = await import(${JSON.stringify(usageLib)});
+    const { openUsageDb, insertCall } = await import(${JSON.stringify(usageModule)});
     const db = openUsageDb();
     insertCall(db, {
       feature: ${JSON.stringify(feature)},

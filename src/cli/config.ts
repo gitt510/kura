@@ -2,7 +2,7 @@
 
 import { existsSync } from "node:fs";
 import { configPath, defaultConfig, loadConfig, redactConfig, saveConfig } from "../config.ts";
-import { isSecretReference, secretsPath, writePrivateJson } from "../lib/secrets.ts";
+import { isSecretReference, secretsPath, writePrivateJson } from "../secrets.ts";
 
 type ConfigCommand = "config" | "init-config" | "bake-secrets";
 

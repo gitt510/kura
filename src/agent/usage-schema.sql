@@ -1,5 +1,5 @@
 -- usage.db — kura が行った全 LLM 呼び出しの token / cost 台帳。
--- 1 row = 1 call。writer は lib/usage.ts のみ。
+-- 1 row = 1 call。writer は agent/usage.ts のみ。
 
 CREATE TABLE IF NOT EXISTS calls (
   feature TEXT NOT NULL,                  -- 呼び出し元 (timeline / english / redpen)

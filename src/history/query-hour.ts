@@ -1,7 +1,7 @@
 #!/usr/bin/env bun
 // query-hour.ts — JST hour bucket を全 session 横断で読む CLI。
 
-import { resolveHourArgs } from "../lib/clock.ts";
+import { resolveHourArgs } from "../clock.ts";
 import { getHourWindow } from "./query.ts";
 
 let target;

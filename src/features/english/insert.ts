@@ -8,15 +8,15 @@
 // 生成 provenance (gen) は orchestrator が LLM の model から渡す。
 // schema / 型 / DB アクセスは同居の ./db.ts が所有する。
 
+import type { Provenance } from "../../agent/provenance.ts";
+import type { HourTarget } from "../../clock.ts";
 import { getHourWindow } from "../../history/query.ts";
-import type { HourTarget } from "../../lib/clock.ts";
 import {
   expectJsonArray,
   expectJsonObject,
   expectJsonString,
   jsonArrayOrNull,
-} from "../../lib/json.ts";
-import type { Provenance } from "../../lib/provenance.ts";
+} from "../../json.ts";
 import { type Card, type EnglishEntry, openEnglishDb, upsertEnglishEntry } from "./db.ts";
 
 export interface EnglishGenerated {
