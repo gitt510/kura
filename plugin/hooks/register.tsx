@@ -376,13 +376,15 @@ function badge({ Text }: Elements, kind: FileRow["kind"]): RenderElement {
 }
 
 // hunk をそのまま行に: dim の行番号、記号、側で色を変えた本文。背景は付けない。
-function previewBlock({ Box, Text }: Elements, preview: string): RenderElement {
+// preview の左に badge と同じ色の樋 (│) を立て、どの file のものかを結ぶ。
+function previewBlock({ Box, Text }: Elements, preview: string, color: string): RenderElement {
   const lines = previewLines(preview);
   const digits = Math.max(1, ...lines.map((line) => String(line.number).length));
   return (
-    <Box flexDirection="column" paddingLeft={4}>
+    <Box flexDirection="column" paddingLeft={1}>
       {lines.map((line, index) => (
         <Text key={index} wrap="truncate-end">
+          <Text color={color}>{"│ "}</Text>
           <Text dimColor>{`${String(line.number).padStart(digits)} `}</Text>
           <Text
             color={
@@ -406,20 +408,12 @@ function summaryLine({ Text }: Elements, rows: FileRow[]): RenderElement {
   if (rows.length === 0) return <Text dimColor>No changes</Text>;
   const added = rows.reduce((sum, row) => sum + row.added, 0);
   const removed = rows.reduce((sum, row) => sum + row.removed, 0);
-  const kinds = (Object.keys(BADGE) as FileRow["kind"][])
-    .map(
-      (kind) => [BADGE[kind].label.trim(), rows.filter((row) => row.kind === kind).length] as const,
-    )
-    .filter(([, count]) => count > 0)
-    .map(([label, count]) => `${label} ${count}`)
-    .join(" · ");
   return (
     <Text wrap="truncate-end">
       <Text bold>{`${rows.length} ${rows.length === 1 ? "file" : "files"} changed`}</Text>
       {"  "}
       <Text color="diffAddedWord">{`+${added}`}</Text>{" "}
       <Text color="diffRemovedWord">{`−${removed}`}</Text>
-      <Text dimColor>{`   ${kinds}`}</Text>
     </Text>
   );
 }
@@ -453,7 +447,7 @@ function drawGlance(elements: Elements, { glance: g, now }: PaneData, { columns 
     );
     const bar = sizeBar(row.added, row.removed, largest, barWidth);
     return (
-      <Box key={row.path} flexDirection="column">
+      <Box key={row.path} flexDirection="column" marginTop={1}>
         <Box flexDirection="row" gap={1}>
           {badge(elements, row.kind)}
           <Text wrap="truncate-end">
@@ -473,8 +467,13 @@ function drawGlance(elements: Elements, { glance: g, now }: PaneData, { columns 
             </Box>
           )}
         </Box>
-        {row.preview !== "" && previewBlock(elements, row.preview)}
-        {row.more > 0 && <Text dimColor>{`    … ${row.more} more`}</Text>}
+        {row.preview !== "" && previewBlock(elements, row.preview, BADGE[row.kind].color)}
+        {row.more > 0 && (
+          <Text wrap="truncate-end">
+            <Text color={BADGE[row.kind].color}>{" │ "}</Text>
+            <Text dimColor>{`… ${row.more} more`}</Text>
+          </Text>
+        )}
       </Box>
     );
   };
@@ -488,7 +487,7 @@ function drawGlance(elements: Elements, { glance: g, now }: PaneData, { columns 
       {unlisted.map((path) => {
         const { dir, name } = splitPath(path);
         return (
-          <Box key={`editing:${path}`} flexDirection="row" gap={1}>
+          <Box key={`editing:${path}`} flexDirection="row" gap={1} marginTop={1}>
             {badge(elements, "added")}
             <Text wrap="truncate-end">
               <Text bold>{name}</Text>

@@ -180,13 +180,13 @@ kura config
   the turn of one prompt share its word and colors
 - A summary cut off by a plugin reload is made again at the next session start
 - `glance` shows the git worktree's changed files: a summary line
-  (`N files changed  +A −R   A n · M n · D n`, or `No changes`), then one row
-  per file — added, changed, deleted, each by path — with an `A` / `M` / `D`
-  badge, the file name and folder, `+a −r`, and a size bar when the pane is at
-  least 56 columns wide
-- Under each row, the first hunk of its diff, up to 7 lines with line numbers,
-  then `… n more` for the changed lines left out; previews cover the first 40
-  files
+  (`N files changed  +A −R`, or `No changes`), then one block per file —
+  added, changed, deleted, each by path — separated by a blank line: an `A` /
+  `M` / `D` badge, the file name and folder, `+a −r`, and a size bar when the
+  pane is at least 56 columns wide
+- Under each row, the first hunk of its diff, up to 7 lines with line numbers
+  behind a `│` in the badge's colour, then `… n more` for the changed lines
+  left out; previews cover the first 40 files
 - `glance` refreshes at session start, after each Edit / Write / NotebookEdit /
   Bash call, and at the end of each turn; a file being written shows
   `✻ editing` beside its name for at least a second after the tool returns
@@ -389,3 +389,4 @@ just test-contract      # public contract tests across CLI, hooks, and SQLite
 just test-architecture  # dependency rules
 just test-plugin        # Claude Code plugin: validate + tests against the engine
 ```
+
