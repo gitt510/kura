@@ -1,4 +1,4 @@
-import { configPath, loadConfig } from "./config.ts";
+import { configPath, loadConfig } from "../config.ts";
 import type { PublishFeature } from "./publish-policy.ts";
 import { resolveSecret } from "./secrets.ts";
 

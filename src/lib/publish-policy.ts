@@ -1,7 +1,7 @@
 // publish-policy.ts — external publish の明示 opt-in。config.json の publish.enabled が正本。
 
 import { existsSync } from "node:fs";
-import { configPath, loadConfig, saveConfig } from "./config.ts";
+import { configPath, loadConfig, saveConfig } from "../config.ts";
 
 export const PUBLISH_FEATURES = ["timeline", "english"] as const;
 export type PublishFeature = (typeof PUBLISH_FEATURES)[number];

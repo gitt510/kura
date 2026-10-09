@@ -1,5 +1,5 @@
 import { existsSync } from "node:fs";
-import { type KuraConfig, loadConfig } from "./config.ts";
+import { type KuraConfig, loadConfig } from "../config.ts";
 import { KURA_ROOT } from "./storage.ts";
 import { type AgentUsage, recordUsage } from "./usage.ts";
 

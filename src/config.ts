@@ -6,7 +6,7 @@
 
 import { existsSync, readFileSync } from "node:fs";
 import { z } from "zod";
-import { isSecretReference, writePrivateJson } from "./secrets.ts";
+import { isSecretReference, writePrivateJson } from "./lib/secrets.ts";
 
 type Environment = Readonly<Record<string, string | undefined>>;
 

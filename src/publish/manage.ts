@@ -1,7 +1,7 @@
 #!/usr/bin/env bun
 // manage.ts — publish policy の enable / disable / status を管理する。
 
-import { loadConfig } from "../lib/config.ts";
+import { loadConfig } from "../config.ts";
 import {
   isPublishEnabled,
   PUBLISH_FEATURES,

@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { defaultConfig } from "../../lib/config.ts";
+import { defaultConfig } from "../../config.ts";
 import { ASK, buildPrompt, parseTldrInput, resolveTldrModel, splitReply } from "./generate.ts";
 
 const turn = (n: number) => ({ question: `q${n}`, answer: `a${n}` });

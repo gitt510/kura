@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { defaultConfig } from "../../lib/config.ts";
+import { defaultConfig } from "../../config.ts";
 import { buildPrompt, parseCardJson, resolveRedpenModel } from "./generate.ts";
 
 test("system は 3 種類の item 契約、prompt は直前の assistant 文脈と入力を持ち、言語は指定しない", () => {
