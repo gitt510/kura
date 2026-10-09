@@ -23,12 +23,17 @@ const flag = z.boolean({ error: "must be a boolean" });
 const object = (shape: z.ZodRawShape) =>
   z.object(shape, { error: "must be an object" }).prefault({});
 
-// generator / effort の値の妥当性は使う側 (agent/run.ts) が検証する。ここは形だけ。
-// avatar は Discord 投稿に出すその agent の画像 URL。
-const agent = object({ model: text, effort: text, avatar: text });
-const model = (fallback: string) => object({ model: text.transform((value) => value ?? fallback) });
+// feature ごとの生成設定。agent は skill を回す CLI、model / effort は null なら CLI の既定。
+// effort の値の妥当性は agent ごとに違うので使う側 (agent/run.ts) が検証する。
+const AGENTS = ["claude", "codex"] as const;
+const generationShape = (model: string | null) => ({
+  agent: z.enum(AGENTS, { error: 'must be "claude" or "codex"' }).default("claude"),
+  model: text.transform((value) => value ?? model),
+  effort: text,
+});
+const generation = (model: string | null) => object(generationShape(model));
 // 配信する feature。webhook は URL か op:// 参照。publish は `kura publish` が書く明示 opt-in。
-const published = object({ publish: flag.default(false), webhook: text });
+const published = object({ ...generationShape(null), publish: flag.default(false), webhook: text });
 
 const isWidget = (value: unknown): value is { id: string; share: number } =>
   !!value &&
@@ -37,17 +42,16 @@ const isWidget = (value: unknown): value is { id: string; share: number } =>
   (value as { id: string }).id.trim() !== "" &&
   count.safeParse((value as { share?: unknown }).share).success;
 
-// root は「誰のための設定か」で 3 つ: agent (生成に使う CLI)、features (機能ごと)、mod (Claude Code mod)。
+// root は「誰のための設定か」で 3 つ: agent (CLI そのものの事実)、features (機能ごと)、mod (Claude Code mod)。
 const Config = z.object(
   {
     agent: object({
-      generator: text.transform((value) => value ?? "claude"),
-      claude: agent,
-      codex: agent,
+      claude: object({ avatar: text }), // Discord 投稿に出すその agent の画像 URL
+      codex: object({ avatar: text }),
     }),
     features: object({
-      redpen: model("opus"),
-      tldr: model("opus"),
+      redpen: generation("opus"), // 速さより質 — 既定は opus
+      tldr: generation("opus"),
       timeline: published,
       english: published,
     }),
@@ -76,18 +80,8 @@ const Config = z.object(
   { error: "must be a JSON object" },
 );
 
-// 旧 schema の root key → 新しい置き場所。見つけたら parse せずに案内する。
-const MOVED: Record<string, string> = {
-  generator: "agent.generator",
-  claude: "agent.claude",
-  codex: "agent.codex",
-  redpen: "features.redpen",
-  tldr: "features.tldr",
-  companion: "mod.companion",
-  discord: "agent.<claude|codex>.avatar and features.<timeline|english>.webhook",
-  publish: "features.<timeline|english>.publish",
-};
-
+export type Agent = (typeof AGENTS)[number];
+export type Generation = { agent: Agent; model: string | null; effort: string | null };
 export type KuraConfig = z.infer<typeof Config>;
 
 export function defaultConfig(): KuraConfig {
@@ -106,13 +100,6 @@ export function configPath(env: Environment = process.env): string {
 
 // 書かれていない項目は既定値で埋める。型が違う項目は path と項目名を付けて拒否する。
 function parseConfig(raw: unknown, path: string): KuraConfig {
-  if (raw && typeof raw === "object" && !Array.isArray(raw)) {
-    const moved = Object.keys(raw).filter((key) => key in MOVED);
-    if (moved.length > 0) {
-      const hints = moved.map((key) => `${key} → ${MOVED[key]}`).join(", ");
-      throw new Error(`invalid config ${path}: old layout, move ${hints}`);
-    }
-  }
   const result = Config.safeParse(raw);
   if (result.success) return result.data;
   const issue = result.error.issues[0];

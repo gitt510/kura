@@ -7,7 +7,7 @@
 // 長い question をそのまま出せないので、その 1 行を question の代わりに出す。
 // tool は使わせない。失敗した呼び出しは status "error" で返し、retry しない。
 
-import { type ClaudePrompt, runClaudePrompt } from "../../agent/run.ts";
+import { type ClaudePrompt, resolvePromptGeneration, runClaudePrompt } from "../../agent/run.ts";
 import { type KuraConfig, loadConfig } from "../../config.ts";
 
 export interface Turn {
@@ -30,7 +30,7 @@ export const CONTEXT_TURNS = 3;
 const CONTEXT_CLIP = 1500;
 
 export function resolveTldrModel(config: KuraConfig = loadConfig()): string {
-  return config.features.tldr.model;
+  return resolvePromptGeneration("tldr", config.features.tldr).model ?? "opus";
 }
 
 function isTurn(value: unknown): value is Turn {
@@ -88,7 +88,12 @@ export async function generateTldr(input: TldrInput): Promise<TldrResult> {
   const model = resolveTldrModel();
   let run;
   try {
-    run = await runClaudePrompt("tldr", buildPrompt(input), model);
+    run = await runClaudePrompt(
+      "tldr",
+      buildPrompt(input),
+      model,
+      resolvePromptGeneration("tldr", loadConfig().features.tldr).effort,
+    );
   } catch {
     return { text: null, question: null, model, status: "error" }; // claude CLI が無い
   }

@@ -139,7 +139,7 @@ test("teardown は history source・feature control・entrypoint を除去し、
     mkdirSync(configDir, { recursive: true });
     writeFileSync(
       join(configDir, "config.json"),
-      JSON.stringify({ agent: { generator: "codex" }, features: { timeline: { publish: true } } }),
+      JSON.stringify({ features: { timeline: { agent: "codex", publish: true } } }),
     );
 
     const result = runWithHome(home, bin, "kura.timeline", "teardown");
@@ -150,7 +150,7 @@ test("teardown は history source・feature control・entrypoint を除去し、
     expect(readFileSync(claudeSettings, "utf-8")).not.toContain(".local/bin/kura");
     const config = JSON.parse(readFileSync(join(configDir, "config.json"), "utf-8"));
     expect(config.features.timeline.publish).toBe(false);
-    expect(config.agent.generator).toBe("codex");
+    expect(config.features.timeline.agent).toBe("codex");
     expect(readFileSync(join(stateDir, "history.db"), "utf-8")).toBe("data");
     expect(output(result)).toContain(`retained state: ${stateDir}`);
     expect(output(result)).toContain(`retained config: ${configDir}`);
@@ -205,8 +205,9 @@ test("status は setup と features を表形式で表示する", () => {
     writeFileSync(
       join(configDir, "config.json"),
       JSON.stringify({
-        agent: { generator: "codex", codex: { model: "gpt-test", effort: "high" } },
-        features: { timeline: { publish: true } },
+        features: {
+          timeline: { agent: "codex", model: "gpt-test", effort: "high", publish: true },
+        },
       }),
     );
 
@@ -219,9 +220,14 @@ test("status は setup と features を表形式で表示する", () => {
     expect(text).toMatch(/history\.db\s+│ PRESENT\s+│/);
     expect(text).toMatch(/history\/claude\s+│ ENABLED\s+│ Stop \+ UserPromptSubmit hooks/);
     expect(text).toMatch(/history\/codex\s+│ DISABLED\s+│ Stop hook/);
-    expect(text).toContain("Features  codex · gpt-test · high  (config)");
-    expect(text).toMatch(/timeline\s+│ PRESENT\s+│ ENABLED\s+│ ENABLED/);
-    expect(text).toMatch(/english\s+│ NOT CREATED\s+│ DISABLED\s+│ DISABLED/);
+    expect(text).toMatch(/timeline\s+│ codex · gpt-test · high\s+│/);
+    expect(text).toMatch(/english\s+│ claude · CLI default · CLI default\s+│/);
+    expect(text).toMatch(
+      /timeline\s+│ codex · gpt-test · high\s+│ PRESENT\s+│ ENABLED\s+│ ENABLED/,
+    );
+    expect(text).toMatch(
+      /english\s+│ claude · CLI default · CLI default\s+│ NOT CREATED\s+│ DISABLED\s+│ DISABLED/,
+    );
   } finally {
     rmSync(home, { recursive: true, force: true });
   }

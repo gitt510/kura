@@ -34,23 +34,36 @@ test("config.json が無ければ既定値で動く", () => {
 
 test("書かれていない項目は既定値で埋め、空文字は未設定として扱う", () => {
   const config = parseConfig(
-    { agent: { generator: "codex", codex: { model: "gpt-5.6", effort: " " } } },
+    { features: { timeline: { agent: "codex", model: "gpt-5.6", effort: " " } } },
     "config.json",
   );
-  expect(config.agent.generator).toBe("codex");
-  expect(config.agent.codex).toEqual({ model: "gpt-5.6", effort: null, avatar: null });
-  expect(config.agent.claude).toEqual({ model: null, effort: null, avatar: null });
-  expect(config.features.redpen.model).toBe("opus");
-  expect(config.features.tldr.model).toBe("opus");
-  expect(config.features.timeline).toEqual({ publish: false, webhook: null });
+  expect(config.features.timeline).toEqual({
+    agent: "codex",
+    model: "gpt-5.6",
+    effort: null,
+    publish: false,
+    webhook: null,
+  });
+  expect(config.features.english).toEqual({
+    agent: "claude",
+    model: null,
+    effort: null,
+    publish: false,
+    webhook: null,
+  });
+  expect(config.features.redpen).toEqual({ agent: "claude", model: "opus", effort: null });
+  expect(config.agent).toEqual({ claude: { avatar: null }, codex: { avatar: null } });
   expect(
     parseConfig({ features: { redpen: { model: "  " } } }, "config.json").features.redpen.model,
   ).toBe("opus");
 });
 
 test("型の違う項目は path と項目名付きで拒否する", () => {
-  expect(() => parseConfig({ agent: { claude: { model: 5 } } }, "c.json")).toThrow(
-    /^invalid config .*\/c\.json: agent\.claude\.model must be a string$/,
+  expect(() => parseConfig({ features: { timeline: { model: 5 } } }, "c.json")).toThrow(
+    /^invalid config .*\/c\.json: features\.timeline\.model must be a string$/,
+  );
+  expect(() => parseConfig({ features: { redpen: { agent: "gemini" } } }, "c.json")).toThrow(
+    'features.redpen.agent must be "claude" or "codex"',
   );
   expect(() => parseConfig({ features: { timeline: { publish: "yes" } } }, "c.json")).toThrow(
     "features.timeline.publish must be a boolean",
@@ -97,12 +110,6 @@ test("companion は既定で無効で閉じ、幅と高さは Claude Code に任
     rows: null,
     widgets: [{ id: "tldr", share: 1 }],
   });
-});
-
-test("旧 layout の root key は新しい置き場所を案内して拒否する", () => {
-  expect(() => parseConfig({ generator: "codex", discord: {} }, "c.json")).toThrow(
-    "old layout, move generator → agent.generator, discord → agent.<claude|codex>.avatar and features.<timeline|english>.webhook",
-  );
 });
 
 test("companion の不正な値は項目名付きで拒否する", () => {

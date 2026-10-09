@@ -64,7 +64,10 @@ test("model は config の redpen.model、無ければ opus", () => {
   expect(
     resolveRedpenModel({
       ...defaultConfig(),
-      features: { ...defaultConfig().features, redpen: { model: "sonnet" } },
+      features: {
+        ...defaultConfig().features,
+        redpen: { agent: "claude", model: "sonnet", effort: null },
+      },
     }),
   ).toBe("sonnet");
 });

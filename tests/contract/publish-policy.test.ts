@@ -49,6 +49,9 @@ test("publish enable は webhook と明示 opt-in を要求し、config の他�
 
   const config = JSON.parse(readFileSync(configFile(), "utf-8"));
   expect(config.features.timeline).toEqual({
+    agent: "claude",
+    model: null,
+    effort: null,
     publish: true,
     webhook: "https://example.test/webhook",
   });
