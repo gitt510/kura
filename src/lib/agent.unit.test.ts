@@ -1,4 +1,5 @@
 import { expect, test } from "bun:test";
+import { defaultConfig, type KuraConfig } from "../config.ts";
 import {
   buildClaudeCommand,
   buildClaudePromptCommand,
@@ -10,7 +11,6 @@ import {
   resolveGenerator,
   skillPrompt,
 } from "./agent.ts";
-import { defaultConfig, type KuraConfig } from "./config.ts";
 import { KURA_ROOT } from "./storage.ts";
 
 function config(patch: Partial<KuraConfig>): KuraConfig {

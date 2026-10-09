@@ -12,3 +12,6 @@
 
 # Claude Code が plugin を読み込むたびに書き出す型定義
 plugin/.claude-plugin/types/
+
+# bun install の出力 — 正本は package.json と bun.lock
+node_modules/

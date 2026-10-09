@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { parseConfig } from "../../lib/config.ts";
+import { defaultConfig } from "../../config.ts";
 import { buildPrompt, parseCardJson, resolveRedpenModel } from "./generate.ts";
 
 test("system は 3 種類の item 契約、prompt は直前の assistant 文脈と入力を持ち、言語は指定しない", () => {
@@ -60,10 +60,6 @@ test("kind 不明や from / to 欠落の要素は落とし、5 件で切る", ()
 });
 
 test("model は config の redpen.model、無ければ opus", () => {
-  const config = parseConfig({}, "config.json");
-  expect(resolveRedpenModel(config)).toBe("opus");
-  expect(resolveRedpenModel(parseConfig({ redpen: { model: "sonnet" } }, "config.json"))).toBe(
-    "sonnet",
-  );
-  expect(resolveRedpenModel(parseConfig({ redpen: { model: "  " } }, "config.json"))).toBe("opus");
+  expect(resolveRedpenModel(defaultConfig())).toBe("opus");
+  expect(resolveRedpenModel({ ...defaultConfig(), redpen: { model: "sonnet" } })).toBe("sonnet");
 });

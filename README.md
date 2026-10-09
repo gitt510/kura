@@ -41,8 +41,9 @@ cd kura
 just setup
 ```
 
-- `just setup` creates the local entrypoints only; no history source,
-  scheduled job, or publish is enabled
+- `just setup` installs the dependencies from `bun.lock` and creates the
+  local entrypoints only; no history source, scheduled job, or publish is
+  enabled
 - `~/.local/share/kura` is symlinked to the checkout
 - `~/.local/bin/kura` is deployed as a stable CLI
 

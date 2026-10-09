@@ -9,8 +9,8 @@
 // 英文を組み立てる時の parts — だから kana / 漢字の日本語も対象外。romaji は
 // 「英文を組もうとして単語が出てこず挫折した跡」なので、そこだけ拾う。
 
+import { type KuraConfig, loadConfig } from "../../config.ts";
 import { type ClaudePrompt, runClaudePrompt } from "../../lib/agent.ts";
-import { type KuraConfig, loadConfig } from "../../lib/config.ts";
 
 export interface GenerateInput {
   input: string;

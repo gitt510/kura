@@ -2,8 +2,8 @@
 
 import { existsSync, lstatSync, readlinkSync } from "node:fs";
 import { join, resolve } from "node:path";
+import { configPath } from "../config.ts";
 import { resolveClaudeOptions, resolveCodexOptions, resolveGenerator } from "../lib/agent.ts";
-import { configPath } from "../lib/config.ts";
 import { isPublishEnabled, type PublishFeature } from "../lib/publish-policy.ts";
 import { paint, type Row, renderTable, stateColor } from "./terminal.ts";
 

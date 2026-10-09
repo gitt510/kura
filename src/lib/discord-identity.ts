@@ -3,7 +3,7 @@
 // username / avatar_url は message ごとに効く。model が無い旧データは feature 固有名、
 // avatar URL が無い model family は webhook 自体の既定 avatar に倒れる。
 
-import { loadConfig } from "./config.ts";
+import { loadConfig } from "../config.ts";
 import { truncateDiscordText } from "./discord-payload.ts";
 import { provenanceName } from "./provenance.ts";
 
