@@ -53,14 +53,6 @@ const published = object({
   }),
 });
 
-const isWidget = (value: unknown): value is { id: string; share: number } =>
-  !!value &&
-  typeof value === "object" &&
-  Object.keys(value).every((key) => key === "id" || key === "share") &&
-  typeof (value as { id?: unknown }).id === "string" &&
-  (value as { id: string }).id.trim() !== "" &&
-  count.safeParse((value as { share?: unknown }).share).success;
-
 // root は「誰のための設定か」で 2 つ: features (機能ごと)、mod (Claude Code mod)。
 const Config = z.strictObject(
   {
@@ -74,21 +66,23 @@ const Config = z.strictObject(
       // Claude Code の mod (plugin/) の pane。null は Claude Code の既定に任せる。
       // widget の id が mod に実在するかは mod が判定する。
       companion: object({
-        enabled: flag.default(false), // redpen / tldr を session の始めから生成する。false なら mod の companion は何もしない
         autoOpen: flag.default(false), // session 開始時に pane を開く
         columns: count.nullable().default(null), // 横に dock したときの幅
         rows: count.nullable().default(null), // prompt の上に置いたときの高さ
-        // 上から順に積み、高さを share で割る
+        // 上から順に積む widget の id。最大 2 つ。空なら companion は何もしない。
+        // redpen / tldr の生成はここに載っている間だけ走る。
         widgets: z
-          .array(z.unknown())
-          .refine((list) => list.every(isWidget), {
-            error: "must be an array of {id: string, share: positive integer}",
+          .array(z.string({ error: "must be a list of widget ids" }).min(1), {
+            error: "must be a list of widget ids",
           })
-          .transform((list) => list.map((widget) => ({ id: widget.id, share: widget.share })))
-          .default([
-            { id: "redpen", share: 4 },
-            { id: "tldr", share: 6 },
-          ]),
+          .max(2, { error: "must list at most 2 widgets" })
+          .default(["redpen", "tldr"]),
+        // 上の widget が占める高さの割合。widget が 1 つなら無視する。
+        ratio: z
+          .number({ error: "must be a number between 0 and 1" })
+          .gt(0, { error: "must be a number between 0 and 1" })
+          .lt(1, { error: "must be a number between 0 and 1" })
+          .default(0.5),
       }),
     }),
   },

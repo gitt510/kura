@@ -90,52 +90,40 @@ test("saveConfig は 0600 で書き、loadConfig で同じ値に戻る", () => {
   expect(loadConfig(path)).toEqual(config);
 });
 
-test("companion は既定で無効で閉じ、幅と高さは Claude Code に任せ、redpen / tldr を 4:6 で積む", () => {
+test("companion は既定で閉じ、幅と高さは Claude Code に任せ、redpen / tldr を半々で積む", () => {
   expect(parseConfig({}, "config.json").mod.companion).toEqual({
-    enabled: false,
     autoOpen: false,
     columns: null,
     rows: null,
-    widgets: [
-      { id: "redpen", share: 4 },
-      { id: "tldr", share: 6 },
-    ],
+    widgets: ["redpen", "tldr"],
+    ratio: 0.5,
   });
   const config = parseConfig(
-    {
-      mod: {
-        companion: {
-          enabled: true,
-          autoOpen: true,
-          columns: 64,
-          widgets: [{ id: "tldr", share: 1 }],
-        },
-      },
-    },
+    { mod: { companion: { autoOpen: true, columns: 64, widgets: ["tldr"], ratio: 0.3 } } },
     "config.json",
   );
   expect(config.mod.companion).toEqual({
-    enabled: true,
     autoOpen: true,
     columns: 64,
     rows: null,
-    widgets: [{ id: "tldr", share: 1 }],
+    widgets: ["tldr"],
+    ratio: 0.3,
   });
 });
 
 test("companion の不正な値は項目名付きで拒否する", () => {
-  expect(() => parseConfig({ mod: { companion: { enabled: 1 } } }, "c.json")).toThrow(
-    "mod.companion.enabled must be a boolean",
-  );
   expect(() => parseConfig({ mod: { companion: { autoOpen: "yes" } } }, "c.json")).toThrow(
     "mod.companion.autoOpen must be a boolean",
   );
   expect(() => parseConfig({ mod: { companion: { columns: 0 } } }, "c.json")).toThrow(
     "mod.companion.columns must be a positive integer",
   );
-  expect(() =>
-    parseConfig({ mod: { companion: { widgets: [{ id: "tldr", share: 1.5 }] } } }, "c.json"),
-  ).toThrow("mod.companion.widgets must be an array");
+  expect(() => parseConfig({ mod: { companion: { widgets: ["a", "b", "c"] } } }, "c.json")).toThrow(
+    "mod.companion.widgets must list at most 2 widgets",
+  );
+  expect(() => parseConfig({ mod: { companion: { ratio: 1 } } }, "c.json")).toThrow(
+    "mod.companion.ratio must be a number between 0 and 1",
+  );
 });
 
 test("redactConfig は参照でない webhook だけを伏せる", () => {

@@ -25,11 +25,11 @@ export type Turn = {
 };
 // `kura config` の mod.companion section。null は Claude Code の既定に任せる。
 export type Layout = {
-  enabled: boolean;
   autoOpen: boolean;
   columns: number | null;
   rows: number | null;
-  widgets: { id: string; share: number }[];
+  widgets: string[]; // 上から順、最大 2 つ。redpen / tldr の生成はここに載っている間だけ
+  ratio: number; // 上の widget が占める高さの割合。1 つなら無視
 };
 
 declare module "claude-code" {

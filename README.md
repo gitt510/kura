@@ -110,11 +110,11 @@ $EDITOR "${XDG_CONFIG_HOME:-$HOME/.config}/kura/config.json"
   },
   "mod": {
     "companion": {
-      "enabled": false,
       "autoOpen": false,
       "columns": null,
       "rows": null,
-      "widgets": [{ "id": "redpen", "share": 4 }, { "id": "tldr", "share": 6 }]
+      "widgets": ["redpen", "tldr"],
+      "ratio": 0.5
     }
   }
 }
@@ -128,10 +128,10 @@ $EDITOR "${XDG_CONFIG_HOME:-$HOME/.config}/kura/config.json"
 | `features.<timeline\|english>.publish.enabled` | Discord delivery opted in; written by `kura publish` |
 | `features.<timeline\|english>.publish.discord.webhook` | Discord webhook URL or `op://` reference |
 | `features.<timeline\|english>.publish.discord.avatar` | Avatar URL for that feature's Discord posts |
-| `mod.companion.enabled` | Generate `redpen` / `tldr` from Claude Code session start; `false` turns the companion off (default `false`) |
 | `mod.companion.autoOpen` | Open the companion pane when a Claude Code session starts (default `false`) |
 | `mod.companion.columns` / `mod.companion.rows` | Companion pane width when docked / height when inline; `null` leaves it to Claude Code |
-| `mod.companion.widgets` | Companion pane widgets, top to bottom, each taking `share` of the rows: `redpen`, `tldr` |
+| `mod.companion.widgets` | Companion pane widgets, top to bottom, at most 2: `redpen`, `tldr`; empty turns the companion off |
+| `mod.companion.ratio` | Share of the rows the upper widget takes (default `0.5`); ignored with one widget |
 
 - `features.<name>.model` / `effort` apply only to that feature's generation; normal CLI usage is untouched
 - `null` model / effort injects no flag; the CLI's own default applies
@@ -162,8 +162,9 @@ kura config
 
 - Ships in the `kura` Claude Code plugin; requires `kura` on `PATH`
   (`just setup`) and a Claude Code build with plugin function hooks
-- Off unless `mod.companion.enabled` is `true`; while off, nothing is generated
-  and `/kura-companion` only says so. `/kura-handoff` works either way
+- `redpen` / `tldr` are generated only while listed in `mod.companion.widgets`;
+  with the list empty nothing is generated and `/kura-companion` only says so.
+  `/kura-handoff` works either way
 - From session start, every typed prompt gets a `kura redpen` card and every
   answer a `kura tldr` summary, whether the pane is open or not — one call
   each, kept for the session (last 30)
