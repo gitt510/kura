@@ -3,8 +3,8 @@
 //
 // 生成は kura の subcommand (`kura redpen` / `kura tldr`) が持ち、usage も kura が記録する。
 // この mod は呼んで表示するだけ。配置は `kura config` の mod.companion section が決める。
-// companion.enabled の間、生成は session の始めから pane と関係なく常に走り、pane はたまった
-// ものをいつでも見せる。enabled でなければ companion は何もしない。
+// widget が mod.companion.widgets に載っている間、その生成は session の始めから pane と関係なく
+// 常に走り、pane はたまったものをいつでも見せる。載っていなければ何もしない。
 //
 // /kura-handoff も置く: この session の id を `kura handoff` に渡し、tmux の右に新しい
 // Claude Code を開く。pane を開くのも system prompt を組むのも kura が持つ。
@@ -198,8 +198,8 @@ function cardRows(
 
 // ---- pane ----
 
-// pane は上から widget を積む。各 widget は share の比で pane の行を分け合い、
-// 自分の行数で切られる。どれを何の比で積むかは config の companion.widgets が決める。
+// pane は上から widget を積む (最大 2 つ)。上の widget が ratio の割合の行を取り、下が残り。
+// 各 widget は自分の行数で切られる。どれを積むかは config の mod.companion.widgets が決める。
 type PaneData = { history: Entry[]; turns: Turn[]; now: number };
 type Size = { columns: number; rows: number };
 type Draw = (elements: Elements, data: PaneData, size: Size) => RenderElement;
@@ -285,10 +285,10 @@ async function loadLayout($: EngineInterface): Promise<Layout> {
   return config.mod.companion;
 }
 
-// 読めていなければ一度だけ読む。読めなければ無効として扱う。
-async function isEnabled($: EngineInterface): Promise<boolean> {
+// その widget が載っているか。読めていなければ一度だけ読む。読めなければ載っていないとして扱う。
+async function isListed($: EngineInterface, widget: string): Promise<boolean> {
   try {
-    return ((await read($, layout)) ?? (await loadLayout($))).enabled;
+    return ((await read($, layout)) ?? (await loadLayout($))).widgets.includes(widget);
   } catch {
     return false;
   }
@@ -297,10 +297,12 @@ async function isEnabled($: EngineInterface): Promise<boolean> {
 // config を読み直してから開く — config の変更は pane を開き直せば効く。
 async function openPane($: EngineInterface): Promise<void> {
   const companion = await loadLayout($);
-  if (!companion.enabled) throw new Error("mod.companion.enabled is false in kura config");
-  const unknown = companion.widgets.filter((widget) => !(widget.id in WIDGETS));
+  if (companion.widgets.length === 0) {
+    throw new Error("mod.companion.widgets is empty in kura config");
+  }
+  const unknown = companion.widgets.filter((widget) => !(widget in WIDGETS));
   if (unknown.length > 0) {
-    await $.ui.toast(`kura: unknown widget ${unknown.map((w) => w.id).join(", ")} — skipped`);
+    await $.ui.toast(`kura: unknown widget ${unknown.join(", ")} — skipped`);
   }
   await $.ui.open({
     id: PANE,
@@ -378,12 +380,12 @@ export const register: Register = (on) => {
     const done = await next(e);
     void (async () => {
       const companion = await loadLayout($);
-      if (companion.enabled) {
+      if (companion.widgets.includes("tldr")) {
         for (const turn of await read($, turns)) {
           if (turn.summary.status === "pending") void summarize($, turn.id);
         }
       }
-      if (companion.enabled && companion.autoOpen && !(await paneState($)).isOpen) {
+      if (companion.widgets.length > 0 && companion.autoOpen && !(await paneState($)).isOpen) {
         await openPane($);
       }
     })().catch(async (error) => {
@@ -431,7 +433,7 @@ export const register: Register = (on) => {
           : list.map((entry) => (entry.id === id ? { ...entry, card } : entry)),
       );
     void (async () => {
-      if (!(await isEnabled($))) return;
+      if (!(await isListed($, "redpen"))) return;
       // spinner が経った秒数を出す起点。時刻が取れなければ秒数は出さない。
       const startedAt = await $.clock.now().catch(() => undefined);
       // command は turn にしない。回答中に打った prompt は、その turn の question に足す。
@@ -494,7 +496,7 @@ export const register: Register = (on) => {
 
   on("turn.complete", async ($, e, next) => {
     const done = await next(e);
-    if (e.agentId !== undefined || !(await isEnabled($))) return done;
+    if (e.agentId !== undefined || !(await isListed($, "tldr"))) return done;
     const open = (await read($, turns)).at(-1);
     const openId = open?.summary.status === "answering" ? open.id : undefined;
     // 中断・エラー・空の回答は要約しない: 回答を待っていた turn ごと捨てる。
@@ -524,24 +526,25 @@ export const register: Register = (on) => {
       turns: await read($, turns),
       now: await read($, frame),
     };
-    const widgets = ((await read($, layout))?.widgets ?? []).filter(
-      (widget) => widget.id in WIDGETS,
-    );
+    const current = await read($, layout);
+    const widgets = (current?.widgets ?? []).filter((widget) => widget in WIDGETS).slice(0, 2);
     if (widgets.length === 0)
       return <Text dimColor>No widget to show — see mod.companion.widgets.</Text>;
 
     const columns = e.props.bodyColumns;
     const gaps = widgets.length - 1;
     const room = Math.max(widgets.length, e.props.scroll.bodyRows - gaps);
-    const total = widgets.reduce((sum, widget) => sum + widget.share, 0);
+    const first =
+      widgets.length === 1 ? room : Math.max(1, Math.floor(room * (current?.ratio ?? 0.5)));
+    const heights = [first, Math.max(1, room - first)];
 
     return (
       <Box flexDirection="column">
         {widgets.map((widget, index) => {
-          const rows = Math.max(1, Math.floor((room * widget.share) / total));
-          const draw = WIDGETS[widget.id];
+          const rows = heights[index] ?? 1;
+          const draw = WIDGETS[widget];
           return (
-            <Box key={widget.id} flexDirection="column">
+            <Box key={widget} flexDirection="column">
               {index > 0 && <Text dimColor>{"─".repeat(columns)}</Text>}
               <Box flexDirection="column" justifyContent="flex-end" height={rows} overflow="hidden">
                 {/* 収まる間は上から積み、はみ出したら下に寄せて上の古い方を切る: 中身は

@@ -8,14 +8,11 @@ const CARD = {
 };
 
 const COMPANION = {
-  enabled: true,
   autoOpen: false,
   columns: 64,
   rows: null,
-  widgets: [
-    { id: "redpen", share: 6 },
-    { id: "tldr", share: 4 },
-  ],
+  widgets: ["redpen", "tldr"],
+  ratio: 0.6,
 };
 
 // band が読むのは hasSurvey と bodyColumns、pane は bodyColumns と scroll.bodyRows だけ。
@@ -216,10 +213,7 @@ test("直すところの無い card は一瞬だけ出して、pane から消す
 test("知らない widget は飛ばし、残りで pane を描く", async ($, on) => {
   engine(on, "closed", {
     ...COMPANION,
-    widgets: [
-      { id: "nope", share: 1 },
-      { id: "tldr", share: 1 },
-    ],
+    widgets: ["nope", "tldr"],
   });
   await open($);
 
@@ -311,8 +305,8 @@ test("pane が閉じている間にたまった card と要約を、開いたと
   await pane.unmount();
 });
 
-test("companion.enabled が false なら何も生成せず、pane も開かない", async ($, on) => {
-  const state = engine(on, "closed", { ...COMPANION, enabled: false });
+test("widgets が空なら何も生成せず、pane も開かない", async ($, on) => {
+  const state = engine(on, "closed", { ...COMPANION, widgets: [] });
   await typed($, "I think kono houhou is good");
   await settle();
   await answered($, "a");
@@ -320,7 +314,7 @@ test("companion.enabled が false なら何も生成せず、pane も開かな�
   expect(generated(state)).toEqual([]);
 
   const result = await $.command.run({ command: "kura-companion" });
-  expect(JSON.stringify(result)).toContain("companion.enabled");
+  expect(JSON.stringify(result)).toContain("companion.widgets");
   expect(state.opened).toEqual([]);
 });
 
