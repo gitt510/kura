@@ -2,9 +2,9 @@
 //
 // orchestrator (hourly-job) が publishEnglish() を import して使う。CLI でも叩ける（手動再送）。
 //   - データは english.db から引く (DB が真実)。カード生成 (insert) は別責務。
-//   - english 専用 webhook (config の features.english.publish.discord)。username は生成 provenance
-//     ("claude-fable-5 (high)")・avatar は model 別 (discord/identity.ts)・帯色 green。
-//     旧 row (gen_model 無し) は "English Feed" と webhook 既定 avatar に fallback。
+//   - webhook と avatar は config の features.english.publish.discord。username は生成 provenance
+//     ("claude-fable-5 (high)")、旧 row (gen_model 無し) は "English Feed"。avatar 未設定なら
+//     webhook 既定の avatar。帯色 green。
 //   - 外部送信なので非冪等。冪等ガードは published_at。
 //
 // レイアウト。カナだけを手がかりに en を書き起こす練習が主用途:

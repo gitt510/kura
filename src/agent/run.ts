@@ -259,7 +259,7 @@ export interface ClaudePrompt {
 export function buildClaudePromptCommand(
   executable: string,
   { system, prompt }: ClaudePrompt,
-  model: string,
+  model: string | null,
   effort: ClaudeEffort | null = null,
 ): string[] {
   return [
@@ -276,8 +276,7 @@ export function buildClaudePromptCommand(
     "",
     "--output-format",
     "json",
-    "--model",
-    model,
+    ...(model ? ["--model", model] : []),
     ...(effort ? ["--effort", effort] : []),
   ];
 }
@@ -296,7 +295,7 @@ export function resolvePromptGeneration(feature: string, generation: Generation)
 export async function runClaudePrompt(
   feature: string,
   input: ClaudePrompt,
-  model: string,
+  model: string | null,
   effort: ClaudeEffort | null = null,
 ): Promise<ClaudePromptRun> {
   const child = Bun.spawn(

@@ -20,22 +20,33 @@ const count = z
   .int({ error: "must be a positive integer" })
   .positive({ error: "must be a positive integer" });
 const flag = z.boolean({ error: "must be a boolean" });
+// 手で書く 1 人用の file なので、知らない key は typo として load 時に拒否する。
 const object = (shape: z.ZodRawShape) =>
-  z.object(shape, { error: "must be an object" }).prefault({});
+  z.strictObject(shape, { error: "must be an object" }).prefault({});
 
-// feature ごとの生成設定。agent は skill を回す CLI、model / effort は null なら CLI の既定。
+// feature ごとの生成設定。agent はその feature を回せる CLI、model / effort は null なら CLI の既定。
+// model は書かなければ feature の既定 (redpen / tldr は opus)、null と書けば CLI の既定。
 // effort の値の妥当性は agent ごとに違うので使う側 (agent/run.ts) が検証する。
 const AGENTS = ["claude", "codex"] as const;
-const generationShape = (model: string | null) => ({
-  agent: z.enum(AGENTS, { error: 'must be "claude" or "codex"' }).default("claude"),
-  model: text.transform((value) => value ?? model),
+export type Agent = (typeof AGENTS)[number];
+export type Generation = { agent: Agent; model: string | null; effort: string | null };
+const generationShape = (agents: readonly Agent[], model: string | null) => ({
+  agent: z
+    .enum(agents, { error: `must be ${agents.map((name) => `"${name}"`).join(" or ")}` })
+    .default("claude"),
+  model: z
+    .string({ error: "must be a string" })
+    .nullable()
+    .default(model)
+    .transform((value) => value?.trim() || null),
   effort: text,
 });
-const generation = (model: string | null) => object(generationShape(model));
+// prompt 一発の feature は system prompt と出力の契約が Claude 前提なので claude だけ。
+const prompted = (model: string | null) => object(generationShape(["claude"], model));
 // 配信する feature。publish.enabled は `kura publish` が書く明示 opt-in。
 // discord.webhook は URL か op:// 参照、discord.avatar は投稿者アイコンの URL。
 const published = object({
-  ...generationShape(null),
+  ...generationShape(AGENTS, null),
   publish: object({
     enabled: flag.default(false),
     discord: object({ webhook: text, avatar: text }),
@@ -45,16 +56,17 @@ const published = object({
 const isWidget = (value: unknown): value is { id: string; share: number } =>
   !!value &&
   typeof value === "object" &&
+  Object.keys(value).every((key) => key === "id" || key === "share") &&
   typeof (value as { id?: unknown }).id === "string" &&
   (value as { id: string }).id.trim() !== "" &&
   count.safeParse((value as { share?: unknown }).share).success;
 
 // root は「誰のための設定か」で 2 つ: features (機能ごと)、mod (Claude Code mod)。
-const Config = z.object(
+const Config = z.strictObject(
   {
     features: object({
-      redpen: generation("opus"), // 速さより質 — 既定は opus
-      tldr: generation("opus"),
+      redpen: prompted("opus"), // 速さより質 — 既定は opus
+      tldr: prompted("opus"),
       timeline: published,
       english: published,
     }),
@@ -83,8 +95,6 @@ const Config = z.object(
   { error: "must be a JSON object" },
 );
 
-export type Agent = (typeof AGENTS)[number];
-export type Generation = { agent: Agent; model: string | null; effort: string | null };
 export type KuraConfig = z.infer<typeof Config>;
 
 export function defaultConfig(): KuraConfig {
@@ -107,8 +117,11 @@ function parseConfig(raw: unknown, path: string): KuraConfig {
   if (result.success) return result.data;
   const issue = result.error.issues[0];
   const field = issue?.path.join(".");
-  const reason = issue?.message ?? "is invalid";
-  throw new Error(`invalid config ${path}: ${field ? `${field} ${reason}` : reason}`);
+  const reason =
+    issue?.code === "unrecognized_keys"
+      ? `has unknown key ${issue.keys.map((key) => `"${key}"`).join(", ")}`
+      : (issue?.message ?? "is invalid");
+  throw new Error(`invalid config ${path}: ${field ? `${field} ${reason}` : `config ${reason}`}`);
 }
 
 export function loadConfig(path: string = configPath()): KuraConfig {

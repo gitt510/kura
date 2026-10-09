@@ -29,8 +29,9 @@ export interface TldrResult {
 export const CONTEXT_TURNS = 3;
 const CONTEXT_CLIP = 1500;
 
-export function resolveTldrModel(config: KuraConfig = loadConfig()): string {
-  return resolvePromptGeneration("tldr", config.features.tldr).model ?? "opus";
+// null は CLI の既定に任せる。
+export function resolveTldrModel(config: KuraConfig = loadConfig()): string | null {
+  return resolvePromptGeneration("tldr", config.features.tldr).model;
 }
 
 function isTurn(value: unknown): value is Turn {

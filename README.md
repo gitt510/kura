@@ -122,8 +122,8 @@ $EDITOR "${XDG_CONFIG_HOME:-$HOME/.config}/kura/config.json"
 
 | Key | Consumer |
 | --- | --- |
-| `features.<name>.agent` | CLI that generates the feature: `claude` (default) or `codex`; `redpen` / `tldr` accept `claude` only |
-| `features.<name>.model` | Model for that feature; `null` leaves it to the CLI (`redpen` / `tldr` default `opus`) |
+| `features.<name>.agent` | CLI that generates the feature: `claude` (default) or `codex`; `redpen` / `tldr` accept `claude` only (rejected at load) |
+| `features.<name>.model` | Model for that feature; omitted means the feature default (`redpen` / `tldr`: `opus`, others: CLI default), `null` means the CLI default |
 | `features.<name>.effort` | Effort for that feature in the agent's own vocabulary; `null` leaves it to the CLI |
 | `features.<timeline\|english>.publish.enabled` | Discord delivery opted in; written by `kura publish` |
 | `features.<timeline\|english>.publish.discord.webhook` | Discord webhook URL or `op://` reference |
@@ -135,6 +135,7 @@ $EDITOR "${XDG_CONFIG_HOME:-$HOME/.config}/kura/config.json"
 
 - `features.<name>.model` / `effort` apply only to that feature's generation; normal CLI usage is untouched
 - `null` model / effort injects no flag; the CLI's own default applies
+- A key the schema does not know is rejected at load with its path (`features.timeline has unknown key "webhok"`)
 - Invalid effort values are rejected at run time with the accepted list
 - A webhook alone does not enable delivery; `just publish enable <feature>`
   sets `features.<feature>.publish.enabled` to `true`

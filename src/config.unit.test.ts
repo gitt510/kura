@@ -32,7 +32,7 @@ test("config.json が無ければ既定値で動く", () => {
   expect(loadConfig(join(tempDir(), "missing.json"))).toEqual(defaultConfig());
 });
 
-test("書かれていない項目は既定値で埋め、空文字は未設定として扱う", () => {
+test("書かれていない項目は既定値で埋め、null と空文字は CLI の既定として扱う", () => {
   const config = parseConfig(
     { features: { timeline: { agent: "codex", model: "gpt-5.6", effort: " " } } },
     "config.json",
@@ -51,17 +51,30 @@ test("書かれていない項目は既定値で埋め、空文字は未設定�
   });
   expect(config.features.redpen).toEqual({ agent: "claude", model: "opus", effort: null });
   expect(Object.keys(config)).toEqual(["features", "mod"]);
+  // model は書かなければ feature の既定、null (や空白) は CLI の既定
   expect(
     parseConfig({ features: { redpen: { model: "  " } } }, "config.json").features.redpen.model,
-  ).toBe("opus");
+  ).toBeNull();
+  expect(
+    parseConfig({ features: { redpen: { model: null } } }, "config.json").features.redpen.model,
+  ).toBeNull();
 });
 
 test("型の違う項目は path と項目名付きで拒否する", () => {
   expect(() => parseConfig({ features: { timeline: { model: 5 } } }, "c.json")).toThrow(
     /^invalid config .*\/c\.json: features\.timeline\.model must be a string$/,
   );
-  expect(() => parseConfig({ features: { redpen: { agent: "gemini" } } }, "c.json")).toThrow(
-    'features.redpen.agent must be "claude" or "codex"',
+  expect(() => parseConfig({ features: { redpen: { agent: "codex" } } }, "c.json")).toThrow(
+    'features.redpen.agent must be "claude"',
+  );
+  expect(() => parseConfig({ features: { timeline: { agent: "gemini" } } }, "c.json")).toThrow(
+    'features.timeline.agent must be "claude" or "codex"',
+  );
+  expect(() => parseConfig({ features: { timeline: { webhok: 1 } } }, "c.json")).toThrow(
+    'features.timeline has unknown key "webhok"',
+  );
+  expect(() => parseConfig({ generator: "codex" }, "c.json")).toThrow(
+    'config has unknown key "generator"',
   );
   expect(() =>
     parseConfig({ features: { timeline: { publish: { enabled: "yes" } } } }, "c.json"),

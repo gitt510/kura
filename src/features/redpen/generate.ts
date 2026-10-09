@@ -38,8 +38,9 @@ export interface GenerateResult {
 }
 
 // 速さより質 — parts の切り方と訳語の自然さが価値なので既定は opus (config の既定値)。
-export function resolveRedpenModel(config: KuraConfig = loadConfig()): string {
-  return resolvePromptGeneration("redpen", config.features.redpen).model ?? "opus";
+// null は CLI の既定に任せる。
+export function resolveRedpenModel(config: KuraConfig = loadConfig()): string | null {
+  return resolvePromptGeneration("redpen", config.features.redpen).model;
 }
 
 const CONTEXT_CLIP = 1200;
