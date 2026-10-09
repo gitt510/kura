@@ -1,7 +1,7 @@
 // usage.ts — usage.db の feature 別集計を表で表示する。読み出しのみで状態を変えない。
 
 import { existsSync } from "node:fs";
-import { openUsageDb, usageDbPath, usageSummary } from "../lib/usage.ts";
+import { openUsageDb, usageDbPath, usageSummary } from "../agent/usage.ts";
 import { paint, type Row, renderTable } from "./terminal.ts";
 
 function usageError(): number {

@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { discordIdentity } from "./discord-identity.ts";
+import { discordIdentity } from "./identity.ts";
 
 const AVATARS = { claude: "https://example.test/claude.png" };
 

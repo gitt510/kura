@@ -9,7 +9,7 @@ if (!home) throw new Error("HOME is required");
 
 const stateHome = process.env.XDG_STATE_HOME ?? `${home}/.local/state`;
 export const KURA_STATE_DIR = `${stateHome}/kura`;
-export const KURA_ROOT = resolve(import.meta.dir, "../..");
+export const KURA_ROOT = resolve(import.meta.dir, "..");
 
 function prepareStateDir(): void {
   mkdirSync(KURA_STATE_DIR, { recursive: true, mode: 0o700 });

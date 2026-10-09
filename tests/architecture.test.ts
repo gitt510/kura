@@ -15,7 +15,7 @@ function typescriptFiles(dir: string): string[] {
 const sources = () => typescriptFiles(src).filter((file) => !file.endsWith(".test.ts"));
 
 // agent を spawn した経路だけが usage を記録できる。spawn 元が増えると記録漏れが
-// 生まれるため、agent CLI を起動できる場所を lib/agent.ts 1 箇所に閉じ込める。
+// 生まれるため、agent CLI を起動できる場所を agent/run.ts 1 箇所に閉じ込める。
 // binary の解決 (agentExecutable / Bun.which) も、名前を直書きした spawn も検出する。
 const agentSpawn = [
   /\bagentExecutable\b/,
@@ -24,8 +24,8 @@ const agentSpawn = [
   /\$`\s*(claude|codex)\b/,
 ];
 
-test("agent CLI を spawn するのは lib/agent.ts だけ", () => {
-  const runner = join(src, "lib", "agent.ts");
+test("agent CLI を spawn するのは agent/run.ts だけ", () => {
+  const runner = join(src, "agent", "run.ts");
   const violations = sources()
     .filter((file) => file !== runner)
     .filter((file) => agentSpawn.some((pattern) => pattern.test(readFileSync(file, "utf-8"))));
@@ -57,10 +57,15 @@ test("features は実行の入口を持たない", () => {
   expect(violations).toEqual([]);
 });
 
-test("history と lib は features に依存しない", () => {
-  const violations = ["history", "lib"]
-    .flatMap((dir) => typescriptFiles(join(src, dir)))
-    .filter((file) => /from\s+["'][^"']*features\//.test(readFileSync(file, "utf-8")));
+// src 直下 = app 全体の土台、directory = 1 domain、cli/ = subcommand の入口。
+// features を import できるのは features 自身と cli/ だけ。
+test("features と cli 以外は features に依存しない", () => {
+  const allowed = ["features", "cli"].map((dir) => `${join(src, dir)}/`);
+  const violations = typescriptFiles(src)
+    .filter((file) => !allowed.some((dir) => file.startsWith(dir)))
+    .filter((file) =>
+      /(from\s+|import\(\s*)["'][^"']*features\//.test(readFileSync(file, "utf-8")),
+    );
 
   expect(violations).toEqual([]);
 });
