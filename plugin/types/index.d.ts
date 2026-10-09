@@ -32,6 +32,27 @@ export type Layout = {
   ratio: number; // 上の widget が占める高さの割合。1 つなら無視
 };
 
+export type FileKind = "added" | "changed" | "deleted";
+// worktree の 1 file。preview は diff の最初の hunk を PREVIEW_LINES 行に切ったもの (無ければ "")、
+// more はそこに入らなかった変更行の数。
+export type FileRow = {
+  path: string;
+  kind: FileKind;
+  added: number;
+  removed: number;
+  preview: string;
+  more: number;
+};
+// editing は Edit / Write / NotebookEdit が今触っている repo 相対の path。root は repo の絶対 path
+// (分かるまで "")。error は worktree を読めなかった理由。
+export type Glance = {
+  rows: FileRow[];
+  editing: string[];
+  root: string;
+  branch: string;
+  error?: string;
+};
+
 declare module "claude-code" {
   interface PluginState {
     kura: {
@@ -39,6 +60,7 @@ declare module "claude-code" {
       turns: Turn[];
       layout: Layout | null;
       frame: number;
+      glance: Glance;
     };
   }
 }
