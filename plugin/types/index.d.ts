@@ -35,6 +35,7 @@ export type Layout = {
 // sessions widget の 1 行。`claude agents --json` の項目をそのまま持つ。status は status、
 // 無ければ state (process の無い background job)。isSelf はこの session か。
 export type Peer = {
+  kind: string;
   sessionId: string;
   name: string;
   cwd: string;

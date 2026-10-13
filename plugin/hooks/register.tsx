@@ -114,7 +114,7 @@ function isWaiting(summary: Tldr): boolean {
   return summary.status === "answering" || summary.status === "pending";
 }
 
-// 待つものがある間だけ frame を進め、無くなったら止める。
+// 待つものか、見えている pane に busy の session がある間だけ frame を進め、無くなったら止める。
 let ticker: Timer | null = null;
 
 function startTicker($: EngineInterface): void {
@@ -124,7 +124,9 @@ function startTicker($: EngineInterface): void {
       const now = await $.clock.now();
       const hasWaiting =
         (await read($, history)).some((entry) => entry.card.status === "pending") ||
-        (await read($, turns)).some((turn) => isWaiting(turn.summary));
+        (await read($, turns)).some((turn) => isWaiting(turn.summary)) ||
+        ((await read($, sessions)).peers.some((peer) => peer.status === MOVING) &&
+          (await paneState($)).isInView);
       if (!hasWaiting) {
         ticker?.cancel();
         ticker = null;
@@ -215,7 +217,7 @@ function cardRows(
 // ---- sessions ----
 
 // sessions widget は `claude agents --json` の行を、JSON の順のまま table に出す。値は言い換えず、
-// status に色を付けるだけ。列の幅と切り詰めは Box / Text の layout に任せる。
+// status を値ごとの色で出すだけ。列の幅は中身から決め、切り詰めは Box / Text の layout に任せる。
 // `claude agents` は 1 回の起動で CPU を約 0.15 秒使い、pane を開いた session がそれぞれ起動する。
 // なので pane が見えている間だけ POLL_MS ごとに読み、見えるようになった瞬間にも 1 回読む。
 // 見えているかは CHECK_MS ごとに確かめる (自分の process の中で済む)。
@@ -223,17 +225,27 @@ const POLL_MS = 10_000;
 const CHECK_MS = 1_000;
 const AGENTS_TIMEOUT_MS = 10_000;
 
-// status の値ごとの色。ここに無い値は色を付けない。
-const STATUS_COLOR: Record<string, string> = {
-  busy: "suggestion",
-  blocked: "warning",
-  waiting: "warning",
-  failed: "error",
-  done: "success",
+// status の値ごとの色と記号。herdr の status 表示 (blocked: red, done: teal, working: yellow,
+// idle: green, その他: gray) に合わせ、色を付けるのは status だけにする。
+// busy は記号の代わりに spinner の記号を回す。
+const MOVING = "busy";
+const STATUS_LOOK: Record<string, { color: string; mark: string }> = {
+  blocked: { color: "red", mark: "●" },
+  waiting: { color: "red", mark: "●" },
+  failed: { color: "red", mark: "●" },
+  done: { color: "cyan", mark: "●" },
+  busy: { color: "yellow", mark: "●" },
+  idle: { color: "green", mark: "○" },
 };
+const OTHER_LOOK = { color: "gray", mark: "·" };
+
+function lookOf(status: string): { color: string; mark: string } {
+  return STATUS_LOOK[status] ?? OTHER_LOOK;
+}
 
 // `claude agents --json` の 1 行。読むのは表に出す項目だけ。
 type AgentRow = {
+  kind?: string;
   sessionId?: string;
   name?: string;
   cwd?: string;
@@ -251,6 +263,7 @@ async function readPeers($: EngineInterface): Promise<Peer[]> {
   }
   const self = await $.session.id();
   return (JSON.parse(run.stdout) as AgentRow[]).map((row) => ({
+    kind: row.kind ?? "",
     sessionId: row.sessionId ?? "",
     name: row.name ?? "",
     cwd: row.cwd ?? "",
@@ -286,9 +299,10 @@ function startPolling($: EngineInterface): void {
     } finally {
       isPolling = false;
     }
-    // age を進める。
+    // age を進める。busy の spinner は ticker が回す。
     const now = await $.clock.now();
     await update($, frame, () => now);
+    startTicker($);
   };
   void poll().catch(() => {});
   poller = $.clock.every(CHECK_MS, () => void poll().catch(() => {}));
@@ -302,83 +316,181 @@ function elapsed(ms: number): string {
   return `${Math.floor(seconds / 86_400)}d`;
 }
 
-// sessionId は頭の 5 文字だけ出す。
-const ID_SHOWN = 5;
-// 列の幅。name と cwd は残りを分け合い、はみ出したら末尾を切る。
-const COLUMNS = { status: 8, sessionId: 10, name: 22, age: 4 } as const;
+// sessionId は頭の 7 文字と … を出す。
+const ID_SHOWN = 7;
+const NAME_MAX = 24;
+const AGE_WIDTH = 4;
+// 指した行の地の色。
+const HOVER_COLOR = "subtle";
 
+type RowValues = {
+  status: string;
+  kind: string;
+  sessionId: string;
+  name: string;
+  cwd: string;
+  age: string;
+};
+type Widths = Record<Exclude<keyof RowValues, "age">, number>;
+
+// 列は Status / Name / Cwd / Kind / SessionId / Age の順。幅は中身の長さから決め、列の間は
+// 1 cell。収まらなければ Name と Cwd が縮んで末尾を切る。文字の列は左寄せ、数値の Age は右寄せ。
 function sessionRow(
   { Box, Text }: Elements,
   key: string,
-  values: { status: RenderElement; sessionId: string; name: string; cwd: string; age: string },
-  props: { dimColor?: boolean; bold?: boolean } = {},
+  values: RowValues,
+  widths: Widths,
+  options: { statusColor?: string; isBold?: boolean; isHoverable?: boolean } = {},
 ): RenderElement {
+  const { statusColor, isBold = false, isHoverable = false } = options;
+  const order = ["status", "name", "cwd", "kind", "sessionId", "age"] as const;
   return (
-    <Box key={key} flexDirection="row">
-      <Box width={COLUMNS.status} flexShrink={0}>
-        {values.status}
-      </Box>
-      <Box width={COLUMNS.sessionId} flexShrink={0}>
-        <Text {...props} dimColor>
-          {values.sessionId}
-        </Text>
-      </Box>
-      <Box width={COLUMNS.name} flexShrink={1} paddingRight={1}>
-        <Text {...props} wrap="truncate-end">
-          {values.name}
-        </Text>
-      </Box>
-      <Box flexGrow={1} flexShrink={1} paddingRight={1}>
-        <Text {...props} dimColor wrap="truncate-end">
-          {values.cwd}
-        </Text>
-      </Box>
-      <Box width={COLUMNS.age} flexShrink={0} justifyContent="flex-end">
-        <Text {...props}>{values.age}</Text>
-      </Box>
+    <Box
+      key={key}
+      flexDirection="row"
+      hover={isHoverable ? { backgroundColor: HOVER_COLOR } : undefined}
+    >
+      {order.map((column) => (
+        <Box
+          key={column}
+          width={column === "age" ? AGE_WIDTH : widths[column] + 1}
+          flexShrink={column === "name" || column === "cwd" ? 1 : 0}
+          paddingRight={column === "age" ? 0 : 1}
+          justifyContent={column === "age" ? "flex-end" : "flex-start"}
+        >
+          <Text
+            color={column === "status" ? statusColor : undefined}
+            bold={isBold}
+            wrap="truncate-end"
+          >
+            {values[column]}
+          </Text>
+        </Box>
+      ))}
     </Box>
   );
 }
 
-function drawSessions(elements: Elements, { sessions: s, now }: PaneData) {
-  const { Box, Text } = elements;
-  if (s.error) return <Text color="error">{s.error}</Text>;
-  if (s.peers.length === 0) return <Text dimColor>No Claude Code sessions.</Text>;
+// status の記号。busy は spinner の記号を回す。
+function statusMark(status: string, now: number): string {
+  const spinning = status === MOVING ? CYCLE[Math.floor(now / TICK_MS) % CYCLE.length] : undefined;
+  return spinning ?? lookOf(status).mark;
+}
+
+// status は値をそのまま、前に記号を置く。
+function statusText(status: string, now: number): string {
+  return `${statusMark(status, now)} ${status || "-"}`;
+}
+
+// table の上の行: session の数と、status の値ごとの数。値は JSON に出てきた順。
+function sessionsSummary({ Text }: Elements, peers: Peer[], now: number): RenderElement {
+  const counts = new Map<string, number>();
+  for (const peer of peers) counts.set(peer.status, (counts.get(peer.status) ?? 0) + 1);
+  return (
+    <Text wrap="truncate-end">
+      <Text bold>{`${peers.length} ${peers.length === 1 ? "session" : "sessions"}`}</Text>
+      {[...counts].map(([status, count]) => (
+        <Text key={status}>
+          {"  "}
+          <Text color={lookOf(status).color}>{`${statusMark(status, now)} `}</Text>
+          {`${count} ${status || "-"}`}
+        </Text>
+      ))}
+    </Text>
+  );
+}
+
+// session の table: 見出し、その下の罫線、1 session 1 行。指した行は地の色が変わる。
+function sessionsTable(elements: Elements, peers: Peer[], now: number): RenderElement {
+  const { Box } = elements;
+  const rows = peers.map((peer) => ({
+    peer,
+    kind: peer.kind || "-",
+    sessionId: peer.sessionId ? `${peer.sessionId.slice(0, ID_SHOWN)}…` : "-",
+    name: peer.name || "-",
+    // cwd は最後の / より後ろだけ。
+    cwd: peer.cwd.slice(peer.cwd.lastIndexOf("/") + 1) || "-",
+  }));
+  const widest = (header: string, values: string[]) =>
+    Math.max(cells(header), ...values.map((value) => cells(value)));
+  const widths: Widths = {
+    status: widest(
+      "Status",
+      rows.map((row) => statusText(row.peer.status, now)),
+    ),
+    name: Math.min(
+      NAME_MAX,
+      widest(
+        "Name",
+        rows.map((row) => row.name),
+      ),
+    ),
+    cwd: widest(
+      "Cwd",
+      rows.map((row) => row.cwd),
+    ),
+    kind: widest(
+      "Kind",
+      rows.map((row) => row.kind),
+    ),
+    // 頭の 7 文字と … で 8 cell。… は East Asian Ambiguous なので cells では数えない。
+    sessionId: Math.max(cells("SessionId"), ID_SHOWN + 1),
+  };
+  const rule = (width: number) => "─".repeat(width);
   return (
     <Box flexDirection="column">
       {sessionRow(
         elements,
         "header",
         {
-          status: <Text dimColor>status</Text>,
-          sessionId: "sessionId",
-          name: "name",
-          cwd: "cwd",
-          age: "age",
+          status: "Status",
+          name: "Name",
+          cwd: "Cwd",
+          kind: "Kind",
+          sessionId: "SessionId",
+          age: "Age",
         },
-        { dimColor: true },
+        widths,
       )}
-      {s.peers.map((peer, index) => {
-        const color = STATUS_COLOR[peer.status];
-        // cwd は最後の / より後ろだけ。
-        const cwd = peer.cwd.slice(peer.cwd.lastIndexOf("/") + 1);
-        return sessionRow(
+      {sessionRow(
+        elements,
+        "rule",
+        {
+          status: rule(widths.status),
+          name: rule(widths.name),
+          cwd: rule(widths.cwd),
+          kind: rule(widths.kind),
+          sessionId: rule(widths.sessionId),
+          age: rule(AGE_WIDTH),
+        },
+        widths,
+      )}
+      {rows.map(({ peer, ...values }, index) =>
+        sessionRow(
           elements,
           peer.sessionId || String(index),
           {
-            status: (
-              <Text color={color} dimColor={color === undefined} bold={peer.isSelf}>
-                {peer.status || "-"}
-              </Text>
-            ),
-            sessionId: peer.sessionId ? `${peer.sessionId.slice(0, ID_SHOWN)}...` : "-",
-            name: peer.name || "-",
-            cwd: cwd || "-",
+            ...values,
+            status: statusText(peer.status, now),
             age: elapsed(now - peer.startedAt),
           },
-          { bold: peer.isSelf },
-        );
-      })}
+          widths,
+          { statusColor: lookOf(peer.status).color, isBold: peer.isSelf, isHoverable: true },
+        ),
+      )}
+    </Box>
+  );
+}
+
+// summary と table は別の塊として、1 行空けて縦に積む。
+function drawSessions(elements: Elements, { sessions: s, now }: PaneData) {
+  const { Box, Text } = elements;
+  if (s.error) return <Text color="error">{s.error}</Text>;
+  if (s.peers.length === 0) return <Text>No Claude Code sessions.</Text>;
+  return (
+    <Box flexDirection="column" rowGap={1}>
+      {sessionsSummary(elements, s.peers, now)}
+      {sessionsTable(elements, s.peers, now)}
     </Box>
   );
 }

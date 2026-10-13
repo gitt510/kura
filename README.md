@@ -180,13 +180,21 @@ kura config
   the turn of one prompt share its word and colors
 - A summary cut off by a plugin reload is made again at the next session start
 - `sessions` shows the rows of `claude agents --json` (interactive and
-  background sessions) in its order, as a table: `status`, `sessionId` (its
-  first 5 characters), `name`, `cwd` (its last path segment), and the age
-  since `startedAt`
+  background sessions) in its order: a summary line (the session count and
+  the count per `status` value), a blank line, then a table of `Status`, `Name`, `Cwd`
+  (the last path segment), `Kind`, `SessionId` (its first 7 characters and
+  `…`), and `Age` (since `startedAt`); each column is as wide as its longest
+  value; text columns are left-aligned and `Age` right-aligned
+- A `─` rule sits under the header; the row under the pointer gets a grey
+  background
 - Values are shown as Claude Code reports them; a background job with no
   process has no `status`, so its `state` (`blocked`, `done`) stands in
-- `status` is coloured by value (`busy`, `blocked` / `waiting`, `failed`,
-  `done`); this session's row is bold
+- `Status` is the value after a mark, coloured like herdr's status: `blocked`
+  / `waiting` / `failed` red `●`, `done` cyan `●`, `busy` yellow with a
+  spinning glyph while the pane is in view, `idle` green `○`, any other value
+  grey `·`; the summary uses the same marks and colours; other columns are
+  uncoloured;
+  this session's row is bold
 - `sessions` runs `claude agents --json` every 10 seconds, only while the
   pane is in view, and once more the moment the pane comes into view; it
   needs `claude` on `PATH`

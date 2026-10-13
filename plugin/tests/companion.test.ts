@@ -401,7 +401,7 @@ test("/kura-handoff はこの session の id を kura handoff に渡すだけ", 
 
 const SESSIONS = { ...COMPANION, widgets: ["sessions"] };
 
-test("sessions widget は claude agents の行を JSON の順のまま、status / sessionId / name / cwd / age で出す", async ($, on) => {
+test("sessions widget は claude agents の行を JSON の順のまま、status / name / cwd / kind / sessionId / age で出す", async ($, on) => {
   const clock = mock.clock(on);
   await clock.set(10 * 60_000);
   const state = engine(on, "closed", SESSIONS);
@@ -437,10 +437,12 @@ test("sessions widget は claude agents の行を JSON の順のまま、status 
 
   const pane = await $.ui.mount({ ...PANE, surface: "terminal" });
   const text = (await pane.find({ type: "Box" }))?.text ?? "";
-  expect(text).toMatch(/status\s*sessionId\s*name\s*cwd\s*age/);
-  expect(text).toMatch(/blocked\s*8bd8e\.\.\.\s*Alarm\s*service-catalog\s*2h/);
-  expect(text).toMatch(/busy\s*9c48e\.\.\.\s*kura-02\s*kura\s*3m/);
-  expect(text).toMatch(/idle\s*e0959\.\.\.\s*crawler-5d\s*cogmo-crawler\s*31s/);
+  expect(text).toMatch(/3 sessions {2}● 1 blocked {2}[·✢✳✶✻✽] 1 busy {2}○ 1 idle/);
+  expect(text).toMatch(/Status\s*Name\s*Cwd\s*Kind\s*SessionId\s*Age\s*─+/);
+  expect(text).toMatch(/● blocked\s*Alarm\s*service-catalog\s*background\s*8bd8eb4…\s*2h/);
+  // busy だけ値の前に spinner の記号を回す。
+  expect(text).toMatch(/[·✢✳✶✻✽] busy\s*kura-02\s*kura\s*interactive\s*9c48e03…\s*3m/);
+  expect(text).toMatch(/○ idle\s*crawler-5d\s*cogmo-crawler\s*interactive\s*e095986…\s*31s/);
   // 並べ替えない。
   expect(text.indexOf("Alarm")).toBeLessThan(text.indexOf("kura-02"));
   expect(text.indexOf("kura-02")).toBeLessThan(text.indexOf("crawler-5d"));
