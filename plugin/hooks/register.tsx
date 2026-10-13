@@ -433,9 +433,10 @@ function agentsTable(elements: Elements, peers: Peer[], now: number): RenderElem
   const widest = (header: string, values: string[]) =>
     Math.max(cells(header), ...values.map((value) => cells(value)));
   const widths: Widths = {
+    // 回る記号は tick ごとに cells が変わるので、幅は動かない記号で測る。
     status: widest(
       "Status",
-      rows.map((row) => statusText(row.peer.status, now)),
+      rows.map((row) => `${lookOf(row.peer.status).mark} ${row.peer.status || "-"}`),
     ),
     name: Math.min(
       NAME_MAX,
