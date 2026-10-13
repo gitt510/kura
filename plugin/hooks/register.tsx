@@ -64,11 +64,20 @@ function pick<T>(list: T[], id: string, salt: number): T {
 
 // 本家の spinner と同じく、文言の後ろに経った秒数と何を待っているかを dim で添える。
 // 光を text の左外から右外へ流し、少し間を置いてまた左から。明るさは 3 段: 芯は bright の
-// 太字、両隣は通常の色、その外は dim。
-function glow(elements: Elements, hue: string, text: string, now: number): RenderElement {
+// 太字、両隣は通常の色、その外は dim。長さ span の行の一部なら、offset はその中での位置で、
+// その外も dim にせず通常の色にする。
+function glow(
+  elements: Elements,
+  hue: string,
+  text: string,
+  now: number,
+  offset = 0,
+  span = [...text].length,
+): RenderElement {
   const { Text } = elements;
   const chars = [...text];
-  const at = (Math.floor(now / TICK_MS) % (chars.length + 8)) - 3;
+  const isPart = offset > 0 || span !== chars.length;
+  const at = (Math.floor(now / TICK_MS) % (span + 8)) - 3 - offset;
   return (
     <Text>
       {chars.map((char, index) => {
@@ -78,7 +87,7 @@ function glow(elements: Elements, hue: string, text: string, now: number): Rende
             key={index}
             color={distance === 0 ? `${hue}Bright` : hue}
             bold={distance === 0}
-            dimColor={distance > 1}
+            dimColor={!isPart && distance > 1}
           >
             {char}
           </Text>
@@ -225,21 +234,21 @@ const POLL_MS = 10_000;
 const CHECK_MS = 1_000;
 const AGENTS_TIMEOUT_MS = 10_000;
 
-// status の値ごとの色と記号。herdr の status 表示 (blocked: red, done: teal, working: yellow,
-// idle: green, その他: gray) に合わせ、色を付けるのは status だけにする。
-// busy は記号の代わりに spinner の記号を回す。
+// status の値ごとの記号と色。記号は herdr の status 表示に合わせる。色が付くのは動いているもの
+// (busy: green、spinner の記号を回し、行全体に光を流す) と、こちらが動かないと進まないもの
+// (blocked / waiting / failed: red) だけで、ほかは地の文字色のまま記号で見分ける。
 const MOVING = "busy";
-const STATUS_LOOK: Record<string, { color: string; mark: string }> = {
+const STATUS_LOOK: Record<string, { color?: string; mark: string }> = {
   blocked: { color: "red", mark: "●" },
   waiting: { color: "red", mark: "●" },
   failed: { color: "red", mark: "●" },
-  done: { color: "cyan", mark: "●" },
-  busy: { color: "yellow", mark: "●" },
-  idle: { color: "green", mark: "○" },
+  done: { mark: "●" },
+  busy: { color: "green", mark: "●" },
+  idle: { mark: "○" },
 };
-const OTHER_LOOK = { color: "gray", mark: "·" };
+const OTHER_LOOK = { mark: "·" };
 
-function lookOf(status: string): { color: string; mark: string } {
+function lookOf(status: string): { color?: string; mark: string } {
   return STATUS_LOOK[status] ?? OTHER_LOOK;
 }
 
@@ -336,34 +345,44 @@ type Widths = Record<Exclude<keyof RowValues, "age">, number>;
 // 列は Status / Name / Cwd / Kind / SessionId / Age の順。幅は中身の長さから決め、列の間は
 // 1 cell。収まらなければ Name と Cwd が縮んで末尾を切る。文字の列は左寄せ、数値の Age は右寄せ。
 function sessionRow(
-  { Box, Text }: Elements,
+  elements: Elements,
   key: string,
   values: RowValues,
   widths: Widths,
-  options: { statusColor?: string; isBold?: boolean; isHoverable?: boolean } = {},
+  options: { statusColor?: string; isBold?: boolean; isHoverable?: boolean; wave?: number } = {},
 ): RenderElement {
-  const { statusColor, isBold = false, isHoverable = false } = options;
+  const { Box, Text } = elements;
+  const { statusColor, isBold = false, isHoverable = false, wave } = options;
   const order = ["status", "name", "cwd", "kind", "sessionId", "age"] as const;
+  const width = (column: (typeof order)[number]) =>
+    column === "age" ? AGE_WIDTH : widths[column] + 1;
+  const span = order.reduce((sum, column) => sum + width(column), 0);
+  // 列の左端の、行の中での位置。
+  const starts = order.map((_, index) =>
+    order.slice(0, index).reduce((sum, column) => sum + width(column), 0),
+  );
   return (
     <Box
       key={key}
       flexDirection="row"
       hover={isHoverable ? { backgroundColor: HOVER_COLOR } : undefined}
     >
-      {order.map((column) => (
+      {order.map((column, index) => (
         <Box
           key={column}
-          width={column === "age" ? AGE_WIDTH : widths[column] + 1}
+          width={width(column)}
           flexShrink={column === "name" || column === "cwd" ? 1 : 0}
           paddingRight={column === "age" ? 0 : 1}
           justifyContent={column === "age" ? "flex-end" : "flex-start"}
         >
           <Text
-            color={column === "status" ? statusColor : undefined}
+            color={column === "status" || wave !== undefined ? statusColor : undefined}
             bold={isBold}
             wrap="truncate-end"
           >
-            {values[column]}
+            {wave !== undefined && statusColor
+              ? glow(elements, statusColor, values[column], wave, starts[index], span)
+              : values[column]}
           </Text>
         </Box>
       ))}
@@ -475,7 +494,12 @@ function agentsTable(elements: Elements, peers: Peer[], now: number): RenderElem
             age: elapsed(now - peer.startedAt),
           },
           widths,
-          { statusColor: lookOf(peer.status).color, isBold: peer.isSelf, isHoverable: true },
+          {
+            statusColor: lookOf(peer.status).color,
+            isBold: peer.isSelf,
+            isHoverable: true,
+            wave: peer.status === MOVING ? now : undefined,
+          },
         ),
       )}
     </Box>
