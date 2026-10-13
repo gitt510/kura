@@ -1,5 +1,5 @@
 // register.tsx — kura companion: Claude Code の横に、打った prompt の英語 feedback (redpen) と
-// 回答ごとの 3 行要約 (tldr) と、worktree の変更 file (glance) を積む pane。
+// 回答ごとの 3 行要約 (tldr) と、mod を読み込んだ全 session の status (agents) を積む pane。
 //
 // 生成は kura の subcommand (`kura redpen` / `kura tldr`) が持ち、usage も kura が記録する。
 // この mod は呼んで表示するだけ。配置は `kura config` の mod.companion section が決める。
@@ -11,8 +11,7 @@
 
 import type { EngineInterface, Register, RenderElement, Timer } from "claude-code";
 import { atom, read, update } from "claude-code";
-import type { Card, Entry, FileRow, Glance, Item, ItemKind, Layout, Tldr, Turn } from "../types";
-import { joinRows, parseNumstat, parseStatus, previewLines, previewOf } from "./glance";
+import type { Agents, Card, Entry, Item, ItemKind, Layout, Peer, Tldr, Turn } from "../types";
 
 const PANE = "kura-companion";
 const COMMAND = "kura-companion";
@@ -23,10 +22,6 @@ const CONTEXT_TURNS = 4;
 const TIMEOUT_MS = 120_000;
 // 直すところの無い card を pane に出しておく時間。
 const FLASH_MS = 2_000;
-// editing の spinner を tool が返ってから出しておく時間 — 一瞬の Edit でも見える。
-const SPINNER_MIN_MS = 1_000;
-// 1 回の refresh で preview を読む file の数。
-const GLANCE_FILES = 40;
 
 // 打った prompt ごとに 1 entry、古い順。band は最新を、pane は全部を出す。
 const history = atom({ plugin: "kura", key: "history" } as const, []);
@@ -36,16 +31,8 @@ const turns = atom({ plugin: "kura", key: "turns" } as const, []);
 const layout = atom({ plugin: "kura", key: "layout" } as const, null);
 // spinner が描く時刻 (ms)。生成を待つものがある間だけ TICK_MS ごとに進む。
 const frame = atom({ plugin: "kura", key: "frame" } as const, 0);
-// glance が最後に読んだ worktree と、今 Edit / Write / NotebookEdit が触っている file。
-const glance = atom(
-  { plugin: "kura", key: "glance" } as const,
-  {
-    rows: [],
-    editing: [],
-    root: "",
-    branch: "",
-  } as Glance,
-);
+// agents widget が最後に読んだ `claude agents --json`。自分も含む。
+const agents = atom({ plugin: "kura", key: "agents" } as const, { peers: [] } as Agents);
 
 type Elements = ReturnType<EngineInterface["ui"]["resolve"]>;
 
@@ -60,20 +47,14 @@ async function kura($: EngineInterface, args: string[], stdin?: string): Promise
 
 // ---- spinner ----
 
-// 記号は行って戻る。文言と palette は待っている item ごとに id から 1 つ選び、待つ間は変えない。
+// 記号は行って戻る。文言と色は待っている item ごとに id から 1 つ選び、待つ間は変えない。
 const GLYPHS = ["·", "✢", "✳", "✶", "✻", "✽"];
 const CYCLE = [...GLYPHS, ...GLYPHS.slice(1, -1).reverse()];
 const TICK_MS = 120;
-// redpen と tldr で共通: 同じ prompt の card と turn は同じ id なので、同じ文言と palette になる。
+// redpen と tldr で共通: 同じ prompt の card と turn は同じ id なので、同じ文言と色になる。
 const WORDS = ["Pondering", "Distilling", "Brewing", "Mulling", "Polishing", "Simmering"];
-// 明るい順: 光の芯、その両隣、さらに外、地の色。
-const PALETTES = [
-  ["#fff7d6", "#ffd866", "#e0a526", "#9c7a2e"],
-  ["#ffe3f1", "#ff8fc7", "#d9589a", "#8f4a6b"],
-  ["#e0f7ff", "#78dcff", "#3aa7d9", "#3f6e85"],
-  ["#eee6ff", "#b69cff", "#8a63e6", "#5f4f8f"],
-  ["#e6ffe9", "#7ee68f", "#3fb85a", "#457552"],
-];
+// 色は ANSI 16 の名前だけで指定し、実際の RGB は terminal の theme に任せる。
+const HUES = ["yellow", "magenta", "cyan", "blue", "green"];
 
 function pick<T>(list: T[], id: string, salt: number): T {
   let hash = salt;
@@ -82,28 +63,48 @@ function pick<T>(list: T[], id: string, salt: number): T {
 }
 
 // 本家の spinner と同じく、文言の後ろに経った秒数と何を待っているかを dim で添える。
+// 光を text の左外から右外へ流し、少し間を置いてまた左から。明るさは 3 段: 芯は bright の
+// 太字、両隣は通常の色、その外は dim。
+function glow(elements: Elements, hue: string, text: string, now: number): RenderElement {
+  const { Text } = elements;
+  const chars = [...text];
+  const at = (Math.floor(now / TICK_MS) % (chars.length + 8)) - 3;
+  return (
+    <Text>
+      {chars.map((char, index) => {
+        const distance = Math.abs(index - at);
+        return (
+          <Text
+            key={index}
+            color={distance === 0 ? `${hue}Bright` : hue}
+            bold={distance === 0}
+            dimColor={distance > 1}
+          >
+            {char}
+          </Text>
+        );
+      })}
+    </Text>
+  );
+}
+
 function spinner(
-  { Text }: Elements,
+  elements: Elements,
   id: string,
   now: number,
   status: string,
   startedAt?: number,
 ): RenderElement {
+  const { Text } = elements;
   const tick = Math.floor(now / TICK_MS);
   const label = `${pick(WORDS, id, 1)}…`;
   const seconds =
     startedAt === undefined ? null : Math.max(0, Math.floor((now - startedAt) / 1000));
-  const palette = pick(PALETTES, id, 2);
-  // 光は label の左外から右外へ流れ、少し間を置いてまた左から。
-  const at = (tick % (label.length + 8)) - 3;
+  const hue = pick(HUES, id, 2);
   return (
     <Text wrap="truncate-end">
-      <Text color={palette[1]}>{`${CYCLE[tick % CYCLE.length]} `}</Text>
-      {[...label].map((char, index) => (
-        <Text key={index} color={palette[Math.min(Math.abs(index - at), palette.length - 1)]}>
-          {char}
-        </Text>
-      ))}
+      <Text color={hue}>{`${CYCLE[tick % CYCLE.length]} `}</Text>
+      {glow(elements, hue, label, now)}
       <Text dimColor>{seconds === null ? ` (${status})` : ` (${seconds}s · ${status})`}</Text>
     </Text>
   );
@@ -113,23 +114,24 @@ function isWaiting(summary: Tldr): boolean {
   return summary.status === "answering" || summary.status === "pending";
 }
 
-// 待つものがある間だけ frame を進め、無くなったら止める。
+// 待つものか、見えている pane に busy の session がある間だけ frame を進め、無くなったら止める。
 let ticker: Timer | null = null;
 
 function startTicker($: EngineInterface): void {
   if (ticker) return;
   ticker = $.clock.every(TICK_MS, () => {
     void (async () => {
+      const now = await $.clock.now();
       const hasWaiting =
         (await read($, history)).some((entry) => entry.card.status === "pending") ||
         (await read($, turns)).some((turn) => isWaiting(turn.summary)) ||
-        (await read($, glance)).editing.length > 0;
+        ((await read($, agents)).peers.some((peer) => peer.status === MOVING) &&
+          (await paneState($)).isInView);
       if (!hasWaiting) {
         ticker?.cancel();
         ticker = null;
         return;
       }
-      const now = await $.clock.now();
       await update($, frame, () => now);
     })().catch(() => {});
   });
@@ -212,292 +214,283 @@ function cardRows(
   );
 }
 
-// ---- glance ----
+// ---- agents ----
 
-const EDITING = "editing";
+// agents widget は `claude agents --json` の行を、JSON の順のまま table に出す。値は言い換えず、
+// status を値ごとの色で出すだけ。列の幅は中身から決め、切り詰めは Box / Text の layout に任せる。
+// `claude agents` は 1 回の起動で CPU を約 0.15 秒使い、pane を開いた session がそれぞれ起動する。
+// なので pane が見えている間だけ POLL_MS ごとに読み、見えるようになった瞬間にも 1 回読む。
+// 見えているかは CHECK_MS ごとに確かめる (自分の process の中で済む)。
+const POLL_MS = 10_000;
+const CHECK_MS = 1_000;
+const AGENTS_TIMEOUT_MS = 10_000;
 
-// file 名の横の ` ✻ editing`: 記号は spinner と同じく回り、光は editing の上を流れる。palette は path から。
-function editingSpinner({ Text }: Elements, path: string, now: number): RenderElement {
-  const tick = Math.floor(now / TICK_MS);
-  const palette = pick(PALETTES, path, 2);
-  const at = (tick % (EDITING.length + 8)) - 3;
-  return (
-    <Text>
-      <Text color={palette[1]}>{` ${CYCLE[tick % CYCLE.length]} `}</Text>
-      {[...EDITING].map((char, index) => (
-        <Text key={index} color={palette[Math.min(Math.abs(index - at), palette.length - 1)]}>
-          {char}
-        </Text>
-      ))}
-    </Text>
-  );
+// status の値ごとの色と記号。herdr の status 表示 (blocked: red, done: teal, working: yellow,
+// idle: green, その他: gray) に合わせ、色を付けるのは status だけにする。
+// busy は記号の代わりに spinner の記号を回す。
+const MOVING = "busy";
+const STATUS_LOOK: Record<string, { color: string; mark: string }> = {
+  blocked: { color: "red", mark: "●" },
+  waiting: { color: "red", mark: "●" },
+  failed: { color: "red", mark: "●" },
+  done: { color: "cyan", mark: "●" },
+  busy: { color: "yellow", mark: "●" },
+  idle: { color: "green", mark: "○" },
+};
+const OTHER_LOOK = { color: "gray", mark: "·" };
+
+function lookOf(status: string): { color: string; mark: string } {
+  return STATUS_LOOK[status] ?? OTHER_LOOK;
 }
 
-async function git($: EngineInterface, args: string[]) {
-  return $.process.run(["git", ...args], { timeoutMs: TIMEOUT_MS });
-}
+// `claude agents --json` の 1 行。読むのは表に出す項目だけ。
+type AgentRow = {
+  kind?: string;
+  sessionId?: string;
+  name?: string;
+  cwd?: string;
+  status?: string;
+  state?: string;
+  startedAt?: number;
+};
 
-// repo の root。一度読めたら atom に残す。
-async function repoRoot($: EngineInterface): Promise<string> {
-  const known = (await read($, glance)).root;
-  if (known) return known;
-  const top = await git($, ["rev-parse", "--show-toplevel"]);
-  const root = top.exitCode === 0 ? top.stdout.trim() : "";
-  if (root) await update($, glance, (g) => ({ ...g, root }));
-  return root;
-}
-
-async function readWorktree($: EngineInterface, before: Glance): Promise<Partial<Glance>> {
-  const status = await git($, ["status", "--porcelain", "--untracked-files=all"]);
-  if (status.exitCode !== 0) {
-    return { rows: [], error: status.stderr.trim().split("\n").pop() || "git status failed" };
+async function readPeers($: EngineInterface): Promise<Peer[]> {
+  const run = await $.process.run(["claude", "agents", "--json"], {
+    timeoutMs: AGENTS_TIMEOUT_MS,
+  });
+  if (run.exitCode !== 0) {
+    throw new Error(run.stderr.trim().split("\n").pop() || `claude agents: exit ${run.exitCode}`);
   }
-  const entries = parseStatus(status.stdout);
-  const diff = await git($, ["diff", "--numstat", "HEAD", "--"]);
-  const numstat = diff.exitCode === 0 ? parseNumstat(diff.stdout) : new Map();
-  const isUntracked = (path: string, kind: string) => kind === "added" && !numstat.has(path);
-
-  // untracked は HEAD との diff に出ない: /dev/null との diff で行数を数える。
-  const untrackedLines = new Map<string, number>();
-  for (const { path } of entries
-    .filter(({ path, kind }) => isUntracked(path, kind))
-    .slice(0, GLANCE_FILES)) {
-    const count = await git($, ["diff", "--no-index", "--numstat", "/dev/null", path]);
-    const added = Number(count.stdout.split("\n")[0]?.split("\t")[0]);
-    untrackedLines.set(path, Number.isFinite(added) ? added : 0);
-  }
-
-  const root = await repoRoot($);
-  const head = await git($, ["branch", "--show-current"]);
-  const branch = head.exitCode === 0 ? head.stdout.trim() : before.branch;
-
-  const rows = joinRows(entries, numstat, untrackedLines, before.rows);
-  for (const row of rows.slice(0, GLANCE_FILES)) {
-    const argv = isUntracked(row.path, row.kind)
-      ? ["diff", "--no-index", "-U1", "--", "/dev/null", row.path]
-      : ["diff", "-U1", "HEAD", "--", row.path];
-    Object.assign(row, previewOf((await git($, argv)).stdout));
-  }
-  return { rows, root, branch, error: undefined };
+  const self = await $.session.id();
+  return (JSON.parse(run.stdout) as AgentRow[]).map((row) => ({
+    kind: row.kind ?? "",
+    sessionId: row.sessionId ?? "",
+    name: row.name ?? "",
+    cwd: row.cwd ?? "",
+    // process の無い background job は status を持たず、state だけを持つ。
+    status: row.status ?? row.state ?? "",
+    startedAt: row.startedAt ?? 0,
+    isSelf: row.sessionId === self,
+  }));
 }
 
-// 重なった refresh は走っている 1 回にまとめる。
-let refreshing: Promise<void> | undefined;
+let poller: Timer | null = null;
 
-function refresh($: EngineInterface): Promise<void> {
-  refreshing ??= (async () => {
+function startPolling($: EngineInterface): void {
+  if (poller) return;
+  // 重なった poll は走っている 1 回にまとめる。
+  let isPolling = false;
+  let wasInView = false;
+  let readAt = 0;
+  const poll = async () => {
+    const isInView = (await paneState($)).isInView;
+    const isAppearing = isInView && !wasInView;
+    wasInView = isInView;
+    if (isPolling || !isInView) return;
+    if (!isAppearing && (await $.clock.now()) - readAt < POLL_MS) return;
+    isPolling = true;
     try {
-      const next = await readWorktree($, await read($, glance));
-      await update($, glance, (g) => ({ ...g, ...next }));
+      const list = await readPeers($);
+      readAt = await $.clock.now();
+      await update($, agents, () => ({ peers: list }));
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      await update($, glance, (g) => ({ ...g, rows: [], error: message })).catch(() => {});
+      await update($, agents, (s) => ({ ...s, error: message }));
     } finally {
-      refreshing = undefined;
+      isPolling = false;
     }
-  })();
-  return refreshing;
+    // age を進める。busy の spinner は ticker が回す。
+    const now = await $.clock.now();
+    await update($, frame, () => now);
+    startTicker($);
+  };
+  void poll().catch(() => {});
+  poller = $.clock.every(CHECK_MS, () => void poll().catch(() => {}));
 }
 
-function editedPath(e: { tool: string } & Record<string, unknown>): string | undefined {
-  const path =
-    e.tool === "Edit" || e.tool === "Write"
-      ? e.file_path
-      : e.tool === "NotebookEdit"
-        ? e.notebook_path
-        : undefined;
-  return typeof path === "string" ? path : undefined;
+function elapsed(ms: number): string {
+  const seconds = Math.max(0, Math.floor(ms / 1000));
+  if (seconds < 60) return `${seconds}s`;
+  if (seconds < 3600) return `${Math.floor(seconds / 60)}m`;
+  if (seconds < 86_400) return `${Math.floor(seconds / 3600)}h`;
+  return `${Math.floor(seconds / 86_400)}d`;
 }
 
-// 書いている間は file 名の横に spinner を出す。path は repo 相対 — git の出力と同じ形。
-async function startEditing(
-  $: EngineInterface,
-  raw: string | undefined,
-): Promise<string | undefined | null> {
-  if (!(await isListed($, "glance"))) return null;
-  if (raw === undefined) return undefined;
-  const path = relative(await repoRoot($), raw);
-  await update($, glance, (g) => ({ ...g, editing: [...g.editing, path] }));
-  startTicker($);
-  return path;
-}
+// sessionId は頭の 7 文字と … を出す。
+const ID_SHOWN = 7;
+const NAME_MAX = 24;
+const AGE_WIDTH = 4;
+// 指した行の地の色。
+const HOVER_COLOR = "subtle";
 
-function relative(root: string, path: string): string {
-  return root && path.startsWith(`${root}/`) ? path.slice(root.length + 1) : path;
-}
-
-// row の表示は joaofatoretto/round-changes (MIT) に倣う: badge、太字の名前と dim の folder、数、size bar。
-function keepStart(text: string, width: number): string {
-  if (width <= 0) return "";
-  return text.length <= width ? text : `${text.slice(0, width - 1)}…`;
-}
-
-function keepEnd(text: string, width: number): string {
-  if (width <= 0) return "";
-  return text.length <= width ? text : `…${text.slice(text.length - width + 1)}`;
-}
-
-function splitPath(path: string): { dir: string; name: string } {
-  const cut = path.lastIndexOf("/");
-  return cut < 0 ? { dir: "", name: path } : { dir: path.slice(0, cut), name: path.slice(cut + 1) };
-}
-
-function sizeBar(added: number, removed: number, largest: number, width: number) {
-  const total = added + removed;
-  if (total === 0 || largest === 0 || width === 0) return { plus: 0, minus: 0, rest: width };
-  const filled = Math.max(1, Math.round((total / largest) * width));
-  let plus = Math.round((added / total) * filled);
-  if (added > 0 && plus === 0) plus = 1;
-  if (removed > 0 && plus === filled) plus = filled - 1;
-  return { plus, minus: Math.max(0, filled - plus), rest: width - filled };
-}
-
-function countsOf(added: number, removed: number): string {
-  if (added + removed === 0) return "±0";
-  return [added > 0 && `+${added}`, removed > 0 && `−${removed}`].filter(Boolean).join(" ");
-}
-
-const BADGE: Record<FileRow["kind"], { label: string; color: string }> = {
-  added: { label: " A ", color: "success" },
-  changed: { label: " M ", color: "warning" },
-  deleted: { label: " D ", color: "error" },
+type RowValues = {
+  status: string;
+  kind: string;
+  sessionId: string;
+  name: string;
+  cwd: string;
+  age: string;
 };
-const ORDER: Record<FileRow["kind"], number> = { added: 0, changed: 1, deleted: 2 };
-// これより狭いと size bar と folder を出さない。
-const WIDE = 56;
-const BAR = 5;
+type Widths = Record<Exclude<keyof RowValues, "age">, number>;
 
-function badge({ Text }: Elements, kind: FileRow["kind"]): RenderElement {
+// 列は Status / Name / Cwd / Kind / SessionId / Age の順。幅は中身の長さから決め、列の間は
+// 1 cell。収まらなければ Name と Cwd が縮んで末尾を切る。文字の列は左寄せ、数値の Age は右寄せ。
+function sessionRow(
+  { Box, Text }: Elements,
+  key: string,
+  values: RowValues,
+  widths: Widths,
+  options: { statusColor?: string; isBold?: boolean; isHoverable?: boolean } = {},
+): RenderElement {
+  const { statusColor, isBold = false, isHoverable = false } = options;
+  const order = ["status", "name", "cwd", "kind", "sessionId", "age"] as const;
   return (
-    <Text bold color="inverseText" backgroundColor={BADGE[kind].color}>
-      {BADGE[kind].label}
-    </Text>
-  );
-}
-
-// hunk をそのまま行に: dim の行番号、記号、側で色を変えた本文。背景は付けない。
-// preview の左に badge と同じ色の樋 (│) を立て、どの file のものかを結ぶ。
-function previewBlock({ Box, Text }: Elements, preview: string, color: string): RenderElement {
-  const lines = previewLines(preview);
-  const digits = Math.max(1, ...lines.map((line) => String(line.number).length));
-  return (
-    <Box flexDirection="column" paddingLeft={1}>
-      {lines.map((line, index) => (
-        <Text key={index} wrap="truncate-end">
-          <Text color={color}>{"│ "}</Text>
-          <Text dimColor>{`${String(line.number).padStart(digits)} `}</Text>
+    <Box
+      key={key}
+      flexDirection="row"
+      hover={isHoverable ? { backgroundColor: HOVER_COLOR } : undefined}
+    >
+      {order.map((column) => (
+        <Box
+          key={column}
+          width={column === "age" ? AGE_WIDTH : widths[column] + 1}
+          flexShrink={column === "name" || column === "cwd" ? 1 : 0}
+          paddingRight={column === "age" ? 0 : 1}
+          justifyContent={column === "age" ? "flex-end" : "flex-start"}
+        >
           <Text
-            color={
-              line.mark === "+"
-                ? "diffAddedWord"
-                : line.mark === "-"
-                  ? "diffRemovedWord"
-                  : undefined
-            }
-            dimColor={line.mark === " "}
+            color={column === "status" ? statusColor : undefined}
+            bold={isBold}
+            wrap="truncate-end"
           >
-            {`${line.mark} ${line.text}`}
+            {values[column]}
           </Text>
-        </Text>
+        </Box>
       ))}
     </Box>
   );
 }
 
-function summaryLine({ Text }: Elements, rows: FileRow[]): RenderElement {
-  if (rows.length === 0) return <Text dimColor>No changes</Text>;
-  const added = rows.reduce((sum, row) => sum + row.added, 0);
-  const removed = rows.reduce((sum, row) => sum + row.removed, 0);
+// status の記号。busy は spinner の記号を回す。
+function statusMark(status: string, now: number): string {
+  const spinning = status === MOVING ? CYCLE[Math.floor(now / TICK_MS) % CYCLE.length] : undefined;
+  return spinning ?? lookOf(status).mark;
+}
+
+// status は値をそのまま、前に記号を置く。
+function statusText(status: string, now: number): string {
+  return `${statusMark(status, now)} ${status || "-"}`;
+}
+
+// table の上の行: session の数と、status の値ごとの数。値は JSON に出てきた順。
+function agentsSummary({ Text }: Elements, peers: Peer[], now: number): RenderElement {
+  const counts = new Map<string, number>();
+  for (const peer of peers) counts.set(peer.status, (counts.get(peer.status) ?? 0) + 1);
   return (
     <Text wrap="truncate-end">
-      <Text bold>{`${rows.length} ${rows.length === 1 ? "file" : "files"} changed`}</Text>
-      {"  "}
-      <Text color="diffAddedWord">{`+${added}`}</Text>{" "}
-      <Text color="diffRemovedWord">{`−${removed}`}</Text>
+      <Text bold>{`${peers.length} ${peers.length === 1 ? "agent" : "agents"}`}</Text>
+      {[...counts].map(([status, count]) => (
+        <Text key={status}>
+          {"  "}
+          <Text color={lookOf(status).color}>{`${statusMark(status, now)} `}</Text>
+          {`${count} ${status || "-"}`}
+        </Text>
+      ))}
     </Text>
   );
 }
 
-function drawGlance(elements: Elements, { glance: g, now }: PaneData, { columns }: Size) {
-  const { Box, Text } = elements;
-  if (g.error) return <Text color="error">{g.error}</Text>;
-  const editing = new Set(g.editing);
-  const listed = new Set(g.rows.map((row) => row.path));
-  // git にまだ出ていない、書いている途中の file は仮の A row にする。
-  const unlisted = g.editing.filter(
-    (path, index) => !listed.has(path) && g.editing.indexOf(path) === index,
-  );
-
-  const narrow = columns < WIDE;
-  const barWidth = narrow ? 0 : BAR;
-  const labelRoom = columns - 3 - 1 - (barWidth > 0 ? barWidth + 1 : 0);
-  const largest = Math.max(1, ...g.rows.map((row) => row.added + row.removed));
-  const spinWidth = EDITING.length + 3;
-
-  const rowOf = (row: FileRow) => {
-    const isEditing = editing.has(row.path);
-    const { dir, name } = splitPath(row.path);
-    const counts = countsOf(row.added, row.removed);
-    const spin = isEditing ? spinWidth : 0;
-    const shown = keepStart(name, Math.max(4, labelRoom - counts.length - 2 - spin));
-    const dirRoom = labelRoom - shown.length - spin - counts.length - 4;
-    const folder = dir !== "" && !narrow && dirRoom > 3 ? `  ${keepEnd(dir, dirRoom)}` : "";
-    const gap = " ".repeat(
-      Math.max(1, labelRoom - shown.length - spin - folder.length - counts.length),
-    );
-    const bar = sizeBar(row.added, row.removed, largest, barWidth);
-    return (
-      <Box key={row.path} flexDirection="column" marginTop={1}>
-        <Box flexDirection="row" gap={1}>
-          {badge(elements, row.kind)}
-          <Text wrap="truncate-end">
-            <Text bold>{shown}</Text>
-            {isEditing && editingSpinner(elements, row.path, now)}
-            <Text dimColor>{folder}</Text>
-            {gap}
-            <Text color={row.removed > 0 && row.added === 0 ? "diffRemovedWord" : "diffAddedWord"}>
-              {counts}
-            </Text>
-          </Text>
-          {barWidth > 0 && (
-            <Box width={barWidth} flexShrink={0}>
-              <Text color="diffAddedWord">{"■".repeat(bar.plus)}</Text>
-              <Text color="diffRemovedWord">{"■".repeat(bar.minus)}</Text>
-              <Text dimColor>{"·".repeat(bar.rest)}</Text>
-            </Box>
-          )}
-        </Box>
-        {row.preview !== "" && previewBlock(elements, row.preview, BADGE[row.kind].color)}
-        {row.more > 0 && (
-          <Text wrap="truncate-end">
-            <Text color={BADGE[row.kind].color}>{" │ "}</Text>
-            <Text dimColor>{`… ${row.more} more`}</Text>
-          </Text>
-        )}
-      </Box>
-    );
+// session の table: 見出し、その下の罫線、1 session 1 行。指した行は地の色が変わる。
+function agentsTable(elements: Elements, peers: Peer[], now: number): RenderElement {
+  const { Box } = elements;
+  const rows = peers.map((peer) => ({
+    peer,
+    kind: peer.kind || "-",
+    sessionId: peer.sessionId ? `${peer.sessionId.slice(0, ID_SHOWN)}…` : "-",
+    name: peer.name || "-",
+    // cwd は最後の / より後ろだけ。
+    cwd: peer.cwd.slice(peer.cwd.lastIndexOf("/") + 1) || "-",
+  }));
+  const widest = (header: string, values: string[]) =>
+    Math.max(cells(header), ...values.map((value) => cells(value)));
+  const widths: Widths = {
+    status: widest(
+      "Status",
+      rows.map((row) => statusText(row.peer.status, now)),
+    ),
+    name: Math.min(
+      NAME_MAX,
+      widest(
+        "Name",
+        rows.map((row) => row.name),
+      ),
+    ),
+    cwd: widest(
+      "Cwd",
+      rows.map((row) => row.cwd),
+    ),
+    kind: widest(
+      "Kind",
+      rows.map((row) => row.kind),
+    ),
+    // 頭の 7 文字と … で 8 cell。… は East Asian Ambiguous なので cells では数えない。
+    sessionId: Math.max(cells("SessionId"), ID_SHOWN + 1),
   };
-
-  const rows = [...g.rows].sort(
-    (a, b) => ORDER[a.kind] - ORDER[b.kind] || a.path.localeCompare(b.path),
-  );
+  const rule = (width: number) => "─".repeat(width);
   return (
     <Box flexDirection="column">
-      {summaryLine(elements, g.rows)}
-      {unlisted.map((path) => {
-        const { dir, name } = splitPath(path);
-        return (
-          <Box key={`editing:${path}`} flexDirection="row" gap={1} marginTop={1}>
-            {badge(elements, "added")}
-            <Text wrap="truncate-end">
-              <Text bold>{name}</Text>
-              {editingSpinner(elements, path, now)}
-              <Text dimColor>{dir ? `  ${dir}` : ""}</Text>
-            </Text>
-          </Box>
-        );
-      })}
-      {rows.map(rowOf)}
+      {sessionRow(
+        elements,
+        "header",
+        {
+          status: "Status",
+          name: "Name",
+          cwd: "Cwd",
+          kind: "Kind",
+          sessionId: "SessionId",
+          age: "Age",
+        },
+        widths,
+      )}
+      {sessionRow(
+        elements,
+        "rule",
+        {
+          status: rule(widths.status),
+          name: rule(widths.name),
+          cwd: rule(widths.cwd),
+          kind: rule(widths.kind),
+          sessionId: rule(widths.sessionId),
+          age: rule(AGE_WIDTH),
+        },
+        widths,
+      )}
+      {rows.map(({ peer, ...values }, index) =>
+        sessionRow(
+          elements,
+          peer.sessionId || String(index),
+          {
+            ...values,
+            status: statusText(peer.status, now),
+            age: elapsed(now - peer.startedAt),
+          },
+          widths,
+          { statusColor: lookOf(peer.status).color, isBold: peer.isSelf, isHoverable: true },
+        ),
+      )}
+    </Box>
+  );
+}
+
+// summary と table は別の塊として、1 行空けて縦に積む。
+function drawAgents(elements: Elements, { agents: s, now }: PaneData) {
+  const { Box, Text } = elements;
+  if (s.error) return <Text color="error">{s.error}</Text>;
+  if (s.peers.length === 0) return <Text>No Claude Code agents.</Text>;
+  return (
+    <Box flexDirection="column" rowGap={1}>
+      {agentsSummary(elements, s.peers, now)}
+      {agentsTable(elements, s.peers, now)}
     </Box>
   );
 }
@@ -507,7 +500,12 @@ function drawGlance(elements: Elements, { glance: g, now }: PaneData, { columns 
 // pane は上から widget を積む (最大 2 つ)。上の widget が ratio の割合の行を取り、下が残り。
 // 各 widget は自分の行数で切られる。どれを積むかは config の mod.companion.widgets が決める。
 // align は切る側: bottom は最新が下に来る widget で上の古い方を、top は上から読む widget で下を切る。
-type PaneData = { history: Entry[]; turns: Turn[]; glance: Glance; now: number };
+type PaneData = {
+  history: Entry[];
+  turns: Turn[];
+  agents: Agents;
+  now: number;
+};
 type Size = { columns: number; rows: number };
 type Draw = (elements: Elements, data: PaneData, size: Size) => RenderElement;
 
@@ -582,7 +580,7 @@ function drawTldr(elements: Elements, { turns: list, now }: PaneData) {
 const WIDGETS: Record<string, { draw: Draw; align: "top" | "bottom" }> = {
   redpen: { draw: drawRedpen, align: "bottom" },
   tldr: { draw: drawTldr, align: "bottom" },
-  glance: { draw: drawGlance, align: "top" },
+  agents: { draw: drawAgents, align: "top" },
 };
 
 async function paneState($: EngineInterface): Promise<{ isOpen: boolean; isInView: boolean }> {
@@ -688,12 +686,10 @@ export const register: Register = (on) => {
             : turn,
         ),
     );
-    // 前の load で書いていた途中の file は、もう終わったか届かない。
-    await update($, glance, (g) => ({ ...g, editing: [] }));
     const done = await next(e);
     void (async () => {
       const companion = await loadLayout($);
-      if (companion.widgets.includes("glance")) void refresh($);
+      if (companion.widgets.includes("agents")) startPolling($);
       if (companion.widgets.includes("tldr")) {
         for (const turn of await read($, turns)) {
           if (turn.summary.status === "pending") void summarize($, turn.id);
@@ -757,7 +753,7 @@ export const register: Register = (on) => {
           if (open?.summary.status === "answering") {
             return [...list.slice(0, -1), { ...open, question: `${open.question}\n${e.text}` }];
           }
-          // card と同じ id: 同じ prompt の redpen と tldr は同じ palette の spinner になる。
+          // card と同じ id: 同じ prompt の redpen と tldr は同じ色の spinner になる。
           const turn: Turn = {
             id,
             question: e.text,
@@ -808,32 +804,8 @@ export const register: Register = (on) => {
     return cardRows($.ui.resolve(e), newest, e.props.bodyColumns, now);
   });
 
-  on("tool.call", async ($, e, next) => {
-    const raw = editedPath(e as { tool: string } & Record<string, unknown>);
-    if (!raw && e.tool !== "Bash") return next(e);
-    // glance が載っていなければ null。tool を止めないように、失敗も null にする。
-    const path = await startEditing($, raw).catch(() => null);
-    if (path === null) return next(e);
-    try {
-      return await next(e);
-    } finally {
-      if (path !== undefined) {
-        $.clock.after(SPINNER_MIN_MS, () => {
-          void update($, glance, (g) => {
-            const index = g.editing.indexOf(path);
-            return index < 0
-              ? g
-              : { ...g, editing: [...g.editing.slice(0, index), ...g.editing.slice(index + 1)] };
-          }).catch(() => {});
-        });
-      }
-      void refresh($);
-    }
-  });
-
   on("turn.complete", async ($, e, next) => {
     const done = await next(e);
-    if (await isListed($, "glance")) void refresh($);
     if (e.agentId !== undefined || !(await isListed($, "tldr"))) return done;
     const open = (await read($, turns)).at(-1);
     const openId = open?.summary.status === "answering" ? open.id : undefined;
@@ -862,7 +834,7 @@ export const register: Register = (on) => {
     const data: PaneData = {
       history: await read($, history),
       turns: await read($, turns),
-      glance: await read($, glance),
+      agents: await read($, agents),
       now: await read($, frame),
     };
     const current = await read($, layout);
