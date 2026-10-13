@@ -1,5 +1,5 @@
 // register.tsx — kura companion: Claude Code の横に、打った prompt の英語 feedback (redpen) と
-// 回答ごとの 3 行要約 (tldr) と、mod を読み込んだ全 session の status (sessions) を積む pane。
+// 回答ごとの 3 行要約 (tldr) と、mod を読み込んだ全 session の status (agents) を積む pane。
 //
 // 生成は kura の subcommand (`kura redpen` / `kura tldr`) が持ち、usage も kura が記録する。
 // この mod は呼んで表示するだけ。配置は `kura config` の mod.companion section が決める。
@@ -11,7 +11,7 @@
 
 import type { EngineInterface, Register, RenderElement, Timer } from "claude-code";
 import { atom, read, update } from "claude-code";
-import type { Card, Entry, Item, ItemKind, Layout, Peer, Sessions, Tldr, Turn } from "../types";
+import type { Agents, Card, Entry, Item, ItemKind, Layout, Peer, Tldr, Turn } from "../types";
 
 const PANE = "kura-companion";
 const COMMAND = "kura-companion";
@@ -31,8 +31,8 @@ const turns = atom({ plugin: "kura", key: "turns" } as const, []);
 const layout = atom({ plugin: "kura", key: "layout" } as const, null);
 // spinner が描く時刻 (ms)。生成を待つものがある間だけ TICK_MS ごとに進む。
 const frame = atom({ plugin: "kura", key: "frame" } as const, 0);
-// sessions widget が最後に読んだ `claude agents --json`。自分も含む。
-const sessions = atom({ plugin: "kura", key: "sessions" } as const, { peers: [] } as Sessions);
+// agents widget が最後に読んだ `claude agents --json`。自分も含む。
+const agents = atom({ plugin: "kura", key: "agents" } as const, { peers: [] } as Agents);
 
 type Elements = ReturnType<EngineInterface["ui"]["resolve"]>;
 
@@ -125,7 +125,7 @@ function startTicker($: EngineInterface): void {
       const hasWaiting =
         (await read($, history)).some((entry) => entry.card.status === "pending") ||
         (await read($, turns)).some((turn) => isWaiting(turn.summary)) ||
-        ((await read($, sessions)).peers.some((peer) => peer.status === MOVING) &&
+        ((await read($, agents)).peers.some((peer) => peer.status === MOVING) &&
           (await paneState($)).isInView);
       if (!hasWaiting) {
         ticker?.cancel();
@@ -214,9 +214,9 @@ function cardRows(
   );
 }
 
-// ---- sessions ----
+// ---- agents ----
 
-// sessions widget は `claude agents --json` の行を、JSON の順のまま table に出す。値は言い換えず、
+// agents widget は `claude agents --json` の行を、JSON の順のまま table に出す。値は言い換えず、
 // status を値ごとの色で出すだけ。列の幅は中身から決め、切り詰めは Box / Text の layout に任せる。
 // `claude agents` は 1 回の起動で CPU を約 0.15 秒使い、pane を開いた session がそれぞれ起動する。
 // なので pane が見えている間だけ POLL_MS ごとに読み、見えるようになった瞬間にも 1 回読む。
@@ -292,10 +292,10 @@ function startPolling($: EngineInterface): void {
     try {
       const list = await readPeers($);
       readAt = await $.clock.now();
-      await update($, sessions, () => ({ peers: list }));
+      await update($, agents, () => ({ peers: list }));
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      await update($, sessions, (s) => ({ ...s, error: message }));
+      await update($, agents, (s) => ({ ...s, error: message }));
     } finally {
       isPolling = false;
     }
@@ -383,12 +383,12 @@ function statusText(status: string, now: number): string {
 }
 
 // table の上の行: session の数と、status の値ごとの数。値は JSON に出てきた順。
-function sessionsSummary({ Text }: Elements, peers: Peer[], now: number): RenderElement {
+function agentsSummary({ Text }: Elements, peers: Peer[], now: number): RenderElement {
   const counts = new Map<string, number>();
   for (const peer of peers) counts.set(peer.status, (counts.get(peer.status) ?? 0) + 1);
   return (
     <Text wrap="truncate-end">
-      <Text bold>{`${peers.length} ${peers.length === 1 ? "session" : "sessions"}`}</Text>
+      <Text bold>{`${peers.length} ${peers.length === 1 ? "agent" : "agents"}`}</Text>
       {[...counts].map(([status, count]) => (
         <Text key={status}>
           {"  "}
@@ -401,7 +401,7 @@ function sessionsSummary({ Text }: Elements, peers: Peer[], now: number): Render
 }
 
 // session の table: 見出し、その下の罫線、1 session 1 行。指した行は地の色が変わる。
-function sessionsTable(elements: Elements, peers: Peer[], now: number): RenderElement {
+function agentsTable(elements: Elements, peers: Peer[], now: number): RenderElement {
   const { Box } = elements;
   const rows = peers.map((peer) => ({
     peer,
@@ -483,14 +483,14 @@ function sessionsTable(elements: Elements, peers: Peer[], now: number): RenderEl
 }
 
 // summary と table は別の塊として、1 行空けて縦に積む。
-function drawSessions(elements: Elements, { sessions: s, now }: PaneData) {
+function drawAgents(elements: Elements, { agents: s, now }: PaneData) {
   const { Box, Text } = elements;
   if (s.error) return <Text color="error">{s.error}</Text>;
-  if (s.peers.length === 0) return <Text>No Claude Code sessions.</Text>;
+  if (s.peers.length === 0) return <Text>No Claude Code agents.</Text>;
   return (
     <Box flexDirection="column" rowGap={1}>
-      {sessionsSummary(elements, s.peers, now)}
-      {sessionsTable(elements, s.peers, now)}
+      {agentsSummary(elements, s.peers, now)}
+      {agentsTable(elements, s.peers, now)}
     </Box>
   );
 }
@@ -503,7 +503,7 @@ function drawSessions(elements: Elements, { sessions: s, now }: PaneData) {
 type PaneData = {
   history: Entry[];
   turns: Turn[];
-  sessions: Sessions;
+  agents: Agents;
   now: number;
 };
 type Size = { columns: number; rows: number };
@@ -580,7 +580,7 @@ function drawTldr(elements: Elements, { turns: list, now }: PaneData) {
 const WIDGETS: Record<string, { draw: Draw; align: "top" | "bottom" }> = {
   redpen: { draw: drawRedpen, align: "bottom" },
   tldr: { draw: drawTldr, align: "bottom" },
-  sessions: { draw: drawSessions, align: "top" },
+  agents: { draw: drawAgents, align: "top" },
 };
 
 async function paneState($: EngineInterface): Promise<{ isOpen: boolean; isInView: boolean }> {
@@ -689,7 +689,7 @@ export const register: Register = (on) => {
     const done = await next(e);
     void (async () => {
       const companion = await loadLayout($);
-      if (companion.widgets.includes("sessions")) startPolling($);
+      if (companion.widgets.includes("agents")) startPolling($);
       if (companion.widgets.includes("tldr")) {
         for (const turn of await read($, turns)) {
           if (turn.summary.status === "pending") void summarize($, turn.id);
@@ -834,7 +834,7 @@ export const register: Register = (on) => {
     const data: PaneData = {
       history: await read($, history),
       turns: await read($, turns),
-      sessions: await read($, sessions),
+      agents: await read($, agents),
       now: await read($, frame),
     };
     const current = await read($, layout);

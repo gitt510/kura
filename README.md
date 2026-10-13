@@ -130,7 +130,7 @@ $EDITOR "${XDG_CONFIG_HOME:-$HOME/.config}/kura/config.json"
 | `features.<timeline\|english>.publish.discord.avatar` | Avatar URL for that feature's Discord posts |
 | `mod.companion.autoOpen` | Open the companion pane when a Claude Code session starts (default `false`) |
 | `mod.companion.columns` / `mod.companion.rows` | Companion pane width when docked / height when inline; `null` leaves it to Claude Code |
-| `mod.companion.widgets` | Companion pane widgets, top to bottom, at most 2: `redpen`, `tldr`, `sessions`; empty turns the companion off |
+| `mod.companion.widgets` | Companion pane widgets, top to bottom, at most 2: `redpen`, `tldr`, `agents`; empty turns the companion off |
 | `mod.companion.ratio` | Share of the rows the upper widget takes (default `0.5`); ignored with one widget |
 
 - `features.<name>.model` / `effort` apply only to that feature's generation; normal CLI usage is untouched
@@ -162,7 +162,7 @@ kura config
 
 - Ships in the `kura` Claude Code plugin; requires `kura` on `PATH`
   (`just setup`) and a Claude Code build with plugin function hooks
-- `redpen` / `tldr` / `sessions` run only while listed in `mod.companion.widgets`;
+- `redpen` / `tldr` / `agents` run only while listed in `mod.companion.widgets`;
   with the list empty nothing is generated and `/kura-companion` only says so.
   `/kura-handoff` works either way
 - From session start, every typed prompt gets a `kura redpen` card and every
@@ -179,8 +179,8 @@ kura config
   what it waits on (`waiting`, `summarizing`, `proofreading`); the card and
   the turn of one prompt share its word and colors
 - A summary cut off by a plugin reload is made again at the next session start
-- `sessions` shows the rows of `claude agents --json` (interactive and
-  background sessions) in its order: a summary line (the session count and
+- `agents` shows the rows of `claude agents --json` (interactive and
+  background sessions) in its order: a summary line (the agent count and
   the count per `status` value), a blank line, then a table of `Status`, `Name`, `Cwd`
   (the last path segment), `Kind`, `SessionId` (its first 7 characters and
   `…`), and `Age` (since `startedAt`); each column is as wide as its longest
@@ -195,18 +195,18 @@ kura config
   grey `·`; the summary uses the same marks and colours; other columns are
   uncoloured;
   this session's row is bold
-- `sessions` runs `claude agents --json` every 10 seconds, only while the
+- `agents` runs `claude agents --json` every 10 seconds, only while the
   pane is in view, and once more the moment the pane comes into view; it
   needs `claude` on `PATH`
 - Each session with the pane in view runs its own `claude agents` (about
   0.15 s of CPU per run)
-- `sessions` is cut from the bottom when it outgrows its rows; `redpen` / `tldr`
+- `agents` is cut from the bottom when it outgrows its rows; `redpen` / `tldr`
   are cut from the top, keeping the newest
 - While the pane is open but out of view, the newest card shows above the
   prompt instead
 - `mod.companion.*` is read at session start and each time the pane opens;
   reopen the pane to apply a change
-- A widget id other than `redpen` / `tldr` / `sessions` is skipped with a toast
+- A widget id other than `redpen` / `tldr` / `agents` is skipped with a toast
 
 ## Handoff
 

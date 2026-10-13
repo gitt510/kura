@@ -32,7 +32,7 @@ export type Layout = {
   ratio: number; // 上の widget が占める高さの割合。1 つなら無視
 };
 
-// sessions widget の 1 行。`claude agents --json` の項目をそのまま持つ。status は status、
+// agents widget の 1 行。`claude agents --json` の項目をそのまま持つ。status は status、
 // 無ければ state (process の無い background job)。isSelf はこの session か。
 export type Peer = {
   kind: string;
@@ -44,7 +44,7 @@ export type Peer = {
   isSelf: boolean;
 };
 // error は `claude agents` を読めなかった理由。
-export type Sessions = { peers: Peer[]; error?: string };
+export type Agents = { peers: Peer[]; error?: string };
 
 declare module "claude-code" {
   interface PluginState {
@@ -53,7 +53,7 @@ declare module "claude-code" {
       turns: Turn[];
       layout: Layout | null;
       frame: number;
-      sessions: Sessions;
+      agents: Agents;
     };
   }
 }

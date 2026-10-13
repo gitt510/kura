@@ -399,12 +399,12 @@ test("/kura-handoff はこの session の id を kura handoff に渡すだけ", 
   expect(state.opened).toEqual([]);
 });
 
-const SESSIONS = { ...COMPANION, widgets: ["sessions"] };
+const AGENTS = { ...COMPANION, widgets: ["agents"] };
 
-test("sessions widget は claude agents の行を JSON の順のまま、status / name / cwd / kind / sessionId / age で出す", async ($, on) => {
+test("agents widget は claude agents の行を JSON の順のまま、status / name / cwd / kind / sessionId / age で出す", async ($, on) => {
   const clock = mock.clock(on);
   await clock.set(10 * 60_000);
-  const state = engine(on, "closed", SESSIONS);
+  const state = engine(on, "closed", AGENTS);
   state.agents = [
     {
       sessionId: "8bd8eb47-32fd-4ba1-a549-1e4e59793964",
@@ -437,7 +437,7 @@ test("sessions widget は claude agents の行を JSON の順のまま、status 
 
   const pane = await $.ui.mount({ ...PANE, surface: "terminal" });
   const text = (await pane.find({ type: "Box" }))?.text ?? "";
-  expect(text).toMatch(/3 sessions {2}● 1 blocked {2}[·✢✳✶✻✽] 1 busy {2}○ 1 idle/);
+  expect(text).toMatch(/3 agents {2}● 1 blocked {2}[·✢✳✶✻✽] 1 busy {2}○ 1 idle/);
   expect(text).toMatch(/Status\s*Name\s*Cwd\s*Kind\s*SessionId\s*Age\s*─+/);
   expect(text).toMatch(/● blocked\s*Alarm\s*service-catalog\s*background\s*8bd8eb4…\s*2h/);
   // busy だけ値の前に spinner の記号を回す。
@@ -449,9 +449,9 @@ test("sessions widget は claude agents の行を JSON の順のまま、status 
   await pane.unmount();
 });
 
-test("sessions は pane が見えている間だけ、見えた瞬間と 10 秒ごとに claude agents を呼ぶ", async ($, on) => {
+test("agents は pane が見えている間だけ、見えた瞬間と 10 秒ごとに claude agents を呼ぶ", async ($, on) => {
   const clock = mock.clock(on);
-  const state = engine(on, "closed", SESSIONS);
+  const state = engine(on, "closed", AGENTS);
   await $.session.start({ source: "startup", cwd: "/work/kura" } as never);
   await clock.advance(10_000);
   expect(state.agentsCalls).toBe(0);
