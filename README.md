@@ -189,11 +189,11 @@ kura config
   background
 - Values are shown as Claude Code reports them; a background job with no
   process has no `status`, so its `state` (`blocked`, `done`) stands in
-- `Status` is the value after a mark, coloured like herdr's status: `blocked`
-  / `waiting` / `failed` red `●`, `done` cyan `●`, `busy` yellow with a
-  spinning glyph while the pane is in view, `idle` green `○`, any other value
-  grey `·`; the summary uses the same marks and colours; other columns are
-  uncoloured;
+- `Status` is the value after a mark (`blocked` / `waiting` / `failed` /
+  `done` `●`, `busy` a spinning glyph while the pane is in view, `idle` `○`,
+  any other value `·`); only `busy` (green, with a shimmer across the whole
+  row) and `blocked` / `waiting` / `failed` (red) are coloured; the summary
+  uses the same marks and colours;
   this session's row is bold
 - `agents` runs `claude agents --json` every 10 seconds, only while the
   pane is in view, and once more the moment the pane comes into view; it
