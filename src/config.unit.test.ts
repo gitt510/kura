@@ -49,14 +49,14 @@ test("書かれていない項目は既定値で埋め、null と空文字は CL
     effort: null,
     publish: { enabled: false, discord: { webhook: null, avatar: null } },
   });
-  expect(config.features.redpen).toEqual({ agent: "claude", model: "opus", effort: null });
+  expect(config.features.akapen).toEqual({ agent: "claude", model: "opus", effort: null });
   expect(Object.keys(config)).toEqual(["features", "mod"]);
   // model は書かなければ feature の既定、null (や空白) は CLI の既定
   expect(
-    parseConfig({ features: { redpen: { model: "  " } } }, "config.json").features.redpen.model,
+    parseConfig({ features: { akapen: { model: "  " } } }, "config.json").features.akapen.model,
   ).toBeNull();
   expect(
-    parseConfig({ features: { redpen: { model: null } } }, "config.json").features.redpen.model,
+    parseConfig({ features: { akapen: { model: null } } }, "config.json").features.akapen.model,
   ).toBeNull();
 });
 
@@ -64,8 +64,8 @@ test("型の違う項目は path と項目名付きで拒否する", () => {
   expect(() => parseConfig({ features: { timeline: { model: 5 } } }, "c.json")).toThrow(
     /^invalid config .*\/c\.json: features\.timeline\.model must be a string$/,
   );
-  expect(() => parseConfig({ features: { redpen: { agent: "codex" } } }, "c.json")).toThrow(
-    'features.redpen.agent must be "claude"',
+  expect(() => parseConfig({ features: { akapen: { agent: "codex" } } }, "c.json")).toThrow(
+    'features.akapen.agent must be "claude"',
   );
   expect(() => parseConfig({ features: { timeline: { agent: "gemini" } } }, "c.json")).toThrow(
     'features.timeline.agent must be "claude" or "codex"',
@@ -90,12 +90,12 @@ test("saveConfig は 0600 で書き、loadConfig で同じ値に戻る", () => {
   expect(loadConfig(path)).toEqual(config);
 });
 
-test("companion は既定で閉じ、幅と高さは Claude Code に任せ、redpen / tldr を半々で積む", () => {
+test("companion は既定で閉じ、幅と高さは Claude Code に任せ、akapen / tldr を半々で積む", () => {
   expect(parseConfig({}, "config.json").mod.companion).toEqual({
     autoOpen: false,
     columns: null,
     rows: null,
-    widgets: ["redpen", "tldr"],
+    widgets: ["akapen", "tldr"],
     ratio: 0.5,
   });
   const config = parseConfig(

@@ -1,6 +1,8 @@
 #!/usr/bin/env bun
+
 // cli.ts — kura command の薄い dispatcher。処理本体は src/cli/ と domain module が持つ。
 
+import { runAkapen } from "./cli/akapen.ts";
 import { runConfig } from "./cli/config.ts";
 import { runFeatures } from "./cli/features.ts";
 import { runHandoff } from "./cli/handoff.ts";
@@ -8,7 +10,6 @@ import { helpText } from "./cli/help.ts";
 import { runHistory } from "./cli/history.ts";
 import { runHourly } from "./cli/hourly.ts";
 import { runLifecycle } from "./cli/lifecycle.ts";
-import { runRedpen } from "./cli/redpen.ts";
 import { runStatus } from "./cli/status.ts";
 import { runTldr } from "./cli/tldr.ts";
 import { runUsage } from "./cli/usage.ts";
@@ -28,7 +29,7 @@ const usage = `usage: kura setup
        kura handoff <session-id>
        kura timeline [<YYYY-MM-DD> <hour 0-23>]
        kura english [<YYYY-MM-DD> <hour 0-23>]
-       kura redpen < prompt.txt
+       kura akapen < prompt.txt
        kura tldr < turns.json
        kura --help
 `;
@@ -68,8 +69,8 @@ async function main(): Promise<number> {
     if (command === "timeline" || command === "english") {
       return await runHourly(command, args);
     }
-    if (command === "redpen") {
-      return await runRedpen(args);
+    if (command === "akapen") {
+      return await runAkapen(args);
     }
     if (command === "tldr") {
       return await runTldr(args);

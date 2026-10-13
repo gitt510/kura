@@ -1,7 +1,7 @@
-// register.tsx — kura companion: Claude Code の横に、打った prompt の英語 feedback (redpen) と
+// register.tsx — kura companion: Claude Code の横に、打った prompt の英語 feedback (akapen) と
 // 回答ごとの 3 行要約 (tldr) と、mod を読み込んだ全 session の status (agents) を積む pane。
 //
-// 生成は kura の subcommand (`kura redpen` / `kura tldr`) が持ち、usage も kura が記録する。
+// 生成は kura の subcommand (`kura akapen` / `kura tldr`) が持ち、usage も kura が記録する。
 // この mod は呼んで表示するだけ。配置は `kura config` の mod.companion section が決める。
 // widget が mod.companion.widgets に載っている間、その生成は session の始めから pane と関係なく
 // 常に走り、pane はたまったものをいつでも見せる。載っていなければ何もしない。
@@ -51,7 +51,7 @@ async function kura($: EngineInterface, args: string[], stdin?: string): Promise
 const GLYPHS = ["·", "✢", "✳", "✶", "✻", "✽"];
 const CYCLE = [...GLYPHS, ...GLYPHS.slice(1, -1).reverse()];
 const TICK_MS = 120;
-// redpen と tldr で共通: 同じ prompt の card と turn は同じ id なので、同じ文言と色になる。
+// akapen と tldr で共通: 同じ prompt の card と turn は同じ id なので、同じ文言と色になる。
 const WORDS = ["Pondering", "Distilling", "Brewing", "Mulling", "Polishing", "Simmering"];
 // 色は ANSI 16 の名前だけで指定し、実際の RGB は terminal の theme に任せる。
 const HUES = ["yellow", "magenta", "cyan", "blue", "green"];
@@ -146,7 +146,7 @@ function startTicker($: EngineInterface): void {
   });
 }
 
-// ---- redpen ----
+// ---- akapen ----
 
 const KIND_COLOR: Record<ItemKind, string> = {
   romaji: "success",
@@ -541,7 +541,7 @@ function fixable(list: Entry[]): Entry[] {
   );
 }
 
-function drawRedpen(elements: Elements, { history: list, now }: PaneData, { columns }: Size) {
+function drawAkapen(elements: Elements, { history: list, now }: PaneData, { columns }: Size) {
   const { Box, Text } = elements;
   // 直すところのある card だけを古い順に — chat のように最新が一番下に来る。item が元の文の
   // 該当部分を持つので、打った prompt は出さない。
@@ -572,7 +572,7 @@ function summaryRows(
 
 function drawTldr(elements: Elements, { turns: list, now }: PaneData) {
   const { Box, Text } = elements;
-  // redpen と同じく古い順。question は `>` を付けた 1 行、要約はその下に 2 桁下げた kura tldr の 3 行。
+  // akapen と同じく古い順。question は `>` を付けた 1 行、要約はその下に 2 桁下げた kura tldr の 3 行。
   // 何 turn 出るかは領域の高さが決める。
   return (
     <Box flexDirection="column">
@@ -603,7 +603,7 @@ function drawTldr(elements: Elements, { turns: list, now }: PaneData) {
 }
 
 const WIDGETS: Record<string, { draw: Draw; align: "top" | "bottom" }> = {
-  redpen: { draw: drawRedpen, align: "bottom" },
+  akapen: { draw: drawAkapen, align: "bottom" },
   tldr: { draw: drawTldr, align: "bottom" },
   agents: { draw: drawAgents, align: "top" },
 };
@@ -768,7 +768,7 @@ export const register: Register = (on) => {
           : list.map((entry) => (entry.id === id ? { ...entry, card } : entry)),
       );
     void (async () => {
-      if (!(await isListed($, "redpen"))) return;
+      if (!(await isListed($, "akapen"))) return;
       // spinner が経った秒数を出す起点。時刻が取れなければ秒数は出さない。
       const startedAt = await $.clock.now().catch(() => undefined);
       // command は turn にしない。回答中に打った prompt は、その turn の question に足す。
@@ -778,7 +778,7 @@ export const register: Register = (on) => {
           if (open?.summary.status === "answering") {
             return [...list.slice(0, -1), { ...open, question: `${open.question}\n${e.text}` }];
           }
-          // card と同じ id: 同じ prompt の redpen と tldr は同じ色の spinner になる。
+          // card と同じ id: 同じ prompt の akapen と tldr は同じ色の spinner になる。
           const turn: Turn = {
             id,
             question: e.text,
@@ -796,7 +796,7 @@ export const register: Register = (on) => {
       );
       startTicker($);
       try {
-        const card = parseCard(await kura($, ["redpen"], e.text));
+        const card = parseCard(await kura($, ["akapen"], e.text));
         await settle(card);
         // 直すところが無ければ、その旨を一瞬だけ出して消す。
         if (card?.status === "ok" && card.items.length === 0) {

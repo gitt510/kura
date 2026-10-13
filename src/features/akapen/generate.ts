@@ -39,8 +39,8 @@ export interface GenerateResult {
 
 // 速さより質 — parts の切り方と訳語の自然さが価値なので既定は opus (config の既定値)。
 // null は CLI の既定に任せる。
-export function resolveRedpenModel(config: KuraConfig = loadConfig()): string | null {
-  return resolvePromptGeneration("redpen", config.features.redpen).model;
+export function resolveAkapenModel(config: KuraConfig = loadConfig()): string | null {
+  return resolvePromptGeneration("akapen", config.features.akapen).model;
 }
 
 const CONTEXT_CLIP = 1200;
@@ -99,14 +99,14 @@ export function parseCardJson(result: string): CardItem[] | null {
 }
 
 export async function generateCard(job: GenerateInput): Promise<GenerateResult> {
-  const model = resolveRedpenModel();
+  const model = resolveAkapenModel();
   let run;
   try {
     run = await runClaudePrompt(
-      "redpen",
+      "akapen",
       buildPrompt(job),
       model,
-      resolvePromptGeneration("redpen", loadConfig().features.redpen).effort,
+      resolvePromptGeneration("akapen", loadConfig().features.akapen).effort,
     );
   } catch {
     return { items: null, model, status: "error" }; // claude CLI が無い
@@ -117,7 +117,7 @@ export async function generateCard(job: GenerateInput): Promise<GenerateResult> 
     // card は "generation failed" のまま、原因は起動 terminal 側で診断できるようにする。
     const reason = run.stderr.trim().split("\n").pop() ?? "";
     process.stderr.write(
-      `redpen generate failed (exit ${run.exitCode})${reason ? `: ${reason}` : ""}\n`,
+      `akapen generate failed (exit ${run.exitCode})${reason ? `: ${reason}` : ""}\n`,
     );
     return { items: null, model: run.model, status: "error" };
   }

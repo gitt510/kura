@@ -28,7 +28,7 @@ export type Layout = {
   autoOpen: boolean;
   columns: number | null;
   rows: number | null;
-  widgets: string[]; // 上から順、最大 2 つ。redpen / tldr の生成はここに載っている間だけ
+  widgets: string[]; // 上から順、最大 2 つ。akapen / tldr の生成はここに載っている間だけ
   ratio: number; // 上の widget が占める高さの割合。1 つなら無視
 };
 

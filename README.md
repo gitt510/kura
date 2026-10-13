@@ -97,7 +97,7 @@ $EDITOR "${XDG_CONFIG_HOME:-$HOME/.config}/kura/config.json"
 ```json
 {
   "features": {
-    "redpen": { "agent": "claude", "model": "opus", "effort": null },
+    "akapen": { "agent": "claude", "model": "opus", "effort": null },
     "tldr": { "agent": "claude", "model": "opus", "effort": null },
     "timeline": {
       "agent": "claude", "model": null, "effort": null,
@@ -113,7 +113,7 @@ $EDITOR "${XDG_CONFIG_HOME:-$HOME/.config}/kura/config.json"
       "autoOpen": false,
       "columns": null,
       "rows": null,
-      "widgets": ["redpen", "tldr"],
+      "widgets": ["akapen", "tldr"],
       "ratio": 0.5
     }
   }
@@ -122,15 +122,15 @@ $EDITOR "${XDG_CONFIG_HOME:-$HOME/.config}/kura/config.json"
 
 | Key | Consumer |
 | --- | --- |
-| `features.<name>.agent` | CLI that generates the feature: `claude` (default) or `codex`; `redpen` / `tldr` accept `claude` only (rejected at load) |
-| `features.<name>.model` | Model for that feature; omitted means the feature default (`redpen` / `tldr`: `opus`, others: CLI default), `null` means the CLI default |
+| `features.<name>.agent` | CLI that generates the feature: `claude` (default) or `codex`; `akapen` / `tldr` accept `claude` only (rejected at load) |
+| `features.<name>.model` | Model for that feature; omitted means the feature default (`akapen` / `tldr`: `opus`, others: CLI default), `null` means the CLI default |
 | `features.<name>.effort` | Effort for that feature in the agent's own vocabulary; `null` leaves it to the CLI |
 | `features.<timeline\|english>.publish.enabled` | Discord delivery opted in; written by `kura publish` |
 | `features.<timeline\|english>.publish.discord.webhook` | Discord webhook URL or `op://` reference |
 | `features.<timeline\|english>.publish.discord.avatar` | Avatar URL for that feature's Discord posts |
 | `mod.companion.autoOpen` | Open the companion pane when a Claude Code session starts (default `false`) |
 | `mod.companion.columns` / `mod.companion.rows` | Companion pane width when docked / height when inline; `null` leaves it to Claude Code |
-| `mod.companion.widgets` | Companion pane widgets, top to bottom, at most 2: `redpen`, `tldr`, `agents`; empty turns the companion off |
+| `mod.companion.widgets` | Companion pane widgets, top to bottom, at most 2: `akapen`, `tldr`, `agents`; empty turns the companion off |
 | `mod.companion.ratio` | Share of the rows the upper widget takes (default `0.5`); ignored with one widget |
 
 - `features.<name>.model` / `effort` apply only to that feature's generation; normal CLI usage is untouched
@@ -162,13 +162,13 @@ kura config
 
 - Ships in the `kura` Claude Code plugin; requires `kura` on `PATH`
   (`just setup`) and a Claude Code build with plugin function hooks
-- `redpen` / `tldr` / `agents` run only while listed in `mod.companion.widgets`;
+- `akapen` / `tldr` / `agents` run only while listed in `mod.companion.widgets`;
   with the list empty nothing is generated and `/kura-companion` only says so.
   `/kura-handoff` works either way
-- From session start, every typed prompt gets a `kura redpen` card and every
+- From session start, every typed prompt gets a `kura akapen` card and every
   answer a `kura tldr` summary, whether the pane is open or not — one call
   each, kept for the session (last 30)
-- `redpen` shows the cards with something to fix, oldest at the top; a card
+- `akapen` shows the cards with something to fix, oldest at the top; a card
   with nothing to fix shows `nothing to flag ✓` for 2 seconds
 - `tldr` shows each turn from the moment its prompt is typed, as a spinner
   until the summary is made; then `> question` on one line and the summary
@@ -200,13 +200,13 @@ kura config
   needs `claude` on `PATH`
 - Each session with the pane in view runs its own `claude agents` (about
   0.15 s of CPU per run)
-- `agents` is cut from the bottom when it outgrows its rows; `redpen` / `tldr`
+- `agents` is cut from the bottom when it outgrows its rows; `akapen` / `tldr`
   are cut from the top, keeping the newest
 - While the pane is open but out of view, the newest card shows above the
   prompt instead
 - `mod.companion.*` is read at session start and each time the pane opens;
   reopen the pane to apply a change
-- A widget id other than `redpen` / `tldr` / `agents` is skipped with a toast
+- A widget id other than `akapen` / `tldr` / `agents` is skipped with a toast
 
 ## Handoff
 
@@ -235,7 +235,7 @@ kura show <session-id-or-prefix>
 - These commands return JSON
 
 ```bash
-echo "I make mod. kono houhou is good" | kura redpen
+echo "I make mod. kono houhou is good" | kura akapen
 ```
 
 - Prints one English feedback card for the prompt on stdin as JSON:
@@ -264,7 +264,7 @@ echo '{"turns": [{"question": "...", "answer": "..."}]}' | kura tldr
 - `turns` is oldest first; up to 3 turns before the last one are passed as
   context
 - Invalid stdin exits 2 without calling the model
-- Generation runs headless Claude with `KURA_NO_HISTORY=1`, like `redpen`
+- Generation runs headless Claude with `KURA_NO_HISTORY=1`, like `akapen`
 
 ```bash
 kura timeline [<YYYY-MM-DD> <hour 0-23>]
@@ -292,7 +292,7 @@ just usage --days=7
   connection) reports no token counts and records nothing
 - Cost comes from the agent's own output: the Claude CLI reports it, Codex's
   public events carry token counts only, so Codex rows show `-`
-- A feature with `"agent": "codex"` shows `-`; `redpen` and `tldr` run Claude
+- A feature with `"agent": "codex"` shows `-`; `akapen` and `tldr` run Claude
   and always report cost
 - Claude's figure is what the API would charge for those tokens; under a
   subscription plan it is not an additional charge
@@ -303,7 +303,7 @@ just usage --days=7
 | --- | --- | --- |
 | `timeline` | Activity timeline | Hourly at `:00` |
 | `english` | English learning card | Hourly at `:05` |
-| `redpen` | Nothing — prints one card as JSON | None — on demand `kura redpen` |
+| `akapen` | Nothing — prints one card as JSON | None — on demand `kura akapen` |
 | `tldr` | Nothing — prints three lines as JSON | None — on demand `kura tldr` |
 
 ```bash

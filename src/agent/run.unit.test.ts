@@ -48,11 +48,11 @@ test("effort は agent ごとの語彙で検証し、feature 名付きで拒否�
 
 test("prompt 一発の feature は claude 以外を拒否する", () => {
   expect(
-    resolvePromptGeneration("redpen", { agent: "claude", model: "opus", effort: null }),
+    resolvePromptGeneration("akapen", { agent: "claude", model: "opus", effort: null }),
   ).toEqual({ model: "opus", effort: null });
   expect(() =>
-    resolvePromptGeneration("redpen", { agent: "codex", model: null, effort: null }),
-  ).toThrow('redpen.agent must be "claude"');
+    resolvePromptGeneration("akapen", { agent: "codex", model: null, effort: null }),
+  ).toThrow('akapen.agent must be "claude"');
 });
 
 test("Claude command は model / effort が明示されたときだけ flag を注入する", () => {
