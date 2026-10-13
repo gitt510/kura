@@ -40,7 +40,13 @@ function ran(stdout: string) {
 }
 
 type Pane = "closed" | "hidden" | "shown";
-type Engine = { calls: { argv: string[]; stdin: string }[]; opened: unknown[]; pane: Pane };
+type Engine = {
+  calls: { argv: string[]; stdin: string }[];
+  opened: unknown[];
+  pane: Pane;
+  agents: object[];
+  agentsCalls: number;
+};
 
 // mod の下で engine が答えるもの: kura の返答、prompt、空の描画、開いている pane。
 // isHanging なら redpen / tldr は返らないまま待つ。
@@ -52,8 +58,12 @@ function engine(
   isHanging = false,
   tldr: object = { status: "ok", text: "three lines" },
 ): Engine {
-  const state: Engine = { calls: [], opened: [], pane };
+  const state: Engine = { calls: [], opened: [], pane, agents: [], agentsCalls: 0 };
   on("process.run", async (_$, e) => {
+    if (e.argv[0] === "claude") {
+      state.agentsCalls += 1;
+      return ran(JSON.stringify(state.agents));
+    }
     state.calls.push({ argv: [...e.argv], stdin: e.init?.stdin ?? "" });
     const command = e.argv[1];
     if (command === "config") return ran(JSON.stringify({ mod: { companion } }));
@@ -62,7 +72,10 @@ function engine(
     return ran(card);
   });
   on("prompt.submit", async (_$, e) => ({ text: e.text }));
+  on("session.id", async () => ({ value: SELF }));
   on("turn.complete", async (_$, e) => ({ text: e.answer }));
+  on("command.register", async () => ({ value: undefined }) as never);
+  on("session.start", async (_$, e) => e as never);
   on("ui.render", async ($, e) => {
     const { Box } = $.ui.resolve(e);
     return h(Box, {}) as RenderElement;
@@ -88,6 +101,8 @@ function engine(
   }));
   return state;
 }
+
+const SELF = "9c48e030-f8d5-4a82-a57f-5e0f4dc15b2c";
 
 // kura config の読み出しを除いた、生成の呼び出し。
 function generated(state: Engine) {
@@ -377,10 +392,73 @@ test("中断した turn は tldr から消し、command は turn にしない", 
 
 test("/kura-handoff はこの session の id を kura handoff に渡すだけ", async ($, on) => {
   const state = engine(on, "closed");
-  on("session.id", async () => ({ value: "9c48e030-f8d5-4a82-a57f-5e0f4dc15b2c" }));
   await $.command.run({ command: "kura-handoff" });
   expect(state.calls.map((call) => call.argv)).toEqual([
     ["kura", "handoff", "9c48e030-f8d5-4a82-a57f-5e0f4dc15b2c"],
   ]);
   expect(state.opened).toEqual([]);
+});
+
+const SESSIONS = { ...COMPANION, widgets: ["sessions"] };
+
+test("sessions widget は claude agents の行を JSON の順のまま、status / sessionId / name / cwd / age で出す", async ($, on) => {
+  const clock = mock.clock(on);
+  await clock.set(10 * 60_000);
+  const state = engine(on, "closed", SESSIONS);
+  state.agents = [
+    {
+      sessionId: "8bd8eb47-32fd-4ba1-a549-1e4e59793964",
+      name: "Alarm",
+      cwd: "/home/me/work/service-catalog",
+      kind: "background",
+      state: "blocked",
+      startedAt: clock.now() - 2 * 3_600_000,
+    },
+    {
+      sessionId: SELF,
+      name: "kura-02",
+      cwd: "/home/me/work/kura",
+      kind: "interactive",
+      status: "busy",
+      startedAt: clock.now() - 3 * 60_000,
+    },
+    {
+      sessionId: "e0959860-1ceb-4b79-9921-9faf5b142e17",
+      name: "crawler-5d",
+      cwd: "/home/me/work/cogmo-crawler",
+      kind: "interactive",
+      status: "idle",
+      startedAt: clock.now() - 30_000,
+    },
+  ];
+  await $.session.start({ source: "startup", cwd: "/work/kura" } as never);
+  await open($);
+  await clock.advance(1_000);
+
+  const pane = await $.ui.mount({ ...PANE, surface: "terminal" });
+  const text = (await pane.find({ type: "Box" }))?.text ?? "";
+  expect(text).toMatch(/status\s*sessionId\s*name\s*cwd\s*age/);
+  expect(text).toMatch(/blocked\s*8bd8e\.\.\.\s*Alarm\s*service-catalog\s*2h/);
+  expect(text).toMatch(/busy\s*9c48e\.\.\.\s*kura-02\s*kura\s*3m/);
+  expect(text).toMatch(/idle\s*e0959\.\.\.\s*crawler-5d\s*cogmo-crawler\s*31s/);
+  // 並べ替えない。
+  expect(text.indexOf("Alarm")).toBeLessThan(text.indexOf("kura-02"));
+  expect(text.indexOf("kura-02")).toBeLessThan(text.indexOf("crawler-5d"));
+  await pane.unmount();
+});
+
+test("sessions は pane が見えている間だけ、見えた瞬間と 10 秒ごとに claude agents を呼ぶ", async ($, on) => {
+  const clock = mock.clock(on);
+  const state = engine(on, "closed", SESSIONS);
+  await $.session.start({ source: "startup", cwd: "/work/kura" } as never);
+  await clock.advance(10_000);
+  expect(state.agentsCalls).toBe(0);
+  await open($);
+  // 見えるようになった瞬間に 1 回、その後は 10 秒ごと。
+  await clock.advance(1_000);
+  expect(state.agentsCalls).toBe(1);
+  await clock.advance(5_000);
+  expect(state.agentsCalls).toBe(1);
+  await clock.advance(5_000);
+  expect(state.agentsCalls).toBe(2);
 });
