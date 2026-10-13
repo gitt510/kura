@@ -25,7 +25,7 @@ const object = (shape: z.ZodRawShape) =>
   z.strictObject(shape, { error: "must be an object" }).prefault({});
 
 // feature ごとの生成設定。agent はその feature を回せる CLI、model / effort は null なら CLI の既定。
-// model は書かなければ feature の既定 (redpen / tldr は opus)、null と書けば CLI の既定。
+// model は書かなければ feature の既定 (akapen / tldr は opus)、null と書けば CLI の既定。
 // effort の値の妥当性は agent ごとに違うので使う側 (agent/run.ts) が検証する。
 const AGENTS = ["claude", "codex"] as const;
 export type Agent = (typeof AGENTS)[number];
@@ -57,7 +57,7 @@ const published = object({
 const Config = z.strictObject(
   {
     features: object({
-      redpen: prompted("opus"), // 速さより質 — 既定は opus
+      akapen: prompted("opus"), // 速さより質 — 既定は opus
       tldr: prompted("opus"),
       timeline: published,
       english: published,
@@ -70,13 +70,13 @@ const Config = z.strictObject(
         columns: count.nullable().default(null), // 横に dock したときの幅
         rows: count.nullable().default(null), // prompt の上に置いたときの高さ
         // 上から順に積む widget の id。最大 2 つ。空なら companion は何もしない。
-        // redpen / tldr の生成はここに載っている間だけ走る。
+        // akapen / tldr の生成はここに載っている間だけ走る。
         widgets: z
           .array(z.string({ error: "must be a list of widget ids" }).min(1), {
             error: "must be a list of widget ids",
           })
           .max(2, { error: "must list at most 2 widgets" })
-          .default(["redpen", "tldr"]),
+          .default(["akapen", "tldr"]),
         // 上の widget が占める高さの割合。widget が 1 つなら無視する。
         ratio: z
           .number({ error: "must be a number between 0 and 1" })

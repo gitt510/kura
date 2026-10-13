@@ -11,7 +11,7 @@ const COMPANION = {
   autoOpen: false,
   columns: 64,
   rows: null,
-  widgets: ["redpen", "tldr"],
+  widgets: ["akapen", "tldr"],
   ratio: 0.6,
 };
 
@@ -49,7 +49,7 @@ type Engine = {
 };
 
 // mod の下で engine が答えるもの: kura の返答、prompt、空の描画、開いている pane。
-// isHanging なら redpen / tldr は返らないまま待つ。
+// isHanging なら akapen / tldr は返らないまま待つ。
 function engine(
   on: On,
   pane: Pane,
@@ -122,7 +122,7 @@ test("pane が閉じていても card は作り、band には出さない", asyn
   const text = "I think kono houhou is good";
   await typed($, text);
   await settle();
-  expect(generated(state)).toEqual([{ argv: ["kura", "redpen"], stdin: text }]);
+  expect(generated(state)).toEqual([{ argv: ["kura", "akapen"], stdin: text }]);
 
   const ui = await $.ui.mount({ ...BAND, surface: "terminal" });
   expect(await ui.find({ type: "Text", text: /this approach/ })).toBeUndefined();
@@ -142,7 +142,7 @@ test("pane が開いていて見えない間は、打った prompt の card を 
   const text = "I think kono houhou is good";
   await typed($, text);
   await settle();
-  expect(generated(state)).toEqual([{ argv: ["kura", "redpen"], stdin: text }]);
+  expect(generated(state)).toEqual([{ argv: ["kura", "akapen"], stdin: text }]);
 
   for (const surface of ["terminal", "desktop"] as const) {
     const ui = await $.ui.mount({ ...BAND, surface });
@@ -186,7 +186,7 @@ test("item は kind ごとにまとまり、長い item は直しを次の行に
   await ui.unmount();
 });
 
-test("pane は config の順に redpen (prompt は出さない) と tldr を積み、band は空ける", async ($, on) => {
+test("pane は config の順に akapen (prompt は出さない) と tldr を積み、band は空ける", async ($, on) => {
   engine(on, "closed");
   await open($);
   await typed($, "first prompt");

@@ -283,7 +283,7 @@ export function buildClaudePromptCommand(
 
 // tool を一切許さない 1 回の対話を Claude で実行する (非同期)。
 // skill 契約も generator 選択も持たない代わりに、model は呼び手が明示する。
-// prompt 一発の生成 (redpen / tldr)。system prompt と出力 JSON の契約が Claude 前提なので claude 固定。
+// prompt 一発の生成 (akapen / tldr)。system prompt と出力 JSON の契約が Claude 前提なので claude 固定。
 export function resolvePromptGeneration(feature: string, generation: Generation): ClaudeOptions {
   const resolved = resolveGeneration(feature, generation);
   if (resolved.agent !== "claude") {

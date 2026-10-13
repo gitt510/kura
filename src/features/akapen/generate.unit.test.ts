@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import { defaultConfig } from "../../config.ts";
-import { buildPrompt, parseCardJson, resolveRedpenModel } from "./generate.ts";
+import { buildPrompt, parseCardJson, resolveAkapenModel } from "./generate.ts";
 
 test("system は 3 種類の item 契約、prompt は直前の assistant 文脈と入力を持ち、言語は指定しない", () => {
   const { system: prompt, prompt: material } = buildPrompt({
@@ -59,14 +59,14 @@ test("kind 不明や from / to 欠落の要素は落とし、5 件で切る", ()
   expect(parseCardJson(JSON.stringify({ items: many }))).toHaveLength(5);
 });
 
-test("model は config の redpen.model、無ければ opus", () => {
-  expect(resolveRedpenModel(defaultConfig())).toBe("opus");
+test("model は config の akapen.model、無ければ opus", () => {
+  expect(resolveAkapenModel(defaultConfig())).toBe("opus");
   expect(
-    resolveRedpenModel({
+    resolveAkapenModel({
       ...defaultConfig(),
       features: {
         ...defaultConfig().features,
-        redpen: { agent: "claude", model: "sonnet", effort: null },
+        akapen: { agent: "claude", model: "sonnet", effort: null },
       },
     }),
   ).toBe("sonnet");

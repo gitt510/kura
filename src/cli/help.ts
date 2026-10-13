@@ -108,13 +108,13 @@ english.db, then publish it to Discord when publishing is enabled. Without
 arguments, targets the last completed hour. An hour already generated (or
 published) is skipped. The scheduled job runs this command.
 `,
-  redpen: `usage: kura redpen < prompt.txt
+  akapen: `usage: kura akapen < prompt.txt
 
 Turn one prompt read from stdin into an English feedback card and print it
 as JSON: {status, model, items}, each item {kind, from, to} with kind one of
 romaji, grammar, natural. Prompts under 3 characters or starting with <, /
 or ! print {"status":"skipped"}. Nothing is stored. The model is
-features.redpen.model in config.json (default opus).
+features.akapen.model in config.json (default opus).
 `,
   tldr: `usage: kura tldr < turns.json
 
