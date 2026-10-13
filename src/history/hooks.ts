@@ -6,6 +6,7 @@
 
 import {
   existsSync,
+  lstatSync,
   mkdirSync,
   readFileSync,
   realpathSync,
@@ -91,7 +92,9 @@ function load(settingsPath: string, events: string[]): Settings {
 function manage(agent: Agent, action: Action): number {
   const config = configs[agent];
   const configExists = existsSync(config.path);
-  const settingsPath = configExists ? realpathSync(config.path) : config.path;
+  const settingsPath = lstatSync(config.path, { throwIfNoEntry: false })
+    ? realpathSync(config.path)
+    : config.path;
   const settings = load(settingsPath, config.events);
   const wired = (event: string): boolean =>
     (settings.hooks?.[event] ?? []).some((group) =>

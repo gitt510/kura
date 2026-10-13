@@ -4,7 +4,16 @@
 // 定期実行が 1Password の sign-in に依存せず、実値が config にも shell にも出ない。
 // 参照でない値はそのまま使う。
 
-import { chmodSync, existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
+import {
+  chmodSync,
+  existsSync,
+  lstatSync,
+  mkdirSync,
+  readFileSync,
+  realpathSync,
+  renameSync,
+  writeFileSync,
+} from "node:fs";
 import { dirname } from "node:path";
 import { KURA_STATE_DIR } from "./storage.ts";
 
@@ -17,13 +26,10 @@ export function isSecretReference(value: string): boolean {
 }
 
 // 0600 で一時 file に書いてから rename する — 途中で落ちても壊れた file を残さない。
-export function writePrivateJson(path: string, value: unknown): void {
+// symlink は実体に書く — dotfiles の stow link を普通の file で置き換えない。
+export function writePrivateJson(linkPath: string, value: unknown): void {
+  const path = lstatSync(linkPath, { throwIfNoEntry: false }) ? realpathSync(linkPath) : linkPath;
   mkdirSync(dirname(path), { recursive: true, mode: 0o700 });
-  try {
-    chmodSync(dirname(path), 0o700);
-  } catch {
-    /* filesystem may not support POSIX permissions */
-  }
   const temp = `${path}.kura-${process.pid}`;
   writeFileSync(temp, `${JSON.stringify(value, null, 2)}\n`, { mode: 0o600 });
   renameSync(temp, path);
