@@ -603,3 +603,32 @@ test("turn を終えて 10 分以内の idle の行には光を流し、過ぎ�
   await clock.advance(240);
   expect(await frames()).toBe(settled);
 });
+
+test("turn を終えた session は、background shell で busy のままでも idle として出す", async ($, on) => {
+  const clock = mock.clock(on);
+  await clock.set(60 * 60_000);
+  const state = engine(on, "closed", AGENTS);
+  state.agents = [{ sessionId: PEER, name: "crawler-5d", cwd: "/w/crawler", status: "busy" }];
+  const write = (name: string) =>
+    state.files.set(`${EVENTS}/${PEER}.json`, {
+      text: JSON.stringify({ name, at: clock.now(), cwd: "/w/crawler" }),
+      mtimeMs: clock.now(),
+    });
+  write("turn.complete");
+  await $.session.start({ source: "startup", cwd: "/work/kura" } as never);
+  await open($);
+  await clock.advance(1_000);
+
+  const text = async () => {
+    const pane = await $.ui.mount({ ...PANE, surface: "terminal" });
+    const shown = (await pane.find({ type: "Box" }))?.text ?? "";
+    await pane.unmount();
+    return shown;
+  };
+  expect(await text()).toMatch(/1 agent {2}● 0 busy {2}\S 1 idle/);
+
+  // 次の turn が始まれば busy に戻る。
+  write("turn.start");
+  await clock.advance(1_000);
+  expect(await text()).toMatch(/1 agent {2}[·✢✳✶✻✽] 1 busy {2}○ 0 idle/);
+});
