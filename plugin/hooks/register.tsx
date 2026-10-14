@@ -290,7 +290,8 @@ async function readPeers($: EngineInterface): Promise<Peer[]> {
 // 書き、全 session の file を CHECK_MS ごとに stat で見る。書き手は file ごとに 1 人なので
 // lock は要らない。event は「今読み直して」の合図と toast にだけ使い、table の正は
 // `claude agents` のまま。mod の載っていない session は event を出さず、POLL_MS の poll が拾う。
-type PeerEvent = { kind: "busy" | "done" | "failed"; at: number; cwd: string };
+// name は mod が受けた event の名前をそのまま持つ。言い換えない。
+type PeerEvent = { name: "turn.start" | "turn.complete"; at: number; cwd: string };
 
 // 落ちた session の file は消えずに残るので、session の始めに古いものを消す。
 const EVENT_TTL_DAYS = 1;
@@ -301,9 +302,9 @@ async function eventsDir($: EngineInterface): Promise<string> {
   return `${stateHome}/kura/events`;
 }
 
-async function publish($: EngineInterface, kind: PeerEvent["kind"]): Promise<void> {
+async function publish($: EngineInterface, name: PeerEvent["name"]): Promise<void> {
   if (!(await isListed($, "agents"))) return;
-  const event: PeerEvent = { kind, at: await $.clock.now(), cwd: await $.session.cwd() };
+  const event: PeerEvent = { name, at: await $.clock.now(), cwd: await $.session.cwd() };
   await $.fs.write(`${await eventsDir($)}/${await $.session.id()}.json`, JSON.stringify(event));
 }
 
@@ -319,7 +320,7 @@ async function pruneEvents($: EngineInterface): Promise<void> {
 // sessionId ごとに最後に見た mtime。最初の 1 回は覚えるだけで toast は出さない。
 let seen: Map<string, number> | null = null;
 
-// 変わった file があれば、done / failed を toast に出して true を返す。
+// 変わった file があれば、turn.complete を toast に出して true を返す。
 async function scanEvents($: EngineInterface): Promise<boolean> {
   const dir = await eventsDir($);
   const entries = await $.fs.list(dir).catch(() => []);
@@ -327,7 +328,7 @@ async function scanEvents($: EngineInterface): Promise<boolean> {
   let isChanged = false;
   for (const entry of entries) {
     if (entry.kind !== "file" || !entry.name.endsWith(".json")) continue;
-    // 自分の file も読む: 自分の done も同じ toast で知らせる。
+    // 自分の file も読む: 自分の turn.complete も同じ toast で知らせる。
     const id = entry.name.slice(0, -".json".length);
     const path = `${dir}/${entry.name}`;
     const mtime = (await $.fs.stat(path).catch(() => null))?.mtimeMs;
@@ -336,13 +337,13 @@ async function scanEvents($: EngineInterface): Promise<boolean> {
     if (seen === null || seen.get(id) === mtime) continue;
     isChanged = true;
     const event = JSON.parse(await $.fs.read(path)) as PeerEvent;
-    if (event.kind === "busy") continue;
+    if (event.name !== "turn.complete") continue;
     // 1 行目は cwd の最後の 1 段と、最後に読んだ `claude agents` の name。どちらも無ければ
-    // sessionId の頭。2 行目は event の種類。
+    // sessionId の頭。2 行目は event の名前。
     const peer = (await read($, agents)).peers.find((each) => each.sessionId === id);
     const cwd = event.cwd.slice(event.cwd.lastIndexOf("/") + 1);
     const label = [cwd, peer?.name].filter(Boolean).join("・") || id.slice(0, ID_SHOWN);
-    await $.ui.toast(`${label}\n${event.kind}`);
+    await $.ui.toast(`${label}\n${event.name}`);
   }
   seen = current;
   return isChanged;
@@ -901,17 +902,14 @@ export const register: Register = (on) => {
   });
 
   on("turn.start", async ($, e, next) => {
-    void publish($, "busy").catch(() => {});
+    void publish($, "turn.start").catch(() => {});
     return next(e);
   });
 
   on("turn.complete", async ($, e, next) => {
     const done = await next(e);
-    // 中断は自分で止めたもの: 知らせない。background の作業を待って止まった turn も done を
-    // 出す — 作業の終わりを知らせる classic.Stop は、組織が管理する環境の plugin に届かないことがある。
-    if (e.agentId === undefined && e.reason !== "aborted") {
-      void publish($, e.reason === "answer" ? "done" : "failed").catch(() => {});
-    }
+    // main loop の turn だけ。subagent の turn は session の turn ではない。
+    if (e.agentId === undefined) void publish($, "turn.complete").catch(() => {});
     if (e.agentId !== undefined || !(await isListed($, "tldr"))) return done;
     const open = (await read($, turns)).at(-1);
     const openId = open?.summary.status === "answering" ? open.id : undefined;

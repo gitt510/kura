@@ -511,7 +511,7 @@ test("agents は pane が見えている間だけ、見えた瞬間と 10 秒ご
 const EVENTS = "/home/me/.local/state/kura/events";
 const PEER = "e0959860-1ceb-4b79-9921-9faf5b142e17";
 
-test("turn の始めと終わりを自分の events file に書く", async ($, on) => {
+test("turn.start と turn.complete を名前のまま自分の events file に書く", async ($, on) => {
   mock.clock(on);
   const state = engine(on, "closed", AGENTS);
   on("turn.start", async (_$, e) => ({ turnId: e.turnId }) as never);
@@ -520,36 +520,30 @@ test("turn の始めと終わりを自分の events file に書く", async ($, o
   const file = () => JSON.parse(state.files.get(`${EVENTS}/${SELF}.json`)?.text ?? "{}");
   await $.turn.start({ text: "hi", turnId: "t1" } as never);
   await settle();
-  expect(file()).toEqual(expect.objectContaining({ kind: "busy", cwd: "/work/kura" }));
+  expect(file()).toEqual(expect.objectContaining({ name: "turn.start", cwd: "/work/kura" }));
   await $.turn.complete({ answer: "ok", reason: "answer" } as never);
   await settle();
-  expect(file().kind).toBe("done");
-  await $.turn.complete({ answer: "", reason: "error" } as never);
-  await settle();
-  expect(file().kind).toBe("failed");
+  expect(file().name).toBe("turn.complete");
 });
 
-test("session の done / failed は pane と関係なく 1 秒以内に toast に出す", async ($, on) => {
+test("session の turn.complete は pane と関係なく 1 秒以内に toast に出す", async ($, on) => {
   const clock = mock.clock(on);
   const state = engine(on, "closed", AGENTS);
-  const write = (kind: string) =>
+  const write = (name: string) =>
     state.files.set(`${EVENTS}/${PEER}.json`, {
-      text: JSON.stringify({ kind, at: clock.now(), cwd: "/home/me/work/crawler" }),
+      text: JSON.stringify({ name, at: clock.now(), cwd: "/home/me/work/crawler" }),
       mtimeMs: clock.now(),
     });
   // 始める前からある file は覚えるだけ。
-  write("done");
+  write("turn.complete");
   await $.session.start({ source: "startup", cwd: "/work/kura" } as never);
   await clock.advance(1_000);
   expect(state.toasts).toEqual([]);
 
   await clock.advance(1_000);
-  write("busy");
+  write("turn.start");
   await clock.advance(1_000);
-  write("done");
+  write("turn.complete");
   await clock.advance(1_000);
-  await clock.advance(1_000);
-  write("failed");
-  await clock.advance(1_000);
-  expect(state.toasts).toEqual(["crawler\ndone", "crawler\nfailed"]);
+  expect(state.toasts).toEqual(["crawler\nturn.complete"]);
 });
