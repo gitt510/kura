@@ -228,8 +228,9 @@ function cardRows(
 // agents widget は `claude agents --json` の行を、JSON の順のまま table に出す。値は言い換えず、
 // status を値ごとの色で出すだけ。列の幅は中身から決め、切り詰めは Box / Text の layout に任せる。
 // `claude agents` は 1 回の起動で CPU を約 0.15 秒使い、pane を開いた session がそれぞれ起動する。
-// なので pane が見えている間だけ POLL_MS ごとに読み、見えるようになった瞬間にも 1 回読む。
-// 見えているかは CHECK_MS ごとに確かめる (自分の process の中で済む)。
+// なので pane が見えている間だけ POLL_MS ごとに読み、見えるようになった瞬間と、ほかの session の
+// event を見つけたときにも 1 回読む。見えているかと event は CHECK_MS ごとに確かめる (自分の
+// process の中で済む)。
 const POLL_MS = 10_000;
 const CHECK_MS = 1_000;
 const AGENTS_TIMEOUT_MS = 10_000;
@@ -283,16 +284,82 @@ async function readPeers($: EngineInterface): Promise<Peer[]> {
   }));
 }
 
+// ---- events ----
+
+// session 間の event。各 session は自分の file (events/<sessionId>.json) にだけ最新の 1 件を
+// 書き、全 session の file を CHECK_MS ごとに stat で見る。書き手は file ごとに 1 人なので
+// lock は要らない。event は「今読み直して」の合図と toast にだけ使い、table の正は
+// `claude agents` のまま。mod の載っていない session は event を出さず、POLL_MS の poll が拾う。
+type PeerEvent = { kind: "busy" | "done" | "failed"; at: number; cwd: string };
+
+// 落ちた session の file は消えずに残るので、session の始めに古いものを消す。
+const EVENT_TTL_DAYS = 1;
+
+async function eventsDir($: EngineInterface): Promise<string> {
+  const stateHome =
+    (await $.env.get("XDG_STATE_HOME")) || `${await $.env.get("HOME")}/.local/state`;
+  return `${stateHome}/kura/events`;
+}
+
+async function publish($: EngineInterface, kind: PeerEvent["kind"]): Promise<void> {
+  if (!(await isListed($, "agents"))) return;
+  const event: PeerEvent = { kind, at: await $.clock.now(), cwd: await $.session.cwd() };
+  await $.fs.write(`${await eventsDir($)}/${await $.session.id()}.json`, JSON.stringify(event));
+}
+
+async function pruneEvents($: EngineInterface): Promise<void> {
+  const dir = await eventsDir($);
+  if (!(await $.fs.exists(dir))) return;
+  await $.process.run(
+    ["find", dir, "-name", "*.json", "-mtime", `+${EVENT_TTL_DAYS - 1}`, "-delete"],
+    { timeoutMs: AGENTS_TIMEOUT_MS },
+  );
+}
+
+// sessionId ごとに最後に見た mtime。最初の 1 回は覚えるだけで toast は出さない。
+let seen: Map<string, number> | null = null;
+
+// 変わった file があれば、done / failed を toast に出して true を返す。
+async function scanEvents($: EngineInterface): Promise<boolean> {
+  const dir = await eventsDir($);
+  const entries = await $.fs.list(dir).catch(() => []);
+  const current = new Map<string, number>();
+  let isChanged = false;
+  for (const entry of entries) {
+    if (entry.kind !== "file" || !entry.name.endsWith(".json")) continue;
+    // 自分の file も読む: 自分の done も同じ toast で知らせる。
+    const id = entry.name.slice(0, -".json".length);
+    const path = `${dir}/${entry.name}`;
+    const mtime = (await $.fs.stat(path).catch(() => null))?.mtimeMs;
+    if (mtime === undefined) continue;
+    current.set(id, mtime);
+    if (seen === null || seen.get(id) === mtime) continue;
+    isChanged = true;
+    const event = JSON.parse(await $.fs.read(path)) as PeerEvent;
+    if (event.kind === "busy") continue;
+    // cwd の最後の 1 段と、最後に読んだ `claude agents` の name。どちらも無ければ sessionId の頭。
+    const peer = (await read($, agents)).peers.find((each) => each.sessionId === id);
+    const cwd = event.cwd.slice(event.cwd.lastIndexOf("/") + 1);
+    const label = [cwd, peer?.name].filter(Boolean).join(" ") || id.slice(0, ID_SHOWN);
+    await $.ui.toast(event.kind === "done" ? `✨ ${label} done` : `💢 ${label} failed`);
+  }
+  seen = current;
+  return isChanged;
+}
+
 let poller: Timer | null = null;
+// 最後に `claude agents` を読んだ時刻。0 にすると次の check で読み直す。
+let readAt = 0;
 
 function startPolling($: EngineInterface): void {
   if (poller) return;
   // 重なった poll は走っている 1 回にまとめる。
   let isPolling = false;
   let wasInView = false;
-  let readAt = 0;
   const poll = async () => {
     const isInView = (await paneState($)).isInView;
+    // event は pane が隠れていても見る: toast は pane と関係なく出す。
+    if (await scanEvents($).catch(() => false)) readAt = 0;
     const isAppearing = isInView && !wasInView;
     wasInView = isInView;
     if (isPolling || !isInView) return;
@@ -714,7 +781,10 @@ export const register: Register = (on) => {
     const done = await next(e);
     void (async () => {
       const companion = await loadLayout($);
-      if (companion.widgets.includes("agents")) startPolling($);
+      if (companion.widgets.includes("agents")) {
+        void pruneEvents($).catch(() => {});
+        startPolling($);
+      }
       if (companion.widgets.includes("tldr")) {
         for (const turn of await read($, turns)) {
           if (turn.summary.status === "pending") void summarize($, turn.id);
@@ -829,8 +899,18 @@ export const register: Register = (on) => {
     return cardRows($.ui.resolve(e), newest, e.props.bodyColumns, now);
   });
 
+  on("turn.start", async ($, e, next) => {
+    void publish($, "busy").catch(() => {});
+    return next(e);
+  });
+
   on("turn.complete", async ($, e, next) => {
     const done = await next(e);
+    // 中断は自分で止めたもの: 知らせない。background の作業を待って止まった turn も done を
+    // 出す — 作業の終わりを知らせる classic.Stop は、組織が管理する環境の plugin に届かないことがある。
+    if (e.agentId === undefined && e.reason !== "aborted") {
+      void publish($, e.reason === "answer" ? "done" : "failed").catch(() => {});
+    }
     if (e.agentId !== undefined || !(await isListed($, "tldr"))) return done;
     const open = (await read($, turns)).at(-1);
     const openId = open?.summary.status === "answering" ? open.id : undefined;
