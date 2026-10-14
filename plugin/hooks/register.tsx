@@ -317,6 +317,20 @@ async function pruneEvents($: EngineInterface): Promise<void> {
   );
 }
 
+// toast はすべてこの形: 1 行目に session (cwd の最後の 1 段・最後に読んだ `claude agents` の
+// name、どちらも無ければ sessionId の頭)、2 行目に起きたこと。session を省けばこの session。
+async function toast(
+  $: EngineInterface,
+  session: { id: string; cwd: string } | null,
+  text: string,
+): Promise<void> {
+  const { id, cwd } = session ?? { id: await $.session.id(), cwd: await $.session.cwd() };
+  const peer = (await read($, agents)).peers.find((each) => each.sessionId === id);
+  const dir = cwd.slice(cwd.lastIndexOf("/") + 1);
+  const label = [dir, peer?.name].filter(Boolean).join("・") || id.slice(0, ID_SHOWN);
+  await $.ui.toast(`${label}\n${text}`);
+}
+
 // sessionId ごとに最後に見た mtime。最初の 1 回は覚えるだけで toast は出さない。
 let seen: Map<string, number> | null = null;
 
@@ -338,12 +352,7 @@ async function scanEvents($: EngineInterface): Promise<boolean> {
     isChanged = true;
     const event = JSON.parse(await $.fs.read(path)) as PeerEvent;
     if (event.name !== "turn.complete") continue;
-    // 1 行目は cwd の最後の 1 段と、最後に読んだ `claude agents` の name。どちらも無ければ
-    // sessionId の頭。2 行目は event の名前。
-    const peer = (await read($, agents)).peers.find((each) => each.sessionId === id);
-    const cwd = event.cwd.slice(event.cwd.lastIndexOf("/") + 1);
-    const label = [cwd, peer?.name].filter(Boolean).join("・") || id.slice(0, ID_SHOWN);
-    await $.ui.toast(`${label}\n${event.name}`);
+    await toast($, { id, cwd: event.cwd }, event.name);
   }
   seen = current;
   return isChanged;
@@ -705,7 +714,7 @@ async function openPane($: EngineInterface): Promise<void> {
   }
   const unknown = companion.widgets.filter((widget) => !(widget in WIDGETS));
   if (unknown.length > 0) {
-    await $.ui.toast(`kura: unknown widget ${unknown.join(", ")} — skipped`);
+    await toast($, null, `unknown widget ${unknown.join(", ")} — skipped`);
   }
   await $.ui.open({
     id: PANE,
@@ -796,7 +805,7 @@ export const register: Register = (on) => {
         await openPane($);
       }
     })().catch(async (error) => {
-      await $.ui.toast(`kura companion: ${error instanceof Error ? error.message : error}`);
+      await toast($, null, `${error instanceof Error ? error.message : error}`);
     });
     return done;
   });
