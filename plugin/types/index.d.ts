@@ -33,7 +33,7 @@ export type Layout = {
 };
 
 // agents widget の 1 行。`claude agents --json` の項目をそのまま持つ。status は status、
-// 無ければ state (process の無い background job)。isSelf はこの session か。
+// 無ければ state (process の無い background job)。
 export type Peer = {
   kind: string;
   sessionId: string;
@@ -41,10 +41,14 @@ export type Peer = {
   cwd: string;
   status: string;
   startedAt: number;
-  isSelf: boolean;
 };
-// error は `claude agents` を読めなかった理由。
-export type Agents = { peers: Peer[]; error?: string };
+// error は `claude agents` を読めなかった理由。lastEvents は session ごとに最後に読んだ event
+// (events/<sessionId>.json の name と at)。
+export type Agents = {
+  peers: Peer[];
+  error?: string;
+  lastEvents?: Record<string, { name: string; at: number }>;
+};
 
 declare module "claude-code" {
   interface PluginState {
