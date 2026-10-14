@@ -131,7 +131,8 @@ function startTicker($: EngineInterface): void {
   ticker = $.clock.every(TICK_MS, () => {
     void (async () => {
       const now = await $.clock.now();
-      const { peers, lastEvents } = await read($, agents);
+      const { peers: listed, lastEvents } = await read($, agents);
+      const peers = settle(listed, lastEvents);
       const hasWaiting =
         (await read($, history)).some((entry) => entry.card.status === "pending") ||
         (await read($, turns)).some((turn) => isWaiting(turn.summary)) ||
@@ -274,6 +275,17 @@ function rankOf(status: string): number {
 function isFresh(peer: Peer, lastEvents: Agents["lastEvents"], now: number): boolean {
   const last = lastEvents?.[peer.sessionId];
   return peer.status === "idle" && last?.name === "turn.complete" && now - last.at < FRESH_MS;
+}
+
+// turn を終えた session は busy でも idle として扱う。turn の後も process が busy なのは
+// background shell (dev server など) が動いているときで、session はこちらの返信を待っている。
+// `claude agents --json` はこの 2 つを区別しないので、自分の hook が残した turn.complete で見分ける。
+function settle(peers: Peer[], lastEvents: Agents["lastEvents"]): Peer[] {
+  return peers.map((peer) =>
+    peer.status === MOVING && lastEvents?.[peer.sessionId]?.name === "turn.complete"
+      ? { ...peer, status: "idle" }
+      : peer,
+  );
 }
 
 // table の行の順: status の順、同じ status なら name の順。
@@ -669,7 +681,7 @@ function drawAgents(elements: Elements, { agents: s, now }: PaneData) {
   const { Box, Text } = elements;
   if (s.error) return <Text color="error">{s.error}</Text>;
   if (s.peers.length === 0) return <Text>No Claude Code agents.</Text>;
-  const peers = sortPeers(s.peers);
+  const peers = sortPeers(settle(s.peers, s.lastEvents));
   return (
     <Box flexDirection="column" rowGap={1}>
       {agentsSummary(elements, peers, s.lastEvents, now)}
