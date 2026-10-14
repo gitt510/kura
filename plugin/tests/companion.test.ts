@@ -46,6 +46,9 @@ type Engine = {
   pane: Pane;
   agents: object[];
   agentsCalls: number;
+  // events/ の中身。path ごとに text と mtime。
+  files: Map<string, { text: string; mtimeMs: number }>;
+  toasts: string[];
 };
 
 // mod の下で engine が答えるもの: kura の返答、prompt、空の描画、開いている pane。
@@ -58,12 +61,21 @@ function engine(
   isHanging = false,
   tldr: object = { status: "ok", text: "three lines" },
 ): Engine {
-  const state: Engine = { calls: [], opened: [], pane, agents: [], agentsCalls: 0 };
+  const state: Engine = {
+    calls: [],
+    opened: [],
+    pane,
+    agents: [],
+    agentsCalls: 0,
+    files: new Map(),
+    toasts: [],
+  };
   on("process.run", async (_$, e) => {
     if (e.argv[0] === "claude") {
       state.agentsCalls += 1;
       return ran(JSON.stringify(state.agents));
     }
+    if (e.argv[0] === "find") return ran("");
     state.calls.push({ argv: [...e.argv], stdin: e.init?.stdin ?? "" });
     const command = e.argv[1];
     if (command === "config") return ran(JSON.stringify({ mod: { companion } }));
@@ -71,6 +83,37 @@ function engine(
     if (command === "tldr") return ran(JSON.stringify(tldr));
     return ran(card);
   });
+  on("env.get", async (_$, e) => ({ value: e.name === "HOME" ? "/home/me" : undefined }) as never);
+  on("fs.write", async (_$, e) => {
+    state.files.set(e.path, { text: e.text, mtimeMs: state.files.size + 1 });
+    return { value: undefined } as never;
+  });
+  on("fs.exists", async () => ({ value: true }) as never);
+  on(
+    "fs.list",
+    async (_$, e) =>
+      ({
+        value: [...state.files.keys()]
+          .filter((path) => path.startsWith(`${e.path}/`))
+          .map((path) => ({
+            name: path.slice(e.path.length + 1),
+            kind: "file",
+            size: 0,
+            isLink: false,
+          })),
+      }) as never,
+  );
+  on("fs.stat", async (_$, e) => {
+    const file = state.files.get(e.path);
+    if (!file) throw new Error("ENOENT");
+    return { value: { kind: "file", size: 0, mtimeMs: file.mtimeMs, isLink: false } } as never;
+  });
+  on("fs.read", async (_$, e) => ({ value: state.files.get(e.path)?.text ?? "" }) as never);
+  on("ui.toast", async (_$, e) => {
+    state.toasts.push(e.text);
+    return { value: undefined } as never;
+  });
+  on("session.cwd", async () => ({ value: "/work/kura" }) as never);
   on("prompt.submit", async (_$, e) => ({ text: e.text }));
   on("session.id", async () => ({ value: SELF }));
   on("turn.complete", async (_$, e) => ({ text: e.answer }));
@@ -463,4 +506,44 @@ test("agents は pane が見えている間だけ、見えた瞬間と 10 秒ご
   expect(state.agentsCalls).toBe(1);
   await clock.advance(5_000);
   expect(state.agentsCalls).toBe(2);
+});
+
+const EVENTS = "/home/me/.local/state/kura/events";
+const PEER = "e0959860-1ceb-4b79-9921-9faf5b142e17";
+
+test("turn.start と turn.complete を名前のまま自分の events file に書く", async ($, on) => {
+  mock.clock(on);
+  const state = engine(on, "closed", AGENTS);
+  on("turn.start", async (_$, e) => ({ turnId: e.turnId }) as never);
+  await $.session.start({ source: "startup", cwd: "/work/kura" } as never);
+  await settle();
+  const file = () => JSON.parse(state.files.get(`${EVENTS}/${SELF}.json`)?.text ?? "{}");
+  await $.turn.start({ text: "hi", turnId: "t1" } as never);
+  await settle();
+  expect(file()).toEqual(expect.objectContaining({ name: "turn.start", cwd: "/work/kura" }));
+  await $.turn.complete({ answer: "ok", reason: "answer" } as never);
+  await settle();
+  expect(file().name).toBe("turn.complete");
+});
+
+test("session の turn.complete は pane と関係なく 1 秒以内に toast に出す", async ($, on) => {
+  const clock = mock.clock(on);
+  const state = engine(on, "closed", AGENTS);
+  const write = (name: string) =>
+    state.files.set(`${EVENTS}/${PEER}.json`, {
+      text: JSON.stringify({ name, at: clock.now(), cwd: "/home/me/work/crawler" }),
+      mtimeMs: clock.now(),
+    });
+  // 始める前からある file は覚えるだけ。
+  write("turn.complete");
+  await $.session.start({ source: "startup", cwd: "/work/kura" } as never);
+  await clock.advance(1_000);
+  expect(state.toasts).toEqual([]);
+
+  await clock.advance(1_000);
+  write("turn.start");
+  await clock.advance(1_000);
+  write("turn.complete");
+  await clock.advance(1_000);
+  expect(state.toasts).toEqual(["crawler › turn.complete"]);
 });
