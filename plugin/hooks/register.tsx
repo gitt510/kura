@@ -337,11 +337,12 @@ async function scanEvents($: EngineInterface): Promise<boolean> {
     isChanged = true;
     const event = JSON.parse(await $.fs.read(path)) as PeerEvent;
     if (event.kind === "busy") continue;
-    // cwd の最後の 1 段と、最後に読んだ `claude agents` の name。どちらも無ければ sessionId の頭。
+    // 1 行目は cwd の最後の 1 段と、最後に読んだ `claude agents` の name。どちらも無ければ
+    // sessionId の頭。2 行目は event の種類。
     const peer = (await read($, agents)).peers.find((each) => each.sessionId === id);
     const cwd = event.cwd.slice(event.cwd.lastIndexOf("/") + 1);
-    const label = [cwd, peer?.name].filter(Boolean).join(" ") || id.slice(0, ID_SHOWN);
-    await $.ui.toast(event.kind === "done" ? `✨ ${label} done` : `💢 ${label} failed`);
+    const label = [cwd, peer?.name].filter(Boolean).join("・") || id.slice(0, ID_SHOWN);
+    await $.ui.toast(`${label}\n${event.kind}`);
   }
   seen = current;
   return isChanged;

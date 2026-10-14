@@ -551,5 +551,5 @@ test("session の done / failed は pane と関係なく 1 秒以内に toast �
   await clock.advance(1_000);
   write("failed");
   await clock.advance(1_000);
-  expect(state.toasts).toEqual(["✨ crawler done", "💢 crawler failed"]);
+  expect(state.toasts).toEqual(["crawler\ndone", "crawler\nfailed"]);
 });
