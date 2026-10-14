@@ -545,5 +545,5 @@ test("session の turn.complete は pane と関係なく 1 秒以内に toast �
   await clock.advance(1_000);
   write("turn.complete");
   await clock.advance(1_000);
-  expect(state.toasts).toEqual(["crawler turn.complete"]);
+  expect(state.toasts).toEqual(["crawler › turn.complete"]);
 });

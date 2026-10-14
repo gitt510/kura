@@ -317,9 +317,10 @@ async function pruneEvents($: EngineInterface): Promise<void> {
   );
 }
 
-// toast はすべてこの形: session (cwd の最後の 1 段・最後に読んだ `claude agents` の name、
-// どちらも無ければ sessionId の頭) と起きたことを 1 行に並べる。toast は 1 行しか描けず (改行は
-// 文字化けする)、見出しの行は engine が plugin 名で埋める。session を省けばこの session。
+// toast はすべてこの形: cwd の最後の 1 段 › 最後に読んだ `claude agents` の name › 起きたこと。
+// cwd と name のどちらも無ければ sessionId の頭。toast は 1 行しか描けず (改行は文字化けする)、
+// 見出しの行は engine が plugin 名で埋めるので、全部を本文の 1 行に並べる。session を省けば
+// この session。
 async function toast(
   $: EngineInterface,
   session: { id: string; cwd: string } | null,
@@ -328,8 +329,8 @@ async function toast(
   const { id, cwd } = session ?? { id: await $.session.id(), cwd: await $.session.cwd() };
   const peer = (await read($, agents)).peers.find((each) => each.sessionId === id);
   const dir = cwd.slice(cwd.lastIndexOf("/") + 1);
-  const label = [dir, peer?.name].filter(Boolean).join("・") || id.slice(0, ID_SHOWN);
-  await $.ui.toast(`${label} ${text}`);
+  const label = [dir, peer?.name].filter(Boolean).join(" › ") || id.slice(0, ID_SHOWN);
+  await $.ui.toast(`${label} › ${text}`);
 }
 
 // sessionId ごとに最後に見た mtime。最初の 1 回は覚えるだけで toast は出さない。
