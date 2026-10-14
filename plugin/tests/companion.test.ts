@@ -444,18 +444,19 @@ test("/kura-handoff はこの session の id を kura handoff に渡すだけ", 
 
 const AGENTS = { ...COMPANION, widgets: ["agents"] };
 
-test("agents widget は claude agents の行を JSON の順のまま、status / name / cwd / kind / sessionId / age で出す", async ($, on) => {
+test("agents widget は claude agents の行を status / name / cwd / kind / sessionId / age で、status の順、name の順に出す", async ($, on) => {
   const clock = mock.clock(on);
   await clock.set(10 * 60_000);
   const state = engine(on, "closed", AGENTS);
+  // JSON の順は並べ替えた後の順と違えておく。
   state.agents = [
     {
-      sessionId: "8bd8eb47-32fd-4ba1-a549-1e4e59793964",
-      name: "Alarm",
-      cwd: "/home/me/work/service-catalog",
-      kind: "background",
-      state: "blocked",
-      startedAt: clock.now() - 2 * 3_600_000,
+      sessionId: "e0959860-1ceb-4b79-9921-9faf5b142e17",
+      name: "crawler-5d",
+      cwd: "/home/me/work/cogmo-crawler",
+      kind: "interactive",
+      status: "idle",
+      startedAt: clock.now() - 30_000,
     },
     {
       sessionId: SELF,
@@ -466,12 +467,20 @@ test("agents widget は claude agents の行を JSON の順のまま、status / 
       startedAt: clock.now() - 3 * 60_000,
     },
     {
-      sessionId: "e0959860-1ceb-4b79-9921-9faf5b142e17",
-      name: "crawler-5d",
-      cwd: "/home/me/work/cogmo-crawler",
+      sessionId: "8bd8eb47-32fd-4ba1-a549-1e4e59793964",
+      name: "Alarm",
+      cwd: "/home/me/work/service-catalog",
+      kind: "background",
+      state: "blocked",
+      startedAt: clock.now() - 2 * 3_600_000,
+    },
+    {
+      sessionId: "3f0a2c11-0b7e-4c55-9d0e-1a2b3c4d5e6f",
+      name: "articles-94",
+      cwd: "/home/me/work/articles",
       kind: "interactive",
       status: "idle",
-      startedAt: clock.now() - 30_000,
+      startedAt: clock.now() - 60_000,
     },
   ];
   await $.session.start({ source: "startup", cwd: "/work/kura" } as never);
@@ -480,15 +489,30 @@ test("agents widget は claude agents の行を JSON の順のまま、status / 
 
   const pane = await $.ui.mount({ ...PANE, surface: "terminal" });
   const text = (await pane.find({ type: "Box" }))?.text ?? "";
-  expect(text).toMatch(/3 agents {2}● 1 blocked {2}[·✢✳✶✻✽] 1 busy {2}○ 1 idle/);
+  expect(text).toMatch(/4 agents {2}● 1 blocked {2}[·✢✳✶✻✽] 1 busy {2}○ 2 idle/);
   expect(text).toMatch(/Status\s*Name\s*Cwd\s*Kind\s*SessionId\s*Age\s*─+/);
   expect(text).toMatch(/● blocked\s*Alarm\s*service-catalog\s*background\s*8bd8eb4…\s*2h/);
   // busy だけ値の前に spinner の記号を回す。
   expect(text).toMatch(/[·✢✳✶✻✽] busy\s*kura-02\s*kura\s*interactive\s*9c48e03…\s*3m/);
   expect(text).toMatch(/○ idle\s*crawler-5d\s*cogmo-crawler\s*interactive\s*e095986…\s*31s/);
-  // 並べ替えない。
-  expect(text.indexOf("Alarm")).toBeLessThan(text.indexOf("kura-02"));
-  expect(text.indexOf("kura-02")).toBeLessThan(text.indexOf("crawler-5d"));
+  // blocked、busy、idle の順。同じ idle は name の順。
+  const order = ["Alarm", "kura-02", "articles-94", "crawler-5d"].map((name) => text.indexOf(name));
+  expect(order).toEqual([...order].sort((a, b) => a - b));
+  await pane.unmount();
+});
+
+test("agents の集計行は busy と idle を 0 でも出し、ほかは 1 つ以上のときだけ出す", async ($, on) => {
+  const clock = mock.clock(on);
+  const state = engine(on, "closed", AGENTS);
+  state.agents = [{ sessionId: SELF, name: "kura-02", cwd: "/w/kura", status: "idle" }];
+  await $.session.start({ source: "startup", cwd: "/work/kura" } as never);
+  await open($);
+  await clock.advance(1_000);
+
+  const pane = await $.ui.mount({ ...PANE, surface: "terminal" });
+  const text = (await pane.find({ type: "Box" }))?.text ?? "";
+  expect(text).toMatch(/1 agent {2}● 0 busy {2}○ 1 idle/);
+  expect(text).not.toMatch(/blocked/);
   await pane.unmount();
 });
 
@@ -545,5 +569,37 @@ test("session の turn.complete は pane と関係なく 1 秒以内に toast �
   await clock.advance(1_000);
   write("turn.complete");
   await clock.advance(1_000);
-  expect(state.toasts).toEqual(["crawler › turn.complete"]);
+  expect(state.toasts).toEqual(["🔔 crawler › turn.complete"]);
+});
+
+test("turn を終えて 10 分以内の idle の行には光を流し、過ぎたら止める", async ($, on) => {
+  const clock = mock.clock(on);
+  await clock.set(60 * 60_000);
+  const state = engine(on, "closed", AGENTS);
+  state.agents = [{ sessionId: PEER, name: "crawler-5d", cwd: "/w/crawler", status: "idle" }];
+  state.files.set(`${EVENTS}/${PEER}.json`, {
+    text: JSON.stringify({ name: "turn.complete", at: clock.now(), cwd: "/w/crawler" }),
+    mtimeMs: clock.now(),
+  });
+  await $.session.start({ source: "startup", cwd: "/work/kura" } as never);
+  await open($);
+  await clock.advance(1_000);
+
+  // 光は文字の色の違いで出る: 描いた Text の props を並べて比べる。
+  const frames = async () => {
+    const pane = await $.ui.mount({ ...PANE, surface: "terminal" });
+    const texts = await pane.findAll({ type: "Text" });
+    await pane.unmount();
+    return JSON.stringify(texts.map((text) => [text.text, text.props]));
+  };
+  const first = await frames();
+  expect(first).toContain("yellow");
+  await clock.advance(240);
+  expect(await frames()).not.toBe(first);
+
+  // 10 分を過ぎたら止まる: その後は描き直しても変わらない。
+  await clock.advance(10 * 60_000);
+  const settled = await frames();
+  await clock.advance(240);
+  expect(await frames()).toBe(settled);
 });

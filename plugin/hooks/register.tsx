@@ -131,10 +131,11 @@ function startTicker($: EngineInterface): void {
   ticker = $.clock.every(TICK_MS, () => {
     void (async () => {
       const now = await $.clock.now();
+      const { peers, lastEvents } = await read($, agents);
       const hasWaiting =
         (await read($, history)).some((entry) => entry.card.status === "pending") ||
         (await read($, turns)).some((turn) => isWaiting(turn.summary)) ||
-        ((await read($, agents)).peers.some((peer) => peer.status === MOVING) &&
+        (peers.some((peer) => peer.status === MOVING || isFresh(peer, lastEvents, now)) &&
           (await paneState($)).isInView);
       if (!hasWaiting) {
         ticker?.cancel();
@@ -225,7 +226,8 @@ function cardRows(
 
 // ---- agents ----
 
-// agents widget は `claude agents --json` の行を、JSON の順のまま table に出す。値は言い換えず、
+// agents widget は `claude agents --json` の行を、status の順、同じ status なら name の順に並べて
+// table に出す。値は言い換えず、
 // status を値ごとの色で出すだけ。列の幅は中身から決め、切り詰めは Box / Text の layout に任せる。
 // `claude agents` は 1 回の起動で CPU を約 0.15 秒使い、pane を開いた session がそれぞれ起動する。
 // なので pane が見えている間だけ POLL_MS ごとに読み、見えるようになった瞬間と、ほかの session の
@@ -236,20 +238,53 @@ const CHECK_MS = 1_000;
 const AGENTS_TIMEOUT_MS = 10_000;
 
 // status の値ごとの記号と色。記号は herdr の status 表示に合わせる。色が付くのは動いているもの
-// (busy: green、spinner の記号を回し、行全体に光を流す) と、こちらが動かないと進まないもの
-// (blocked / waiting / failed: red) だけで、ほかは地の文字色のまま記号で見分ける。
+// (busy: green、spinner の記号を回し、行全体に光を流す)、turn を終えたばかりでこちらの返信を
+// 待っているもの (FRESH_MS 以内の idle: yellow、行全体に光を流す)、こちらが動かないと進まない
+// もの (blocked / waiting / failed: red) だけで、ほかは地の文字色のまま記号で見分ける。
+// 並びは集計行と table の status の順: こちらが動かないと進まないもの、動いているもの、
+// 止まっているものの順。ここに無い status はその後ろ。
 const MOVING = "busy";
-const STATUS_LOOK: Record<string, { color?: string; mark: string }> = {
+// spin は光を流す行で回す記号と、1 つ進める間隔。busy は本家の spinner で作業中を、turn を
+// 終えたばかりの idle は点字の loading で、こちらの返事を待っていることを示す。
+type Look = { color?: string; mark: string; spin?: { frames: string[]; stepMs: number } };
+const STATUS_LOOK: Record<string, Look> = {
   blocked: { color: "red", mark: "●" },
   waiting: { color: "red", mark: "●" },
   failed: { color: "red", mark: "●" },
+  busy: { color: "green", mark: "●", spin: { frames: CYCLE, stepMs: TICK_MS } },
   done: { mark: "●" },
-  busy: { color: "green", mark: "●" },
-  idle: { mark: "○" },
+  idle: {
+    mark: "○",
+    spin: { frames: ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"], stepMs: TICK_MS },
+  },
 };
+// turn を終えて idle になった session の行に、光を流す時間と色。過ぎれば地の文字色に戻る。
+const FRESH_MS = 10 * 60_000;
+const FRESH_COLOR = "yellow";
+const STATUS_ORDER = Object.keys(STATUS_LOOK);
+// 集計行に 0 でも出す status。
+const ALWAYS_COUNTED = ["busy", "idle"];
+
+function rankOf(status: string): number {
+  const rank = STATUS_ORDER.indexOf(status);
+  return rank === -1 ? STATUS_ORDER.length : rank;
+}
+
+// turn を終えてから FRESH_MS 以内の idle か。終えた時刻は events の turn.complete から読む。
+function isFresh(peer: Peer, lastEvents: Agents["lastEvents"], now: number): boolean {
+  const last = lastEvents?.[peer.sessionId];
+  return peer.status === "idle" && last?.name === "turn.complete" && now - last.at < FRESH_MS;
+}
+
+// table の行の順: status の順、同じ status なら name の順。
+function sortPeers(peers: Peer[]): Peer[] {
+  return [...peers].sort(
+    (a, b) => rankOf(a.status) - rankOf(b.status) || a.name.localeCompare(b.name),
+  );
+}
 const OTHER_LOOK = { mark: "·" };
 
-function lookOf(status: string): { color?: string; mark: string } {
+function lookOf(status: string): Look {
   return STATUS_LOOK[status] ?? OTHER_LOOK;
 }
 
@@ -271,7 +306,6 @@ async function readPeers($: EngineInterface): Promise<Peer[]> {
   if (run.exitCode !== 0) {
     throw new Error(run.stderr.trim().split("\n").pop() || `claude agents: exit ${run.exitCode}`);
   }
-  const self = await $.session.id();
   return (JSON.parse(run.stdout) as AgentRow[]).map((row) => ({
     kind: row.kind ?? "",
     sessionId: row.sessionId ?? "",
@@ -280,7 +314,6 @@ async function readPeers($: EngineInterface): Promise<Peer[]> {
     // process の無い background job は status を持たず、state だけを持つ。
     status: row.status ?? row.state ?? "",
     startedAt: row.startedAt ?? 0,
-    isSelf: row.sessionId === self,
   }));
 }
 
@@ -320,17 +353,18 @@ async function pruneEvents($: EngineInterface): Promise<void> {
 // toast はすべてこの形: cwd の最後の 1 段 › 最後に読んだ `claude agents` の name › 起きたこと。
 // cwd と name のどちらも無ければ sessionId の頭。toast は 1 行しか描けず (改行は文字化けする)、
 // 見出しの行は engine が plugin 名で埋めるので、全部を本文の 1 行に並べる。session を省けば
-// この session。
+// この session。icon があれば先頭に置く。
 async function toast(
   $: EngineInterface,
   session: { id: string; cwd: string } | null,
   text: string,
+  icon?: string,
 ): Promise<void> {
   const { id, cwd } = session ?? { id: await $.session.id(), cwd: await $.session.cwd() };
   const peer = (await read($, agents)).peers.find((each) => each.sessionId === id);
   const dir = cwd.slice(cwd.lastIndexOf("/") + 1);
   const label = [dir, peer?.name].filter(Boolean).join(" › ") || id.slice(0, ID_SHOWN);
-  await $.ui.toast(`${label} › ${text}`);
+  await $.ui.toast(`${icon ? `${icon} ` : ""}${label} › ${text}`);
 }
 
 // sessionId ごとに最後に見た mtime。最初の 1 回は覚えるだけで toast は出さない。
@@ -341,6 +375,7 @@ async function scanEvents($: EngineInterface): Promise<boolean> {
   const dir = await eventsDir($);
   const entries = await $.fs.list(dir).catch(() => []);
   const current = new Map<string, number>();
+  const found: NonNullable<Agents["lastEvents"]> = {};
   let isChanged = false;
   for (const entry of entries) {
     if (entry.kind !== "file" || !entry.name.endsWith(".json")) continue;
@@ -350,11 +385,18 @@ async function scanEvents($: EngineInterface): Promise<boolean> {
     const mtime = (await $.fs.stat(path).catch(() => null))?.mtimeMs;
     if (mtime === undefined) continue;
     current.set(id, mtime);
-    if (seen === null || seen.get(id) === mtime) continue;
-    isChanged = true;
+    if (seen?.get(id) === mtime) continue;
+    // 最初の 1 回は中身を覚えるだけ: idle になった時刻は reload をまたいでも要る。
     const event = JSON.parse(await $.fs.read(path)) as PeerEvent;
+    found[id] = { name: event.name, at: event.at };
+    if (seen === null) continue;
+    isChanged = true;
     if (event.name !== "turn.complete") continue;
-    await toast($, { id, cwd: event.cwd }, event.name);
+    // turn が終わったこと (答え・中断・error のどれでも) を知らせる: 成功を言わない鈴。
+    await toast($, { id, cwd: event.cwd }, event.name, "🔔");
+  }
+  if (Object.keys(found).length > 0) {
+    await update($, agents, (s) => ({ ...s, lastEvents: { ...s.lastEvents, ...found } }));
   }
   seen = current;
   return isChanged;
@@ -381,7 +423,7 @@ function startPolling($: EngineInterface): void {
     try {
       const list = await readPeers($);
       readAt = await $.clock.now();
-      await update($, agents, () => ({ peers: list }));
+      await update($, agents, (s) => ({ peers: list, lastEvents: s.lastEvents }));
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       await update($, agents, (s) => ({ ...s, error: message }));
@@ -429,10 +471,10 @@ function sessionRow(
   key: string,
   values: RowValues,
   widths: Widths,
-  options: { statusColor?: string; isBold?: boolean; isHoverable?: boolean; wave?: number } = {},
+  options: { statusColor?: string; isHoverable?: boolean; wave?: number } = {},
 ): RenderElement {
   const { Box, Text } = elements;
-  const { statusColor, isBold = false, isHoverable = false, wave } = options;
+  const { statusColor, isHoverable = false, wave } = options;
   const order = ["status", "name", "cwd", "kind", "sessionId", "age"] as const;
   const width = (column: (typeof order)[number]) =>
     column === "age" ? AGE_WIDTH : widths[column] + 1;
@@ -457,7 +499,6 @@ function sessionRow(
         >
           <Text
             color={column === "status" || wave !== undefined ? statusColor : undefined}
-            bold={isBold}
             wrap="truncate-end"
           >
             {wave !== undefined && statusColor
@@ -470,37 +511,73 @@ function sessionRow(
   );
 }
 
-// status の記号。busy は spinner の記号を回す。
-function statusMark(status: string, now: number): string {
-  const spinning = status === MOVING ? CYCLE[Math.floor(now / TICK_MS) % CYCLE.length] : undefined;
-  return spinning ?? lookOf(status).mark;
+// status の記号。光を流す行 (busy と、turn を終えたばかりの idle) は、その status の記号を回す。
+function statusMark(status: string, now: number, isSpinning: boolean): string {
+  const { mark, spin } = lookOf(status);
+  if (!isSpinning || !spin) return mark;
+  return spin.frames[Math.floor(now / spin.stepMs) % spin.frames.length];
 }
 
 // status は値をそのまま、前に記号を置く。
-function statusText(status: string, now: number): string {
-  return `${statusMark(status, now)} ${status || "-"}`;
+function statusText(status: string, now: number, isSpinning: boolean): string {
+  return `${statusMark(status, now, isSpinning)} ${status || "-"}`;
 }
 
-// table の上の行: session の数と、status の値ごとの数。値は JSON に出てきた順。
-function agentsSummary({ Text }: Elements, peers: Peer[], now: number): RenderElement {
-  const counts = new Map<string, number>();
+// 行の見た目: 光を流すか (spinner の記号も回す) と、status の色。
+function rowLook(
+  peer: Peer,
+  lastEvents: Agents["lastEvents"],
+  now: number,
+): { isLit: boolean; color?: string } {
+  if (isFresh(peer, lastEvents, now)) return { isLit: true, color: FRESH_COLOR };
+  return { isLit: peer.status === MOVING, color: lookOf(peer.status).color };
+}
+
+// table の上の行: session の数と、status の値ごとの数。値は status の順。busy と idle は 0 でも
+// 出し、ほかは 1 つ以上あるときだけ出す。
+// 記号と色は、その status の行のどれかが光っていれば、その行と同じにする。
+function agentsSummary(
+  { Text }: Elements,
+  peers: Peer[],
+  lastEvents: Agents["lastEvents"],
+  now: number,
+): RenderElement {
+  const lit = (status: string) =>
+    peers
+      .filter((peer) => peer.status === status)
+      .map((peer) => rowLook(peer, lastEvents, now))
+      .find((look) => look.isLit);
+  const counts = new Map<string, number>(ALWAYS_COUNTED.map((status) => [status, 0]));
   for (const peer of peers) counts.set(peer.status, (counts.get(peer.status) ?? 0) + 1);
+  const ordered = [...counts].sort(([a], [b]) => rankOf(a) - rankOf(b));
   return (
     <Text wrap="truncate-end">
       <Text bold>{`${peers.length} ${peers.length === 1 ? "agent" : "agents"}`}</Text>
-      {[...counts].map(([status, count]) => (
-        <Text key={status}>
-          {"  "}
-          <Text color={lookOf(status).color}>{`${statusMark(status, now)} `}</Text>
-          {`${count} ${status || "-"}`}
-        </Text>
-      ))}
+      {/* 0 の status は記号を回さず、色も付けずに地の文字で出す。 */}
+      {ordered.map(([status, count]) =>
+        count === 0 ? (
+          <Text key={status}>{`  ${lookOf(status).mark} ${count} ${status}`}</Text>
+        ) : (
+          <Text key={status}>
+            {"  "}
+            <Text color={lit(status)?.color ?? lookOf(status).color}>
+              {`${statusMark(status, now, lit(status) !== undefined)} `}
+            </Text>
+            {`${count} ${status || "-"}`}
+          </Text>
+        ),
+      )}
     </Text>
   );
 }
 
 // session の table: 見出し、その下の罫線、1 session 1 行。指した行は地の色が変わる。
-function agentsTable(elements: Elements, peers: Peer[], now: number): RenderElement {
+function agentsTable(
+  elements: Elements,
+  peers: Peer[],
+  lastEvents: Agents["lastEvents"],
+  now: number,
+): RenderElement {
   const { Box } = elements;
   const rows = peers.map((peer) => ({
     peer,
@@ -565,24 +642,24 @@ function agentsTable(elements: Elements, peers: Peer[], now: number): RenderElem
         },
         widths,
       )}
-      {rows.map(({ peer, ...values }, index) =>
-        sessionRow(
+      {rows.map(({ peer, ...values }, index) => {
+        const look = rowLook(peer, lastEvents, now);
+        return sessionRow(
           elements,
           peer.sessionId || String(index),
           {
             ...values,
-            status: statusText(peer.status, now),
+            status: statusText(peer.status, now, look.isLit),
             age: elapsed(now - peer.startedAt),
           },
           widths,
           {
-            statusColor: lookOf(peer.status).color,
-            isBold: peer.isSelf,
+            statusColor: look.color,
             isHoverable: true,
-            wave: peer.status === MOVING ? now : undefined,
+            wave: look.isLit ? now : undefined,
           },
-        ),
-      )}
+        );
+      })}
     </Box>
   );
 }
@@ -592,10 +669,11 @@ function drawAgents(elements: Elements, { agents: s, now }: PaneData) {
   const { Box, Text } = elements;
   if (s.error) return <Text color="error">{s.error}</Text>;
   if (s.peers.length === 0) return <Text>No Claude Code agents.</Text>;
+  const peers = sortPeers(s.peers);
   return (
     <Box flexDirection="column" rowGap={1}>
-      {agentsSummary(elements, s.peers, now)}
-      {agentsTable(elements, s.peers, now)}
+      {agentsSummary(elements, peers, s.lastEvents, now)}
+      {agentsTable(elements, peers, s.lastEvents, now)}
     </Box>
   );
 }
