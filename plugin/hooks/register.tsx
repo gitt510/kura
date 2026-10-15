@@ -353,6 +353,17 @@ async function publish($: EngineInterface, name: PeerEvent["name"]): Promise<voi
   await $.fs.write(`${await eventsDir($)}/${await $.session.id()}.json`, JSON.stringify(event));
 }
 
+// background の subagent が 1 つ終わるたびに、親はその通知に答える turn を回す。
+// 他の subagent がまだ動いている間の turn.complete は書かない: 最後の 1 つの後だけ鈴を鳴らす。
+async function publishComplete($: EngineInterface): Promise<void> {
+  const running = (await $.agent.list()).filter((agent) => agent.status === "running");
+  if (running.length > 0) {
+    $.ui.log(`turn.complete skipped: ${running.length} subagent(s) running`, { to: "debug" });
+    return;
+  }
+  await publish($, "turn.complete");
+}
+
 async function pruneEvents($: EngineInterface): Promise<void> {
   const dir = await eventsDir($);
   if (!(await $.fs.exists(dir))) return;
@@ -360,6 +371,12 @@ async function pruneEvents($: EngineInterface): Promise<void> {
     ["find", dir, "-name", "*.json", "-mtime", `+${EVENT_TTL_DAYS - 1}`, "-delete"],
     { timeoutMs: AGENTS_TIMEOUT_MS },
   );
+}
+
+// debug log は --debug / --debug-file で起動したときだけ残る。開発時に `[kura]` の行を見る。
+// 握りつぶす失敗・error の状態だけを残す失敗は、ここに理由を書く。
+function debug($: EngineInterface, where: string, error: unknown): void {
+  $.ui.log(`${where}: ${error instanceof Error ? error.message : error}`, { to: "debug" });
 }
 
 // toast はすべてこの形: cwd の最後の 1 段 › 最後に読んだ `claude agents` の name › 起きたこと。
@@ -376,7 +393,9 @@ async function toast(
   const peer = (await read($, agents)).peers.find((each) => each.sessionId === id);
   const dir = cwd.slice(cwd.lastIndexOf("/") + 1);
   const label = [dir, peer?.name].filter(Boolean).join(" › ") || id.slice(0, ID_SHOWN);
-  await $.ui.toast(`${icon ? `${icon} ` : ""}${label} › ${text}`);
+  const line = `${icon ? `${icon} ` : ""}${label} › ${text}`;
+  $.ui.log(`toast: ${line}`, { to: "debug" });
+  await $.ui.toast(line);
 }
 
 // sessionId ごとに最後に見た mtime。最初の 1 回は覚えるだけで toast は出さない。
@@ -426,7 +445,14 @@ function startPolling($: EngineInterface): void {
   const poll = async () => {
     const isInView = (await paneState($)).isInView;
     // event は pane が隠れていても見る: toast は pane と関係なく出す。
-    if (await scanEvents($).catch(() => false)) readAt = 0;
+    if (
+      await scanEvents($).catch((error) => {
+        debug($, "scanEvents", error);
+        return false;
+      })
+    ) {
+      readAt = 0;
+    }
     const isAppearing = isInView && !wasInView;
     wasInView = isInView;
     if (isPolling || !isInView) return;
@@ -793,7 +819,8 @@ async function loadLayout($: EngineInterface): Promise<Layout> {
 async function isListed($: EngineInterface, widget: string): Promise<boolean> {
   try {
     return ((await read($, layout)) ?? (await loadLayout($))).widgets.includes(widget);
-  } catch {
+  } catch (error) {
+    debug($, "isListed", error);
     return false;
   }
 }
@@ -837,7 +864,8 @@ async function summarize($: EngineInterface, id: string): Promise<void> {
         ? { status: "ok", text: out.text, ...(out.question ? { question: out.question } : {}) }
         : { status: "error" },
     );
-  } catch {
+  } catch (error) {
+    debug($, "summarize", error);
     await settle({ status: "error" }).catch(() => {});
   }
 }
@@ -969,7 +997,11 @@ export const register: Register = (on) => {
       );
       startTicker($);
       try {
-        const card = parseCard(await kura($, ["akapen"], e.text));
+        const stdout = await kura($, ["akapen"], e.text);
+        const card = parseCard(stdout);
+        if (card?.status === "error") {
+          debug($, "akapen", `unexpected output ${stdout.slice(0, 200)}`);
+        }
         await settle(card);
         // 直すところが無ければ、その旨を一瞬だけ出して消す。
         if (card?.status === "ok" && card.items.length === 0) {
@@ -980,7 +1012,8 @@ export const register: Register = (on) => {
           await flash(true);
           $.clock.after(FLASH_MS, () => void flash(false).catch(() => {}));
         }
-      } catch {
+      } catch (error) {
+        debug($, "akapen", error);
         await settle({ status: "error" });
       }
     })().catch(() => {});
@@ -1003,14 +1036,16 @@ export const register: Register = (on) => {
   });
 
   on("turn.start", async ($, e, next) => {
-    void publish($, "turn.start").catch(() => {});
+    void publish($, "turn.start").catch((error) => debug($, "publish turn.start", error));
     return next(e);
   });
 
   on("turn.complete", async ($, e, next) => {
     const done = await next(e);
     // main loop の turn だけ。subagent の turn は session の turn ではない。
-    if (e.agentId === undefined) void publish($, "turn.complete").catch(() => {});
+    if (e.agentId === undefined) {
+      void publishComplete($).catch((error) => debug($, "publish turn.complete", error));
+    }
     if (e.agentId !== undefined || !(await isListed($, "tldr"))) return done;
     const open = (await read($, turns)).at(-1);
     const openId = open?.summary.status === "answering" ? open.id : undefined;
