@@ -49,6 +49,8 @@ type Engine = {
   // events/ の中身。path ごとに text と mtime。
   files: Map<string, { text: string; mtimeMs: number }>;
   toasts: string[];
+  // $.agent.list() が返す、この session の subagent。
+  subagents: object[];
 };
 
 // mod の下で engine が答えるもの: kura の返答、prompt、空の描画、開いている pane。
@@ -69,6 +71,7 @@ function engine(
     agentsCalls: 0,
     files: new Map(),
     toasts: [],
+    subagents: [],
   };
   on("process.run", async (_$, e) => {
     if (e.argv[0] === "claude") {
@@ -109,6 +112,7 @@ function engine(
     return { value: { kind: "file", size: 0, mtimeMs: file.mtimeMs, isLink: false } } as never;
   });
   on("fs.read", async (_$, e) => ({ value: state.files.get(e.path)?.text ?? "" }) as never);
+  on("agent.list", async () => ({ value: state.subagents }) as never);
   on("ui.toast", async (_$, e) => {
     state.toasts.push(e.text);
     return { value: undefined } as never;
@@ -545,6 +549,27 @@ test("turn.start と turn.complete を名前のまま自分の events file に�
   await $.turn.start({ text: "hi", turnId: "t1" } as never);
   await settle();
   expect(file()).toEqual(expect.objectContaining({ name: "turn.start", cwd: "/work/kura" }));
+  await $.turn.complete({ answer: "ok", reason: "answer" } as never);
+  await settle();
+  expect(file().name).toBe("turn.complete");
+});
+
+test("subagent がまだ動いている間の turn.complete は events file に書かない", async ($, on) => {
+  mock.clock(on);
+  const state = engine(on, "closed", AGENTS);
+  on("turn.start", async (_$, e) => ({ turnId: e.turnId }) as never);
+  await $.session.start({ source: "startup", cwd: "/work/kura" } as never);
+  await settle();
+  const file = () => JSON.parse(state.files.get(`${EVENTS}/${SELF}.json`)?.text ?? "{}");
+  const agent = (status: string) => ({ id: "a1", description: "", type: "Explore", status });
+  state.subagents = [agent("completed"), { ...agent("running"), id: "a2" }];
+  await $.turn.start({ text: "<task-notification>", turnId: "t1" } as never);
+  await $.turn.complete({ answer: "ok", reason: "answer" } as never);
+  await settle();
+  expect(file().name).toBe("turn.start");
+
+  state.subagents = [agent("completed"), { ...agent("completed"), id: "a2" }];
+  await $.turn.start({ text: "<task-notification>", turnId: "t2" } as never);
   await $.turn.complete({ answer: "ok", reason: "answer" } as never);
   await settle();
   expect(file().name).toBe("turn.complete");
