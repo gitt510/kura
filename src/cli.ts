@@ -13,6 +13,7 @@ import { runLifecycle } from "./cli/lifecycle.ts";
 import { runStatus } from "./cli/status.ts";
 import { runTldr } from "./cli/tldr.ts";
 import { runUsage } from "./cli/usage.ts";
+import { runVerbatim } from "./cli/verbatim.ts";
 
 const usage = `usage: kura setup
        kura config
@@ -31,6 +32,7 @@ const usage = `usage: kura setup
        kura english [<YYYY-MM-DD> <hour 0-23>]
        kura akapen < prompt.txt
        kura tldr < turns.json
+       kura verbatim < prompt.json
        kura --help
 `;
 
@@ -74,6 +76,9 @@ async function main(): Promise<number> {
     }
     if (command === "tldr") {
       return await runTldr(args);
+    }
+    if (command === "verbatim") {
+      return await runVerbatim(args);
     }
     if (command === "schedule" || command === "publish") {
       return await runFeatures(command, args);

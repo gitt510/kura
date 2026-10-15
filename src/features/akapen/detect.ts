@@ -11,11 +11,11 @@ export function shouldSkip(text: string): boolean {
   return head.startsWith("<") || head.startsWith("/") || head.startsWith("!");
 }
 
-// 長大な貼り付けは先頭だけを feedback 対象にする。
+// 長大な貼り付けは末尾だけを対象にする — 貼り付けの後ろに本人の言葉を書くことが多い。
 const CLIP_THRESHOLD = 3000;
 const CLIP_LENGTH = 1500;
 
 export function clipInput(text: string): { text: string; truncated: boolean } {
   if (text.length <= CLIP_THRESHOLD) return { text, truncated: false };
-  return { text: text.slice(0, CLIP_LENGTH), truncated: true };
+  return { text: text.slice(-CLIP_LENGTH), truncated: true };
 }

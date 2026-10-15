@@ -96,10 +96,10 @@ test("companion は既定で閉じ、幅と高さは Claude Code に任せ、aka
     columns: null,
     rows: null,
     widgets: ["akapen", "tldr"],
-    ratio: 0.5,
+    ratio: [0.5, 0.5],
   });
   const config = parseConfig(
-    { mod: { companion: { autoOpen: true, columns: 64, widgets: ["tldr"], ratio: 0.3 } } },
+    { mod: { companion: { autoOpen: true, columns: 64, widgets: ["tldr"], ratio: [1] } } },
     "config.json",
   );
   expect(config.mod.companion).toEqual({
@@ -107,7 +107,7 @@ test("companion は既定で閉じ、幅と高さは Claude Code に任せ、aka
     columns: 64,
     rows: null,
     widgets: ["tldr"],
-    ratio: 0.3,
+    ratio: [1],
   });
 });
 
@@ -118,12 +118,15 @@ test("companion の不正な値は項目名付きで拒否する", () => {
   expect(() => parseConfig({ mod: { companion: { columns: 0 } } }, "c.json")).toThrow(
     "mod.companion.columns must be a positive integer",
   );
-  expect(() => parseConfig({ mod: { companion: { widgets: ["a", "b", "c"] } } }, "c.json")).toThrow(
-    "mod.companion.widgets must list at most 2 widgets",
+  expect(() =>
+    parseConfig({ mod: { companion: { widgets: ["a", "b", "c", "d"] } } }, "c.json"),
+  ).toThrow("mod.companion.widgets must list at most 3 widgets");
+  expect(() => parseConfig({ mod: { companion: { ratio: [0.5, 0] } } }, "c.json")).toThrow(
+    "mod.companion.ratio.1 must be a positive number",
   );
-  expect(() => parseConfig({ mod: { companion: { ratio: 1 } } }, "c.json")).toThrow(
-    "mod.companion.ratio must be a number between 0 and 1",
-  );
+  expect(() =>
+    parseConfig({ mod: { companion: { widgets: ["akapen", "verbatim", "tldr"] } } }, "c.json"),
+  ).toThrow("mod.companion.ratio must list one share per widget in mod.companion.widgets");
 });
 
 test("redactConfig は参照でない webhook だけを伏せる", () => {

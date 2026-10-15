@@ -23,13 +23,25 @@ export type Turn = {
   summary: Tldr;
   startedAt?: number;
 };
+// pending は通訳している間。
+export type Translation =
+  | { status: "pending" }
+  | { status: "ok"; text: string }
+  | { status: "error" };
+// verbatim widget が出す直近の 1 prompt。id は同じ prompt の card / turn と同じ。
+export type Sentence = {
+  id: string;
+  input: string;
+  translation: Translation;
+  startedAt?: number;
+};
 // `kura config` の mod.companion section。null は Claude Code の既定に任せる。
 export type Layout = {
   autoOpen: boolean;
   columns: number | null;
   rows: number | null;
-  widgets: string[]; // 上から順、最大 2 つ。akapen / tldr の生成はここに載っている間だけ
-  ratio: number; // 上の widget が占める高さの割合。1 つなら無視
+  widgets: string[]; // 上から順、最大 3 つ。akapen / tldr / verbatim の生成はここに載っている間だけ
+  ratio: number[]; // widget ごとの高さの取り分。widgets と同じ数で、合計で割る
 };
 
 // agents widget の 1 行。`claude agents --json` の項目をそのまま持つ。status は status、
@@ -55,6 +67,7 @@ declare module "claude-code" {
     kura: {
       history: Entry[];
       turns: Turn[];
+      sentence: Sentence | null;
       layout: Layout | null;
       frame: number;
       agents: Agents;

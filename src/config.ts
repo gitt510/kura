@@ -25,7 +25,7 @@ const object = (shape: z.ZodRawShape) =>
   z.strictObject(shape, { error: "must be an object" }).prefault({});
 
 // feature ごとの生成設定。agent はその feature を回せる CLI、model / effort は null なら CLI の既定。
-// model は書かなければ feature の既定 (akapen / tldr は opus)、null と書けば CLI の既定。
+// model は書かなければ feature の既定 (akapen / tldr / verbatim は opus)、null と書けば CLI の既定。
 // effort の値の妥当性は agent ごとに違うので使う側 (agent/run.ts) が検証する。
 const AGENTS = ["claude", "codex"] as const;
 export type Agent = (typeof AGENTS)[number];
@@ -59,31 +59,46 @@ const Config = z.strictObject(
     features: object({
       akapen: prompted("opus"), // 速さより質 — 既定は opus
       tldr: prompted("opus"),
+      verbatim: prompted("opus"), // 訳語の自然さが価値 — 既定は opus
       timeline: published,
       english: published,
     }),
     mod: object({
       // Claude Code の mod (plugin/) の pane。null は Claude Code の既定に任せる。
       // widget の id が mod に実在するかは mod が判定する。
-      companion: object({
-        autoOpen: flag.default(false), // session 開始時に pane を開く
-        columns: count.nullable().default(null), // 横に dock したときの幅
-        rows: count.nullable().default(null), // prompt の上に置いたときの高さ
-        // 上から順に積む widget の id。最大 2 つ。空なら companion は何もしない。
-        // akapen / tldr の生成はここに載っている間だけ走る。
-        widgets: z
-          .array(z.string({ error: "must be a list of widget ids" }).min(1), {
-            error: "must be a list of widget ids",
-          })
-          .max(2, { error: "must list at most 2 widgets" })
-          .default(["akapen", "tldr"]),
-        // 上の widget が占める高さの割合。widget が 1 つなら無視する。
-        ratio: z
-          .number({ error: "must be a number between 0 and 1" })
-          .gt(0, { error: "must be a number between 0 and 1" })
-          .lt(1, { error: "must be a number between 0 and 1" })
-          .default(0.5),
-      }),
+      companion: z
+        .strictObject(
+          {
+            autoOpen: flag.default(false), // session 開始時に pane を開く
+            columns: count.nullable().default(null), // 横に dock したときの幅
+            rows: count.nullable().default(null), // prompt の上に置いたときの高さ
+            // 上から順に積む widget の id。最大 3 つ。空なら companion は何もしない。
+            // akapen / tldr / verbatim の生成はここに載っている間だけ走る。
+            widgets: z
+              .array(z.string({ error: "must be a list of widget ids" }).min(1), {
+                error: "must be a list of widget ids",
+              })
+              .max(3, { error: "must list at most 3 widgets" })
+              .default(["akapen", "tldr"]),
+            // widget ごとの高さの取り分。widgets と同じ順・同じ数。合計で割るので和は 1 でなくてよい。
+            ratio: z
+              .array(
+                z
+                  .number({ error: "must be a positive number" })
+                  .positive({ error: "must be a positive number" }),
+                {
+                  error: "must be a list of positive numbers",
+                },
+              )
+              .default([0.5, 0.5]),
+          },
+          { error: "must be an object" },
+        )
+        .refine((companion) => companion.ratio.length === companion.widgets.length, {
+          path: ["ratio"],
+          error: "must list one share per widget in mod.companion.widgets",
+        })
+        .prefault({}),
     }),
   },
   { error: "must be a JSON object" },

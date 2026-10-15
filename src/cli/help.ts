@@ -124,6 +124,17 @@ line, or null when the reply did not give one. stdin is {"turns": [{question, an
 oldest first; up to 3 turns before the last one are passed as context.
 Nothing is stored. The model is tldr.model in config.json (default opus).
 `,
+  verbatim: `usage: kura verbatim < prompt.json
+
+Say one prompt again as the English a native developer would have typed,
+whole and verbatim (fillers and asides kept; quoted, fenced or pasted
+material becomes [pasted]), and print it as JSON: {status, model, text}.
+stdin is {"input": string, "turns"?: [{question, answer}, ...]}, the turns
+before it oldest first; the last one is passed as context. An input under 3
+characters or starting with <, / or ! prints {"status":"skipped"}. Invalid
+stdin exits 2. Nothing is stored. The model is features.verbatim.model in
+config.json (default opus).
+`,
 };
 
 export function helpText(command: string): string | null {
