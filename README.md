@@ -99,6 +99,7 @@ $EDITOR "${XDG_CONFIG_HOME:-$HOME/.config}/kura/config.json"
   "features": {
     "akapen": { "agent": "claude", "model": "opus", "effort": null },
     "tldr": { "agent": "claude", "model": "opus", "effort": null },
+    "verbatim": { "agent": "claude", "model": "opus", "effort": null },
     "timeline": {
       "agent": "claude", "model": null, "effort": null,
       "publish": { "enabled": false, "discord": { "webhook": null, "avatar": null } }
@@ -114,7 +115,7 @@ $EDITOR "${XDG_CONFIG_HOME:-$HOME/.config}/kura/config.json"
       "columns": null,
       "rows": null,
       "widgets": ["akapen", "tldr"],
-      "ratio": 0.5
+      "ratio": [0.5, 0.5]
     }
   }
 }
@@ -122,16 +123,16 @@ $EDITOR "${XDG_CONFIG_HOME:-$HOME/.config}/kura/config.json"
 
 | Key | Consumer |
 | --- | --- |
-| `features.<name>.agent` | CLI that generates the feature: `claude` (default) or `codex`; `akapen` / `tldr` accept `claude` only (rejected at load) |
-| `features.<name>.model` | Model for that feature; omitted means the feature default (`akapen` / `tldr`: `opus`, others: CLI default), `null` means the CLI default |
+| `features.<name>.agent` | CLI that generates the feature: `claude` (default) or `codex`; `akapen` / `tldr` / `verbatim` accept `claude` only (rejected at load) |
+| `features.<name>.model` | Model for that feature; omitted means the feature default (`akapen` / `tldr` / `verbatim`: `opus`, others: CLI default), `null` means the CLI default |
 | `features.<name>.effort` | Effort for that feature in the agent's own vocabulary; `null` leaves it to the CLI |
 | `features.<timeline\|english>.publish.enabled` | Discord delivery opted in; written by `kura publish` |
 | `features.<timeline\|english>.publish.discord.webhook` | Discord webhook URL or `op://` reference |
 | `features.<timeline\|english>.publish.discord.avatar` | Avatar URL for that feature's Discord posts |
 | `mod.companion.autoOpen` | Open the companion pane when a Claude Code session starts (default `false`) |
 | `mod.companion.columns` / `mod.companion.rows` | Companion pane width when docked / height when inline; `null` leaves it to Claude Code |
-| `mod.companion.widgets` | Companion pane widgets, top to bottom, at most 2: `akapen`, `tldr`, `agents`; empty turns the companion off |
-| `mod.companion.ratio` | Share of the rows the upper widget takes (default `0.5`); ignored with one widget |
+| `mod.companion.widgets` | Companion pane widgets, top to bottom, at most 3: `akapen`, `verbatim`, `tldr`, `agents`; empty turns the companion off |
+| `mod.companion.ratio` | Each widget's share of the rows, in `widgets` order (default `[0.5, 0.5]`); divided by their sum, so they need not add up to 1; a length that differs from `widgets` is rejected at load |
 
 - `features.<name>.model` / `effort` apply only to that feature's generation; normal CLI usage is untouched
 - `null` model / effort injects no flag; the CLI's own default applies
@@ -162,22 +163,33 @@ kura config
 
 - Ships in the `kura` Claude Code plugin; requires `kura` on `PATH`
   (`just setup`) and a Claude Code build with plugin function hooks
-- `akapen` / `tldr` / `agents` run only while listed in `mod.companion.widgets`;
-  with the list empty nothing is generated and `/kura-companion` only says so.
-  `/kura-handoff` works either way
-- From session start, every typed prompt gets a `kura akapen` card and every
-  answer a `kura tldr` summary, whether the pane is open or not — one call
-  each, kept for the session (last 30)
+- `akapen` / `verbatim` / `tldr` / `agents` run only while listed in
+  `mod.companion.widgets`; with the list empty nothing is generated and
+  `/kura-companion` only says so. `/kura-handoff` works either way
+- From session start, every typed prompt gets a `kura akapen` card and a
+  `kura verbatim` translation, and every answer a `kura tldr` summary,
+  whether the pane is open or not — one call each, kept for the session
+  (last 30; `verbatim` keeps only the newest)
 - `akapen` shows the cards with something to fix, oldest at the top; a card
   with nothing to fix shows `nothing to flag ✓` for 2 seconds
+- `verbatim` shows the newest typed prompt as the English a native developer
+  would have typed, whole and verbatim, fillers included, with the turn
+  before it (its prompt and answer) passed as context; the prompt itself is
+  shown dimmed above the English, each headed `[input]` / green `[native]` on its
+  first line. It keeps its `ratio` share of the rows: the
+  English fits first, the prompt takes what is left, and either is cut with
+  `…` at the end.
+  A prompt `kura verbatim` would skip (under 3 characters, or starting with
+  `<`, `/` or `!`) is not sent and leaves the previous translation in place
 - `tldr` shows each turn from the moment its prompt is typed, as a spinner
   until the summary is made; then `> question` on one line and the summary
   below it, oldest at the top, with the 3 turns before it as summary context
 - The question line is the one-line question `kura tldr` returns, or the
   typed prompt cut at the pane width when it returns none
 - A row still waiting shows a spinner with the seconds since the prompt and
-  what it waits on (`waiting`, `summarizing`, `proofreading`); the card and
-  the turn of one prompt share its word and colors
+  what it waits on (`waiting`, `summarizing`, `proofreading`,
+  `interpreting`); the card, the translation and the turn of one prompt
+  share its word and colors
 - A summary cut off by a plugin reload is made again at the next session start
 - `agents` shows the rows of `claude agents --json` (interactive and
   background sessions) in its order: a summary line (the agent count and
@@ -206,7 +218,8 @@ kura config
   prompt instead
 - `mod.companion.*` is read at session start and each time the pane opens;
   reopen the pane to apply a change
-- A widget id other than `akapen` / `tldr` / `agents` is skipped with a toast
+- A widget id other than `akapen` / `verbatim` / `tldr` / `agents` is skipped
+  with a toast
 
 ## Handoff
 
@@ -267,6 +280,27 @@ echo '{"turns": [{"question": "...", "answer": "..."}]}' | kura tldr
 - Generation runs headless Claude with `KURA_NO_HISTORY=1`, like `akapen`
 
 ```bash
+echo '{"input": "なんだっけ、あー、うーんと、わすれちゃった。まあ。fix this"}' | kura verbatim
+```
+
+- Prints `input` as the English a native developer would have typed, as
+  JSON: `{status, model, text}`; nothing is stored
+- The whole prompt, verbatim: Japanese, English and romaji alike, the same
+  sentences in the same order, with fillers, hesitations and asides kept
+  as their English equivalents; code, file names and commands unchanged
+- Quoted lines (`>`), fenced code blocks and pasted material are not the
+  user's words: each block becomes `[pasted]`
+- `turns` (`[{question, answer}, ...]`, oldest first) is optional; the last
+  one is passed as context to resolve what the prompt refers to, and is
+  never translated
+- An `input` under 3 characters or starting with `<`, `/` or `!` prints
+  `{"status":"skipped"}` without calling the model; an `input` over 3000
+  characters is cut to its last 1500 (the user's own words usually follow a
+  paste), as for `akapen`
+- Invalid stdin exits 2 without calling the model
+- Generation runs headless Claude with `KURA_NO_HISTORY=1`, like `akapen`
+
+```bash
 kura timeline [<YYYY-MM-DD> <hour 0-23>]
 kura english [<YYYY-MM-DD> <hour 0-23>]
 ```
@@ -292,8 +326,8 @@ just usage --days=7
   connection) reports no token counts and records nothing
 - Cost comes from the agent's own output: the Claude CLI reports it, Codex's
   public events carry token counts only, so Codex rows show `-`
-- A feature with `"agent": "codex"` shows `-`; `akapen` and `tldr` run Claude
-  and always report cost
+- A feature with `"agent": "codex"` shows `-`; `akapen`, `verbatim` and `tldr`
+  run Claude and always report cost
 - Claude's figure is what the API would charge for those tokens; under a
   subscription plan it is not an additional charge
 - Recording is fail-open: a storage failure prints one line and never fails
@@ -305,6 +339,7 @@ just usage --days=7
 | `english` | English learning card | Hourly at `:05` |
 | `akapen` | Nothing — prints one card as JSON | None — on demand `kura akapen` |
 | `tldr` | Nothing — prints three lines as JSON | None — on demand `kura tldr` |
+| `verbatim` | Nothing — prints one translation as JSON | None — on demand `kura verbatim` |
 
 ```bash
 just schedule enable timeline

@@ -12,7 +12,7 @@ const COMPANION = {
   columns: 64,
   rows: null,
   widgets: ["akapen", "tldr"],
-  ratio: 0.6,
+  ratio: [0.6, 0.4],
 };
 
 // band が読むのは hasSurvey と bodyColumns、pane は bodyColumns と scroll.bodyRows だけ。
@@ -51,6 +51,8 @@ type Engine = {
   toasts: string[];
   // $.agent.list() が返す、この session の subagent。
   subagents: object[];
+  // $.store の中身。session をまたいで残るもの。
+  store: Map<string, unknown>;
 };
 
 // mod の下で engine が答えるもの: kura の返答、prompt、空の描画、開いている pane。
@@ -72,6 +74,7 @@ function engine(
     files: new Map(),
     toasts: [],
     subagents: [],
+    store: new Map(),
   };
   on("process.run", async (_$, e) => {
     if (e.argv[0] === "claude") {
@@ -84,6 +87,10 @@ function engine(
     if (command === "config") return ran(JSON.stringify({ mod: { companion } }));
     if (isHanging) return new Promise<never>(() => {});
     if (command === "tldr") return ran(JSON.stringify(tldr));
+    if (command === "verbatim") {
+      const { input } = JSON.parse(e.init?.stdin ?? "{}") as { input: string };
+      return ran(JSON.stringify({ status: "ok", model: "opus", text: `en: ${input}` }));
+    }
     return ran(card);
   });
   on("env.get", async (_$, e) => ({ value: e.name === "HOME" ? "/home/me" : undefined }) as never);
@@ -131,6 +138,15 @@ function engine(
     state.opened.push(e);
     state.pane = "shown";
     return { value: { isPlaced: true } } as never;
+  });
+  on("ui.close", async () => {
+    state.pane = "closed";
+    return { value: undefined } as never;
+  });
+  on("store.get", async (_$, e) => ({ value: state.store.get(e.key) }) as never);
+  on("store.set", async (_$, e) => {
+    state.store.set(e.key, e.value);
+    return { value: undefined } as never;
   });
   on("ui.panes", async () => ({
     value:
@@ -656,4 +672,117 @@ test("turn を終えた session は、background shell で busy のままでも 
   write("turn.start");
   await clock.advance(1_000);
   expect(await text()).toMatch(/1 agent {2}[·✢✳✶✻✽] 1 busy {2}○ 0 idle/);
+});
+
+const VERBATIM = { ...COMPANION, widgets: ["verbatim", "akapen", "tldr"], ratio: [0.2, 0.4, 0.4] };
+
+test("verbatim は載っている間だけ prompt ごとに kura verbatim を呼び、直近の英訳だけを出す", async ($, on) => {
+  mock.clock(on);
+  const state = engine(on, "closed", VERBATIM);
+  await open($);
+  await typed($, "なんだっけ、あー、これ直して");
+  await typed($, "まあ、いいや");
+  await settle();
+  expect(sentTo(state, "verbatim")).toEqual([
+    { input: "なんだっけ、あー、これ直して", turns: [] },
+    { input: "まあ、いいや", turns: [] },
+  ]);
+
+  const pane = await $.ui.mount({ ...PANE, surface: "terminal" });
+  const text = (await pane.find({ type: "Box" }))?.text ?? "";
+  expect(text).toContain("en: まあ、いいや");
+  expect(text).not.toContain("en: なんだっけ");
+  // 訳した prompt を英訳の上に出す。
+  expect(text.indexOf("まあ、いいや")).toBeLessThan(text.indexOf("en: まあ"));
+  // 上から verbatim、akapen、tldr の順。
+  expect(text.indexOf("en: まあ")).toBeLessThan(text.indexOf("this approach"));
+  expect(text.indexOf("this approach")).toBeLessThan(text.indexOf("[tldr]"));
+  await pane.unmount();
+});
+
+// kura <command> に渡した stdin (JSON) の列。
+function sentTo(state: Engine, command: string): unknown[] {
+  return state.calls
+    .filter((call) => call.argv[1] === command)
+    .map((call) => JSON.parse(call.stdin));
+}
+
+test("verbatim には回答の済んだ直前の turn を context に渡す", async ($, on) => {
+  mock.clock(on);
+  const state = engine(on, "closed", VERBATIM);
+  await open($);
+  await typed($, "question 1");
+  await answered($, "answer 1");
+  await typed($, "question 2");
+  await answered($, "answer 2");
+  await typed($, "question 3");
+  await settle();
+  expect(sentTo(state, "verbatim")).toEqual([
+    { input: "question 1", turns: [] },
+    { input: "question 2", turns: [{ question: "question 1", answer: "answer 1" }] },
+    { input: "question 3", turns: [{ question: "question 2", answer: "answer 2" }] },
+  ]);
+});
+
+test("verbatim は ratio の行数に prompt と英訳を収め、はみ出す分は切って … を出す", async ($, on) => {
+  mock.clock(on);
+  engine(on, "closed", VERBATIM);
+  await open($);
+  await typed($, "word ".repeat(200).trim());
+  await settle();
+
+  const pane = await $.ui.mount({ ...PANE, surface: "terminal" });
+  const text = (await pane.find({ type: "Box" }))?.text ?? "";
+  // Box の text は行を繋げて返す: 区切りの罫線までが verbatim。罫線を除く 28 行の 0.2 で 5 行:
+  // prompt が 1 行、英訳が 4 行。label は最初の行の頭だけに付き、どちらも切られて … で終わる。
+  const shown = text.slice(0, text.indexOf("─"));
+  expect(shown.startsWith("[input] word word")).toBe(true);
+  expect(shown).toContain("…[native] en: word");
+  expect(shown.match(/\[(input|native)\]/g)).toHaveLength(2);
+  expect(shown.endsWith("…")).toBe(true);
+  expect(shown.length).toBeLessThanOrEqual(60 * 5);
+  expect(shown.length).toBeGreaterThan(60 * 4);
+  await pane.unmount();
+});
+
+test("verbatim が載っていなければ kura verbatim は呼ばない", async ($, on) => {
+  mock.clock(on);
+  const state = engine(on, "closed");
+  await typed($, "fix this");
+  await settle();
+  expect(state.calls.filter((call) => call.argv[1] === "verbatim")).toEqual([]);
+});
+
+test("kura が skip する prompt は kura verbatim に送らず、前の英訳を残す", async ($, on) => {
+  mock.clock(on);
+  const state = engine(on, "closed", VERBATIM);
+  await open($);
+  await typed($, "fix this");
+  await typed($, "ok");
+  await typed($, "/status");
+  await settle();
+  expect(sentTo(state, "verbatim")).toEqual([{ input: "fix this", turns: [] }]);
+
+  const pane = await $.ui.mount({ ...PANE, surface: "terminal" });
+  expect(await pane.find({ type: "Text", text: /en: fix this/ })).toBeDefined();
+  await pane.unmount();
+});
+
+test("人が閉じた pane は autoOpen でも次の session で開かず、開いた pane は autoOpen が無くても開く", async ($, on) => {
+  const state = engine(on, "closed", { ...COMPANION, autoOpen: true });
+  const start = async () => {
+    await $.session.start({ source: "startup", cwd: "/work/kura" } as never);
+    await settle();
+  };
+  await start();
+  expect(state.opened).toHaveLength(1);
+
+  await open($); // toggle: 閉じる
+  expect(state.pane).toBe("closed");
+  await start();
+  expect(state.opened).toHaveLength(1);
+
+  state.store.set("isPaneOpen", true);
+  await start();
+  expect(state.opened).toHaveLength(2);
 });

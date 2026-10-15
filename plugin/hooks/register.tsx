@@ -1,7 +1,8 @@
 // register.tsx — kura companion: Claude Code の横に、打った prompt の英語 feedback (akapen) と
-// 回答ごとの 3 行要約 (tldr) と、mod を読み込んだ全 session の status (agents) を積む pane。
+// 直近の prompt の native 英訳 (verbatim) と、回答ごとの 3 行要約 (tldr) と、mod を読み込んだ
+// 全 session の status (agents) を積む pane。
 //
-// 生成は kura の subcommand (`kura akapen` / `kura tldr`) が持ち、usage も kura が記録する。
+// 生成は kura の subcommand (`kura akapen` / `kura verbatim` / `kura tldr`) が持ち、usage も kura が記録する。
 // この mod は呼んで表示するだけ。配置は `kura config` の mod.companion section が決める。
 // widget が mod.companion.widgets に載っている間、その生成は session の始めから pane と関係なく
 // 常に走り、pane はたまったものをいつでも見せる。載っていなければ何もしない。
@@ -11,20 +12,38 @@
 
 import type { EngineInterface, Register, RenderElement, Timer } from "claude-code";
 import { atom, read, update } from "claude-code";
-import type { Agents, Card, Entry, Item, ItemKind, Layout, Peer, Tldr, Turn } from "../types";
+import type {
+  Agents,
+  Card,
+  Entry,
+  Item,
+  ItemKind,
+  Layout,
+  Peer,
+  Sentence,
+  Tldr,
+  Translation,
+  Turn,
+} from "../types";
 
 const PANE = "kura-companion";
 const COMMAND = "kura-companion";
 const HANDOFF = "kura-handoff";
+// 人が最後に pane を開いていたか閉じていたか。$.store に session をまたいで残し、autoOpen より優先する。
+const IS_OPEN_KEY = "isPaneOpen";
 const HISTORY_LIMIT = 30;
 // 要約する turn と、kura tldr が context として読む直前の 3 turn。
 const CONTEXT_TURNS = 4;
 const TIMEOUT_MS = 120_000;
 // 直すところの無い card を pane に出しておく時間。
 const FLASH_MS = 2_000;
+// kura verbatim に context として渡す直前の turn の数。
+const VERBATIM_CONTEXT = 1;
 
 // 打った prompt ごとに 1 entry、古い順。band は最新を、pane は全部を出す。
 const history = atom({ plugin: "kura", key: "history" } as const, []);
+// 直近に打った prompt とその native 英訳。1 つだけ持ち、次の prompt で置き換わる。
+const sentence = atom({ plugin: "kura", key: "sentence" } as const, null);
 // main loop の question / answer とその要約、古い順。turn は prompt を打った時点で積み、回答で埋める。
 const turns = atom({ plugin: "kura", key: "turns" } as const, []);
 // session の始めか pane を開いたときに読んだ `kura config` の mod.companion section。
@@ -135,6 +154,7 @@ function startTicker($: EngineInterface): void {
       const peers = settle(listed, lastEvents);
       const hasWaiting =
         (await read($, history)).some((entry) => entry.card.status === "pending") ||
+        (await read($, sentence))?.translation.status === "pending" ||
         (await read($, turns)).some((turn) => isWaiting(turn.summary)) ||
         (peers.some((peer) => peer.status === MOVING || isFresh(peer, lastEvents, now)) &&
           (await paneState($)).isInView);
@@ -150,15 +170,19 @@ function startTicker($: EngineInterface): void {
 
 // ---- akapen ----
 
+// agents と同じ信号機の配色: romaji は okay、natural は needs action、grammar は warning。
+// 色は label にだけ付け、直す前の文は dim、直しは地の色 (verbatim の input / native と同じ)。
 const KIND_COLOR: Record<ItemKind, string> = {
-  romaji: "success",
-  grammar: "error",
-  natural: "warning",
+  romaji: "green",
+  grammar: "red",
+  natural: "yellow",
 };
 
 // kind ごとにこの順でまとめ、同じ kind の中は入力の順を保つ。
 const KIND_ORDER: ItemKind[] = ["romaji", "grammar", "natural"];
-const LABEL_WIDTH = 10;
+// verbatim の [native] label の色。agents と同じ信号機の配色で、green は okay (正しい英語)。
+// [input] label は地の色、本文は dim。
+const NATIVE_COLOR = "green";
 
 function byKind(items: Item[]): Item[] {
   return KIND_ORDER.flatMap((kind) => items.filter((item) => item.kind === kind));
@@ -195,16 +219,14 @@ function cardRows(
   return (
     <Box flexDirection="column">
       {byKind(card.items).map((item) => {
-        const label = (
-          <Text color={KIND_COLOR[item.kind]}>{`[${item.kind}]`.padEnd(LABEL_WIDTH)}</Text>
-        );
-        if (LABEL_WIDTH + cells(item.from) + 3 + cells(item.to) <= columns) {
+        const label = <Text color={KIND_COLOR[item.kind]}>{`[${item.kind}] `}</Text>;
+        if (cells(`[${item.kind}] ${item.from} → ${item.to}`) <= columns) {
           return (
             <Text>
               {label}
-              <Text>{item.from}</Text>
+              <Text dimColor>{item.from}</Text>
               {" → "}
-              <Text color={KIND_COLOR[item.kind]}>{item.to}</Text>
+              {item.to}
             </Text>
           );
         }
@@ -213,11 +235,9 @@ function cardRows(
           <Box flexDirection="column">
             <Text>
               {label}
-              <Text>{item.from}</Text>
+              <Text dimColor>{item.from}</Text>
             </Text>
-            <Text>
-              {" ".repeat(LABEL_WIDTH)}→ <Text color={KIND_COLOR[item.kind]}>{item.to}</Text>
-            </Text>
+            <Text>→ {item.to}</Text>
           </Box>
         );
       })}
@@ -718,11 +738,12 @@ function drawAgents(elements: Elements, { agents: s, now }: PaneData) {
 
 // ---- pane ----
 
-// pane は上から widget を積む (最大 2 つ)。上の widget が ratio の割合の行を取り、下が残り。
-// 各 widget は自分の行数で切られる。どれを積むかは config の mod.companion.widgets が決める。
+// pane は上から widget を積む (最大 3 つ)。行は ratio の比で分け、各 widget は自分の行数で切られる。
+// どれを積むかは config の mod.companion.widgets が決める。
 // align は切る側: bottom は最新が下に来る widget で上の古い方を、top は上から読む widget で下を切る。
 type PaneData = {
   history: Entry[];
+  sentence: Sentence | null;
   turns: Turn[];
   agents: Agents;
   now: number;
@@ -798,11 +819,123 @@ function drawTldr(elements: Elements, { turns: list, now }: PaneData) {
   );
 }
 
-const WIDGETS: Record<string, { draw: Draw; align: "top" | "bottom" }> = {
+// kura verbatim が skip する prompt (3 文字未満・合成 message・command)。akapen/detect.ts と同じ規則。
+function isTrivial(text: string): boolean {
+  const head = text.trim();
+  return head.length < 3 || /^[</!]/.test(head);
+}
+
+// 幅に収まるまで文字を取る。残りは次の行。
+function splitAt(word: string, width: number): [string, string] {
+  let taken = 0;
+  let head = "";
+  for (const char of word) {
+    if (taken + cells(char) > width) break;
+    taken += cells(char);
+    head += char;
+  }
+  return [head, word.slice(head.length)];
+}
+
+// 文を pane の幅で折り返す (空白で区切る。幅を超える 1 語は文字で切る)。最初の行は lead 桁を
+// label に譲る。rows を超えたら切り、最終行の末尾に … を置く。描く側は行ごとに Text にして、
+// Ink に折り返させない。
+function wrapSentence(text: string, columns: number, rows: number, lead = 0): string[] {
+  const lines: string[] = [];
+  const width = () => Math.max(1, columns - (lines.length === 0 ? lead : 0));
+  for (const paragraph of text.split("\n")) {
+    let line = "";
+    for (const word of paragraph.split(" ")) {
+      const joined = line ? `${line} ${word}` : word;
+      if (cells(joined) <= width()) {
+        line = joined;
+        continue;
+      }
+      if (line) lines.push(line);
+      let rest = word;
+      while (cells(rest) > width()) {
+        const [head, tail] = splitAt(rest, width());
+        lines.push(head);
+        rest = tail;
+      }
+      line = rest;
+    }
+    lines.push(line);
+  }
+  const max = Math.max(1, rows);
+  if (lines.length <= max) return lines;
+  const kept = lines.slice(0, max);
+  const room = Math.max(1, columns - (max === 1 ? lead : 0));
+  let last = kept[max - 1];
+  while (last && cells(`${last}…`) > room) last = [...last].slice(0, -1).join("");
+  kept[max - 1] = `${last}…`;
+  return kept;
+}
+
+// 直近の prompt ([input]) とその native 英訳 ([native])。label は最初の行の頭にだけ置き、
+// 続く行は字下げせず幅いっぱいに使う。英訳を先に収め、prompt は残りの行に収める。
+// 1 行しか無ければ英訳だけ。
+function drawVerbatim(elements: Elements, { sentence: s, now }: PaneData, { columns, rows }: Size) {
+  const { Box, Text } = elements;
+  if (s === null) return <Text dimColor>The last prompt is said again in English here.</Text>;
+  const { translation } = s;
+  const labeled = (label: string, color: string | undefined, lines: string[], dimColor = false) =>
+    lines.map((line, index) => (
+      <Text key={`${label}-${index}`} wrap="truncate-end">
+        {index === 0 && <Text color={color}>{`[${label}] `}</Text>}
+        <Text dimColor={dimColor}>{line}</Text>
+      </Text>
+    ));
+  const nativeLabel = <Text color={NATIVE_COLOR}>{"[native] "}</Text>;
+  const lines =
+    translation.status === "ok"
+      ? wrapSentence(translation.text, columns, rows - 1, "[native] ".length)
+      : [];
+  const english =
+    translation.status === "pending" ? (
+      <Text wrap="truncate-end">
+        {nativeLabel}
+        {spinner(elements, s.id, now, "interpreting", s.startedAt)}
+      </Text>
+    ) : translation.status === "error" ? (
+      <Text wrap="truncate-end">
+        {nativeLabel}
+        <Text color="error">interpretation failed</Text>
+      </Text>
+    ) : (
+      labeled("native", NATIVE_COLOR, lines)
+    );
+  return (
+    <Box flexDirection="column">
+      {rows > 1 &&
+        labeled(
+          "input",
+          undefined,
+          wrapSentence(s.input, columns, rows - Math.max(1, lines.length), "[input] ".length),
+          true,
+        )}
+      {english}
+    </Box>
+  );
+}
+
+type Widget = { draw: Draw; align: "top" | "bottom" };
+const WIDGETS: Record<string, Widget> = {
   akapen: { draw: drawAkapen, align: "bottom" },
+  verbatim: { draw: drawVerbatim, align: "top" },
   tldr: { draw: drawTldr, align: "bottom" },
   agents: { draw: drawAgents, align: "top" },
 };
+
+// 各 widget の行数。区切りの罫線を除いた行を ratio の比で分け、端数は最後の widget が取る。
+function widgetHeights(ratio: number[], bodyRows: number): number[] {
+  const room = Math.max(ratio.length, bodyRows - (ratio.length - 1));
+  const total = ratio.reduce((sum, share) => sum + share, 0);
+  const heights = ratio.map((share) => Math.max(1, Math.floor((room * share) / total)));
+  const rest = room - heights.slice(0, -1).reduce((sum, rows) => sum + rows, 0);
+  heights[heights.length - 1] = Math.max(1, rest);
+  return heights;
+}
 
 async function paneState($: EngineInterface): Promise<{ isOpen: boolean; isInView: boolean }> {
   const pane = (await $.ui.panes()).find((candidate) => candidate.id === PANE);
@@ -898,6 +1031,7 @@ export const register: Register = (on) => {
         .filter((entry) => entry.card.status !== "pending")
         .map((entry) => (entry.isFlashing ? { ...entry, isFlashing: false } : entry)),
     );
+    await update($, sentence, (s) => (s?.translation.status === "pending" ? null : s));
     // id の無い turn は要約を turn ごとに持つ前の形、回答を待っていた turn は回答が届かない: 捨てる。
     // 要約の途中だった turn (と要約を持たない前の形) は作り直す。
     await update($, turns, (list) =>
@@ -921,7 +1055,12 @@ export const register: Register = (on) => {
           if (turn.summary.status === "pending") void summarize($, turn.id);
         }
       }
-      if (companion.widgets.length > 0 && companion.autoOpen && !(await paneState($)).isOpen) {
+      const wasOpen = (await $.store.get(IS_OPEN_KEY)) as boolean | undefined;
+      if (
+        companion.widgets.length > 0 &&
+        (wasOpen ?? companion.autoOpen) &&
+        !(await paneState($)).isOpen
+      ) {
         await openPane($);
       }
     })().catch(async (error) => {
@@ -937,12 +1076,20 @@ export const register: Register = (on) => {
     }
     try {
       await openPane($);
+      await $.store.set(IS_OPEN_KEY, true);
     } catch (error) {
       return {
         text: `Companion pane not opened: ${error instanceof Error ? error.message : error}`,
       };
     }
     return { text: "Companion pane opened." };
+  });
+
+  // command でも ctrl+x x でも、人が閉じたら覚えておく。unload (reload / 終了) は人の意思ではない。
+  on("ui.close", { id: PANE }, async ($, e, next) => {
+    const done = await next(e);
+    if (e.origin.kind !== "unload") await $.store.set(IS_OPEN_KEY, false);
+    return done;
   });
 
   on("command.run", { command: HANDOFF }, async ($) => {
@@ -1018,6 +1165,44 @@ export const register: Register = (on) => {
       }
     })().catch(() => {});
 
+    // verbatim は card と同じ id で、直近の 1 prompt だけを持つ。kura が skip する prompt
+    // (短すぎる・command) は前の英訳を残すため、ここでも同じ規則で触らない。
+    // context は回答の済んだ直前の turn: 「これ」「上は」の指示先と口調はそこで決まる。
+    void (async () => {
+      if (isTrivial(e.text) || !(await isListed($, "verbatim"))) return;
+      const startedAt = await $.clock.now().catch(() => undefined);
+      const context = (await read($, turns))
+        .filter((turn) => turn.id !== id && turn.answer.trim() !== "")
+        .slice(-VERBATIM_CONTEXT)
+        .map(({ question, answer }) => ({ question, answer }));
+      await update($, sentence, () => ({
+        id,
+        input: e.text,
+        translation: { status: "pending" },
+        startedAt,
+      }));
+      startTicker($);
+      const settle = (value: Sentence | null) =>
+        update($, sentence, (current) => (current?.id === id ? value : current));
+      try {
+        const stdin = JSON.stringify({ input: e.text, turns: context });
+        const stdout = await kura($, ["verbatim"], stdin);
+        const out = JSON.parse(stdout) as { status?: string; text?: string };
+        if (out.status === "skipped") return await settle(null);
+        const translation: Translation =
+          out.status === "ok" && out.text ? { status: "ok", text: out.text } : { status: "error" };
+        if (translation.status === "error") {
+          debug($, "verbatim", `unexpected output ${stdout.slice(0, 200)}`);
+        }
+        await settle({ id, input: e.text, translation, startedAt });
+      } catch (error) {
+        debug($, "verbatim", error);
+        await settle({ id, input: e.text, translation: { status: "error" }, startedAt }).catch(
+          () => {},
+        );
+      }
+    })().catch(() => {});
+
     return next(e);
   });
 
@@ -1073,21 +1258,28 @@ export const register: Register = (on) => {
     const { Box, Text } = elements;
     const data: PaneData = {
       history: await read($, history),
+      sentence: await read($, sentence),
       turns: await read($, turns),
       agents: await read($, agents),
       now: await read($, frame),
     };
     const current = await read($, layout);
-    const widgets = (current?.widgets ?? []).filter((widget) => widget in WIDGETS).slice(0, 2);
+    // 知らない widget は ratio ごと飛ばす。ratio が widgets と揃うことは kura config が保証する。
+    const listed = (current?.widgets ?? []).map((widget, index) => ({
+      widget,
+      share: current?.ratio[index] ?? 1,
+    }));
+    const known = listed.filter(({ widget }) => widget in WIDGETS).slice(0, 3);
+    const widgets = known.map(({ widget }) => widget);
     if (widgets.length === 0)
       return <Text dimColor>No widget to show — see mod.companion.widgets.</Text>;
 
     const columns = e.props.bodyColumns;
-    const gaps = widgets.length - 1;
-    const room = Math.max(widgets.length, e.props.scroll.bodyRows - gaps);
-    const first =
-      widgets.length === 1 ? room : Math.max(1, Math.floor(room * (current?.ratio ?? 0.5)));
-    const heights = [first, Math.max(1, room - first)];
+    const size = { columns, rows: e.props.scroll.bodyRows };
+    const heights = widgetHeights(
+      known.map(({ share }) => share),
+      size.rows,
+    );
 
     return (
       <Box flexDirection="column">
