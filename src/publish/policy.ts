@@ -1,4 +1,4 @@
-// policy.ts — external publish の明示 opt-in。config.json の features.<name>.publish.enabled が正本。
+// policy.ts — external publish の明示 opt-in。config.json の extensions.<name>.publish.enabled が正本。
 
 import { existsSync } from "node:fs";
 import { configPath, loadConfig, PUBLISHED_FEATURES, saveConfig } from "../config.ts";
@@ -7,7 +7,7 @@ export const PUBLISH_FEATURES = PUBLISHED_FEATURES;
 export type PublishFeature = (typeof PUBLISH_FEATURES)[number];
 
 export function isPublishEnabled(feature: PublishFeature, path: string = configPath()): boolean {
-  return loadConfig(path).features[feature].publish.enabled;
+  return loadConfig(path).extensions[feature].publish.enabled;
 }
 
 export function setPublishEnabled(
@@ -19,6 +19,6 @@ export function setPublishEnabled(
   if (!enabled && !existsSync(path)) return;
 
   const config = loadConfig(path);
-  for (const feature of features) config.features[feature].publish.enabled = enabled;
+  for (const feature of features) config.extensions[feature].publish.enabled = enabled;
   saveConfig(config, path);
 }

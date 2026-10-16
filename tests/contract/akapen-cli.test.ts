@@ -4,7 +4,7 @@ import { join } from "node:path";
 const cli = join(import.meta.dir, "..", "..", "src", "cli.ts");
 
 function run(args: string[], stdin: string) {
-  return Bun.spawnSync([process.execPath, cli, "akapen", ...args], {
+  return Bun.spawnSync([process.execPath, cli, "extension", "run", "akapen", ...args], {
     stdin: new TextEncoder().encode(stdin),
     env: process.env,
   });
@@ -13,7 +13,7 @@ function run(args: string[], stdin: string) {
 test("akapen は引数を受け付けず usage で拒否する", () => {
   const result = run(["--bogus"], "hello there");
   expect(result.exitCode).toBe(2);
-  expect(result.stderr.toString()).toContain("usage: kura akapen < prompt.txt");
+  expect(result.stderr.toString()).toContain("usage: kura extension run akapen < prompt.txt");
 });
 
 test("card 化しない入力は model を呼ばずに skipped を返す", () => {
@@ -24,8 +24,10 @@ test("card 化しない入力は model を呼ばずに skipped を返す", () =>
   }
 });
 
-test("kura --help が akapen を載せる", () => {
-  const result = Bun.spawnSync([process.execPath, cli, "--help"], { env: process.env });
+test("kura extension run akapen --help が akapen の help を出す", () => {
+  const result = Bun.spawnSync([process.execPath, cli, "extension", "run", "akapen", "--help"], {
+    env: process.env,
+  });
   expect(result.exitCode).toBe(0);
-  expect(result.stdout.toString()).toContain("kura akapen < prompt.txt");
+  expect(result.stdout.toString()).toContain("kura extension run akapen < prompt.txt");
 });

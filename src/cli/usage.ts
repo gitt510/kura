@@ -1,7 +1,8 @@
-// usage.ts — usage.db の feature 別集計を表で表示する。読み出しのみで状態を変えない。
+// usage.ts — kura.db の usage table の feature 別集計を表で表示する。読み出しのみで状態を変えない。
 
 import { existsSync } from "node:fs";
-import { openUsageDb, usageDbPath, usageSummary } from "../agent/usage.ts";
+import { usageSummary } from "../agent/usage.ts";
+import { KURA_DB, openKura } from "../db.ts";
 import { paint, type Row, renderTable } from "./terminal.ts";
 
 function usageError(): number {
@@ -56,19 +57,20 @@ export async function runUsage(args: string[]): Promise<number> {
   }
   if (days !== null && days < 1) return usageError();
 
-  // openUsageDb は file を作ってしまうので、未記録はここで判定する。
-  if (!existsSync(usageDbPath())) {
+  // openKura は file を作ってしまうので、kura.db が無ければ開かずに未記録とする。
+  const since = days === null ? null : new Date(Date.now() - days * 86_400_000).toISOString();
+  let rows: ReturnType<typeof usageSummary> = [];
+  if (existsSync(KURA_DB)) {
+    const db = openKura();
+    try {
+      rows = usageSummary(db, since);
+    } finally {
+      db.close();
+    }
+  }
+  if (rows.length === 0 && days === null) {
     process.stdout.write("no usage recorded yet — LLM calls will appear here after the next run\n");
     return 0;
-  }
-
-  const since = days === null ? null : new Date(Date.now() - days * 86_400_000).toISOString();
-  const db = openUsageDb();
-  let rows;
-  try {
-    rows = usageSummary(db, since);
-  } finally {
-    db.close();
   }
 
   const period = days === null ? "all time" : `last ${days} day${days === 1 ? "" : "s"}`;

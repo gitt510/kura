@@ -1,4 +1,4 @@
-// status.ts — setup / feature state の収集と rich 表示。
+// status.ts — setup / extension state の収集と rich 表示。
 
 import { existsSync, lstatSync, readlinkSync } from "node:fs";
 import { join, resolve } from "node:path";
@@ -68,14 +68,10 @@ function publishState(feature: PublishFeature): State {
   }
 }
 
-function databaseState(stateDir: string, feature: string): State {
-  return existsSync(join(stateDir, `${feature}.db`)) ? "PRESENT" : "NOT CREATED";
-}
-
 // feature の生成設定を 1 cell に: `codex · gpt-5.6 · high`。null は CLI の既定。
 function generationState(feature: PublishFeature): string {
   try {
-    const { agent, options } = resolveGeneration(feature, loadConfig().features[feature]);
+    const { agent, options } = resolveGeneration(feature, loadConfig().extensions[feature]);
     return `${agent} · ${options.model ?? "CLI default"} · ${options.effort ?? "CLI default"}`;
   } catch {
     return "ERROR";
@@ -93,18 +89,18 @@ function renderStatus(): number {
   const runtime = join(userHome, ".local", "share", "kura");
   const cli = join(userHome, ".local", "bin", "kura");
   const cliTarget = join(runtime, "src", "cli.ts");
-  const hooks = join(repo, "src", "history", "hooks.ts");
+  const hooks = join(repo, "src", "store", "hooks.ts");
   const jobs = join(repo, "src", "launchd", "jobs.ts");
-  const historyDb = join(stateDir, "history.db");
+  const kuraDb = join(stateDir, "kura.db");
   const config = configPath();
 
   const setupRows: Row[] = [
     ["runtime", symlinkState(runtime, repo), displayPath(runtime)],
     ["cli", symlinkState(cli, cliTarget), displayPath(cli)],
     ["config", existsSync(config) ? "PRESENT" : "MISSING", displayPath(config)],
-    ["history.db", existsSync(historyDb) ? "PRESENT" : "NOT CREATED", displayPath(historyDb)],
-    ["history/claude", managerState(hooks, "claude"), "Stop + UserPromptSubmit hooks"],
-    ["history/codex", managerState(hooks, "codex"), "Stop hook"],
+    ["kura.db", existsSync(kuraDb) ? "PRESENT" : "NOT CREATED", displayPath(kuraDb)],
+    ["claude", managerState(hooks, "claude"), "Stop + UserPromptSubmit hooks"],
+    ["codex", managerState(hooks, "codex"), "Stop hook"],
   ];
 
   process.stdout.write(`${paint.bold("Setup")}\n`);
@@ -114,24 +110,17 @@ function renderStatus(): number {
     )}\n\n`,
   );
 
-  const featureRows: Row[] = [
+  const extensionRows: Row[] = [
     [
       "timeline",
       generationState("timeline"),
-      databaseState(stateDir, "timeline"),
       managerState(jobs, "timeline"),
       publishState("timeline"),
     ],
-    [
-      "english",
-      generationState("english"),
-      databaseState(stateDir, "english"),
-      managerState(jobs, "english"),
-      publishState("english"),
-    ],
+    ["english", generationState("english"), managerState(jobs, "english"), publishState("english")],
   ];
   process.stdout.write(
-    `${renderTable(["Feature", "Agent", "Database", "Schedule", "Publish"], featureRows, tableCell)}\n`,
+    `${renderTable(["Extension", "Agent", "Schedule", "Publish"], extensionRows, tableCell)}\n`,
   );
   return 0;
 }

@@ -15,7 +15,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import { dirname } from "node:path";
-import { KURA_STATE_DIR } from "./storage.ts";
+import { KURA_STATE_DIR } from "./db.ts";
 
 export function secretsPath(): string {
   return `${KURA_STATE_DIR}/secrets.json`;

@@ -3,7 +3,7 @@ import { expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { insertCall, type UsageRecord, usageSummary } from "./usage.ts";
 
-const schema = readFileSync(`${import.meta.dir}/usage-schema.sql`, "utf-8");
+const schema = readFileSync(`${import.meta.dir}/../schema.sql`, "utf-8");
 
 function memoryDb(): Database {
   const db = new Database(":memory:");

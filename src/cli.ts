@@ -2,37 +2,31 @@
 
 // cli.ts — kura command の薄い dispatcher。処理本体は src/cli/ と domain module が持つ。
 
-import { runAkapen } from "./cli/akapen.ts";
 import { runConfig } from "./cli/config.ts";
-import { runFeatures } from "./cli/features.ts";
+import { runExtension } from "./cli/extension.ts";
 import { runHandoff } from "./cli/handoff.ts";
 import { helpText } from "./cli/help.ts";
-import { runHistory } from "./cli/history.ts";
-import { runHourly } from "./cli/hourly.ts";
 import { runLifecycle } from "./cli/lifecycle.ts";
 import { runStatus } from "./cli/status.ts";
-import { runTldr } from "./cli/tldr.ts";
+import { runStore } from "./cli/store.ts";
 import { runUsage } from "./cli/usage.ts";
-import { runVerbatim } from "./cli/verbatim.ts";
 
-const usage = `usage: kura setup
-       kura config
-       kura init-config
-       kura bake-secrets
-       kura history <enable|disable> <claude|codex|all>
-       kura schedule <enable|disable> <timeline|english|all>
-       kura publish <enable|disable> <timeline|english|all>
+// 直下は core (会話の保存と検索) と kura 全体の管理。extension はすべて `kura extension` の下。
+const usage = `usage: kura enable <claude|codex|all>
+       kura disable <claude|codex|all>
+       kura search [--limit=N] <keyword...>
+       kura show <session-id-or-prefix>
+       kura extension run <timeline|english|akapen|tldr|verbatim> [args]
+       kura extension schedule <enable|disable> <timeline|english|all>
+       kura extension publish <enable|disable> <timeline|english|all>
+       kura setup
        kura teardown
        kura status
        kura usage [--days=N]
-       kura search [--limit=N] <keyword...>
-       kura show <session-id-or-prefix>
+       kura config
+       kura init-config
+       kura bake-secrets
        kura handoff <session-id>
-       kura timeline [<YYYY-MM-DD> <hour 0-23>]
-       kura english [<YYYY-MM-DD> <hour 0-23>]
-       kura akapen < prompt.txt
-       kura tldr < turns.json
-       kura verbatim < prompt.json
        kura --help
 `;
 
@@ -48,7 +42,12 @@ async function main(): Promise<number> {
     return 0;
   }
   if (command !== undefined && (args.includes("--help") || args.includes("-h"))) {
-    const text = helpText(command);
+    // `kura extension run <name> --help` はその extension の help、それ以外は subcommand の help。
+    const [verb, name] = args;
+    const text =
+      (command === "extension" && verb === "run" && name !== undefined
+        ? helpText(`extension run ${name}`)
+        : null) ?? helpText(command);
     if (text) {
       process.stdout.write(text);
       return 0;
@@ -62,26 +61,20 @@ async function main(): Promise<number> {
     if (command === "config" || command === "init-config" || command === "bake-secrets") {
       return await runConfig(command, args);
     }
-    if (command === "history" || command === "hook" || command === "search" || command === "show") {
-      return await runHistory(command, args);
+    if (
+      command === "enable" ||
+      command === "disable" ||
+      command === "hook" ||
+      command === "search" ||
+      command === "show"
+    ) {
+      return await runStore(command, args);
+    }
+    if (command === "extension") {
+      return await runExtension(args);
     }
     if (command === "handoff") {
       return await runHandoff(args);
-    }
-    if (command === "timeline" || command === "english") {
-      return await runHourly(command, args);
-    }
-    if (command === "akapen") {
-      return await runAkapen(args);
-    }
-    if (command === "tldr") {
-      return await runTldr(args);
-    }
-    if (command === "verbatim") {
-      return await runVerbatim(args);
-    }
-    if (command === "schedule" || command === "publish") {
-      return await runFeatures(command, args);
     }
     if (command === "status") {
       return runStatus(args);

@@ -16,9 +16,6 @@ const text = z
   .nullable()
   .default(null)
   .transform((value) => value?.trim() || null);
-const count = z
-  .int({ error: "must be a positive integer" })
-  .positive({ error: "must be a positive integer" });
 const flag = z.boolean({ error: "must be a boolean" });
 // 手で書く 1 人用の file なので、知らない key は typo として load 時に拒否する。
 const object = (shape: z.ZodRawShape) =>
@@ -53,10 +50,10 @@ const published = object({
   }),
 });
 
-// root は「誰のための設定か」で 2 つ: features (機能ごと)、mod (Claude Code mod)。
+// root は「誰のための設定か」で 2 つ: extensions (kura の上で動く opt-in の機能ごと)、mod (Claude Code mod)。
 const Config = z.strictObject(
   {
-    features: object({
+    extensions: object({
       akapen: prompted("opus"), // 速さより質 — 既定は opus
       tldr: prompted("opus"),
       verbatim: prompted("opus"), // 訳語の自然さが価値 — 既定は opus
@@ -70,8 +67,6 @@ const Config = z.strictObject(
         .strictObject(
           {
             autoOpen: flag.default(false), // session 開始時に pane を開く
-            columns: count.nullable().default(null), // 横に dock したときの幅
-            rows: count.nullable().default(null), // prompt の上に置いたときの高さ
             // 上から順に積む widget の id。最大 3 つ。空なら companion は何もしない。
             // akapen / tldr / verbatim の生成はここに載っている間だけ走る。
             widgets: z
@@ -120,15 +115,26 @@ export function configPath(env: Environment = process.env): string {
   return `${configHome(env)}/kura/config.json`;
 }
 
+// 前の版にあった key。知らない key として拒否しつつ、今の書き方を添える。
+const RETIRED_KEYS: Record<string, string> = {
+  features: 'renamed to "extensions"',
+  "mod.companion.columns": "removed; the pane size is left to Claude Code",
+  "mod.companion.rows": "removed; the pane size is left to Claude Code",
+};
+
 // 書かれていない項目は既定値で埋める。型が違う項目は path と項目名を付けて拒否する。
 function parseConfig(raw: unknown, path: string): KuraConfig {
   const result = Config.safeParse(raw);
   if (result.success) return result.data;
   const issue = result.error.issues[0];
   const field = issue?.path.join(".");
+  const unknown = (key: string) => {
+    const retired = RETIRED_KEYS[field ? `${field}.${key}` : key];
+    return retired ? `"${key}" (${retired})` : `"${key}"`;
+  };
   const reason =
     issue?.code === "unrecognized_keys"
-      ? `has unknown key ${issue.keys.map((key) => `"${key}"`).join(", ")}`
+      ? `has unknown key ${issue.keys.map(unknown).join(", ")}`
       : (issue?.message ?? "is invalid");
   throw new Error(`invalid config ${path}: ${field ? `${field} ${reason}` : `config ${reason}`}`);
 }
@@ -153,16 +159,16 @@ export type PublishedFeature = (typeof PUBLISHED_FEATURES)[number];
 
 // 表示用の config。参照でない webhook は実値なので伏せる — 参照 (op://) はそのまま見せる。
 export function redactConfig(config: KuraConfig): KuraConfig {
-  const features = { ...config.features };
+  const extensions = { ...config.extensions };
   for (const name of PUBLISHED_FEATURES) {
-    const { publish } = features[name];
+    const { publish } = extensions[name];
     const { webhook } = publish.discord;
     if (webhook && !isSecretReference(webhook)) {
-      features[name] = {
-        ...features[name],
+      extensions[name] = {
+        ...extensions[name],
         publish: { ...publish, discord: { ...publish.discord, webhook: "<redacted>" } },
       };
     }
   }
-  return { ...config, features };
+  return { ...config, extensions };
 }

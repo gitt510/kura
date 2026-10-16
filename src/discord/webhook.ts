@@ -4,10 +4,10 @@ import { resolveSecret } from "../secrets.ts";
 
 export async function postDiscord(feature: PublishFeature, payload: unknown): Promise<number> {
   const webhook = resolveSecret(
-    loadConfig().features[feature].publish.discord.webhook ?? undefined,
+    loadConfig().extensions[feature].publish.discord.webhook ?? undefined,
   );
   if (!webhook) {
-    throw new Error(`features.${feature}.publish.discord.webhook is unset in ${configPath()}`);
+    throw new Error(`extensions.${feature}.publish.discord.webhook is unset in ${configPath()}`);
   }
 
   const response = await fetch(webhook, {

@@ -77,7 +77,7 @@ function teardown(): void {
     );
   }
 
-  const hooks = join(repo, "src", "history", "hooks.ts");
+  const hooks = join(repo, "src", "store", "hooks.ts");
   const launchd = join(repo, "src", "launchd", "jobs.ts");
   const publish = join(repo, "src", "publish", "manage.ts");
   runManager(hooks, ["all", "status"], true);
@@ -92,7 +92,7 @@ function teardown(): void {
 
   const stateDir = join(process.env.XDG_STATE_HOME || join(userHome, ".local", "state"), "kura");
   const configDir = join(process.env.XDG_CONFIG_HOME || join(userHome, ".config"), "kura");
-  process.stdout.write("kura history sources, features, and local entrypoints removed\n");
+  process.stdout.write("kura recording hooks, extensions, and local entrypoints removed\n");
   process.stdout.write(`retained state: ${stateDir}\n`);
   process.stdout.write(`retained config: ${configDir}\n`);
 }

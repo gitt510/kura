@@ -2,7 +2,7 @@
 // 直近の prompt の native 英訳 (verbatim) と、回答ごとの 3 行要約 (tldr) と、mod を読み込んだ
 // 全 session の status (agents) を積む pane。
 //
-// 生成は kura の subcommand (`kura akapen` / `kura verbatim` / `kura tldr`) が持ち、usage も kura が記録する。
+// 生成は kura の extension (`kura extension run akapen|verbatim|tldr`) が持ち、usage も kura が記録する。
 // この mod は呼んで表示するだけ。配置は `kura config` の mod.companion section が決める。
 // widget が mod.companion.widgets に載っている間、その生成は session の始めから pane と関係なく
 // 常に走り、pane はたまったものをいつでも見せる。載っていなければ何もしない。
@@ -42,7 +42,7 @@ const ERROR_MS = 30_000;
 // kura verbatim に context として渡す直前の turn の数。
 const VERBATIM_CONTEXT = 1;
 
-// 打った prompt ごとに 1 entry、古い順。band は最新を、pane は全部を出す。
+// 打った prompt ごとに 1 entry、古い順。pane が全部を出す。
 const history = atom({ plugin: "kura", key: "history" } as const, []);
 // 直近に打った prompt とその native 英訳。1 つだけ持ち、次の prompt で置き換わる。
 const sentence = atom({ plugin: "kura", key: "sentence" } as const, null);
@@ -975,8 +975,6 @@ async function openPane($: EngineInterface): Promise<void> {
   await $.ui.open({
     id: PANE,
     title: "kura companion",
-    ...(companion.columns ? { columns: companion.columns } : {}),
-    ...(companion.rows ? { rows: companion.rows } : {}),
   });
 }
 
@@ -991,7 +989,9 @@ async function summarize($: EngineInterface, id: string): Promise<void> {
     const context = list
       .slice(Math.max(0, end - CONTEXT_TURNS), end)
       .map(({ question, answer }) => ({ question, answer }));
-    const out = JSON.parse(await kura($, ["tldr"], JSON.stringify({ turns: context }))) as {
+    const out = JSON.parse(
+      await kura($, ["extension", "run", "tldr"], JSON.stringify({ turns: context })),
+    ) as {
       status?: string;
       text?: string;
       question?: string | null;
@@ -1157,7 +1157,7 @@ export const register: Register = (on) => {
       );
       startTicker($);
       try {
-        const stdout = await kura($, ["akapen"], e.text);
+        const stdout = await kura($, ["extension", "run", "akapen"], e.text);
         const card = parseCard(stdout);
         if (card?.status === "error") {
           debug($, "akapen", `unexpected output ${stdout.slice(0, 200)}`);
@@ -1194,7 +1194,7 @@ export const register: Register = (on) => {
         update($, sentence, (current) => (current?.id === id ? value : current));
       try {
         const stdin = JSON.stringify({ input: e.text, turns: context });
-        const stdout = await kura($, ["verbatim"], stdin);
+        const stdout = await kura($, ["extension", "run", "verbatim"], stdin);
         const out = JSON.parse(stdout) as { status?: string; text?: string };
         if (out.status === "skipped") return await settle(null);
         const translation: Translation =
@@ -1214,18 +1214,13 @@ export const register: Register = (on) => {
     return next(e);
   });
 
+  // prompt 欄は session の間ずっと描かれる。mod が session の途中で読み込まれても、ここで
+  // command を登録する。この mod は prompt 欄に何も描かない。
   on("ui.render", { component: "AbovePrompt" }, async ($, e, next) => {
     void declare($).catch(() => {
       isDeclared = false;
     });
-    const newest = (await read($, history)).at(-1);
-    if (e.props.hasSurvey || newest === undefined) return next(e);
-    // pane が開いていて見えていない間 (tab の裏・幅が足りない) だけ、band に最新の card を出す。
-    const pane = await paneState($);
-    if (!pane.isOpen || pane.isInView) return next(e);
-
-    const now = newest.card.status === "pending" ? await read($, frame) : 0;
-    return cardRows($.ui.resolve(e), newest, e.props.bodyColumns, now);
+    return next(e);
   });
 
   on("turn.start", async ($, e, next) => {

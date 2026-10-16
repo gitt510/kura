@@ -38,8 +38,6 @@ export type Sentence = {
 // `kura config` の mod.companion section。null は Claude Code の既定に任せる。
 export type Layout = {
   autoOpen: boolean;
-  columns: number | null;
-  rows: number | null;
   widgets: string[]; // 上から順、最大 3 つ。akapen / tldr / verbatim の生成はここに載っている間だけ
   ratio: number[]; // widget ごとの高さの取り分。widgets と同じ数で、合計で割る
 };
