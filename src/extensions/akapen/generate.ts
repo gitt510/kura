@@ -40,7 +40,7 @@ export interface GenerateResult {
 // 速さより質 — parts の切り方と訳語の自然さが価値なので既定は opus (config の既定値)。
 // null は CLI の既定に任せる。
 export function resolveAkapenModel(config: KuraConfig = loadConfig()): string | null {
-  return resolvePromptGeneration("akapen", config.features.akapen).model;
+  return resolvePromptGeneration("akapen", config.extensions.akapen).model;
 }
 
 const CONTEXT_CLIP = 1200;
@@ -106,7 +106,7 @@ export async function generateCard(job: GenerateInput): Promise<GenerateResult> 
       "akapen",
       buildPrompt(job),
       model,
-      resolvePromptGeneration("akapen", loadConfig().features.akapen).effort,
+      resolvePromptGeneration("akapen", loadConfig().extensions.akapen).effort,
     );
   } catch {
     return { items: null, model, status: "error" }; // claude CLI が無い

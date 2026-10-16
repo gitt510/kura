@@ -2,7 +2,7 @@
 //
 // orchestrator (hourly-job) が publishTimeline() を import して使う。CLI でも叩ける（手動再送）。
 //   - データは timeline table から引く (DB が真実)。要約 (insert) は別責務。
-//   - webhook と avatar は config の features.timeline.publish.discord。username は生成 provenance、
+//   - webhook と avatar は config の extensions.timeline.publish.discord。username は生成 provenance、
 //     旧 row (gen_model 無し) は "Timeline ⏱"。avatar 未設定なら webhook 既定の avatar。帯色 blurple。
 //   - 外部送信なので非冪等。冪等ガードは published_at。
 //
@@ -38,7 +38,7 @@ interface Row {
 // timeline table の 1 hour を配信する。投稿できたら published、既 publish は skipped を
 // 返す（正常系）。POST 失敗は throw（呼び手が扱う）。
 export async function publishTimeline(target: HourTarget): Promise<PublishResult> {
-  const { avatar } = loadConfig().features.timeline.publish.discord;
+  const { avatar } = loadConfig().extensions.timeline.publish.discord;
   const { windowStart } = target;
   const db = openKura();
   try {

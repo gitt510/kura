@@ -51,8 +51,8 @@ test("model は config の tldr.model、無ければ opus", () => {
   expect(
     resolveTldrModel({
       ...defaultConfig(),
-      features: {
-        ...defaultConfig().features,
+      extensions: {
+        ...defaultConfig().extensions,
         tldr: { agent: "claude", model: "sonnet", effort: null },
       },
     }),

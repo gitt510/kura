@@ -9,8 +9,6 @@ const CARD = {
 
 const COMPANION = {
   autoOpen: false,
-  columns: 64,
-  rows: null,
   widgets: ["akapen", "tldr"],
   ratio: [0.6, 0.4],
 };
@@ -185,7 +183,7 @@ function typed($: EngineInterface, text: string) {
   return $.prompt.submit({ text, wait: false, origin: { kind: "composer" } });
 }
 
-test("pane が閉じていても card は作り、band には出さない", async ($, on) => {
+test("pane が閉じていても card は作り、prompt 欄には出さない", async ($, on) => {
   const state = engine(on, "closed");
   const text = "I think kono houhou is good";
   await typed($, text);
@@ -197,15 +195,16 @@ test("pane が閉じていても card は作り、band には出さない", asyn
   await ui.unmount();
 });
 
-test("/kura-companion は kura config を読み、columns を渡して pane を開く", async ($, on) => {
+test("/kura-companion は kura config を読み、大きさを Claude Code に任せて pane を開く", async ($, on) => {
   const state = engine(on, "closed");
   await open($);
   expect(state.calls.map((call) => call.argv)).toEqual([["kura", "config"]]);
-  expect(state.opened).toEqual([expect.objectContaining({ id: "kura-companion", columns: 64 })]);
+  expect(state.opened).toEqual([expect.objectContaining({ id: "kura-companion" })]);
+  expect(state.opened[0]).not.toHaveProperty("columns");
   expect(state.opened[0]).not.toHaveProperty("rows");
 });
 
-test("pane が開いていて見えない間は、打った prompt の card を band に出す", async ($, on) => {
+test("pane が開いていて見えない間も、card は prompt 欄に出さない", async ($, on) => {
   const state = engine(on, "hidden");
   const text = "I think kono houhou is good";
   await typed($, text);
@@ -214,7 +213,7 @@ test("pane が開いていて見えない間は、打った prompt の card を 
 
   for (const surface of ["terminal", "desktop"] as const) {
     const ui = await $.ui.mount({ ...BAND, surface });
-    expect(await ui.find({ type: "Text", text: /this approach/ })).toBeDefined();
+    expect(await ui.find({ type: "Text", text: /this approach/ })).toBeUndefined();
     await ui.unmount();
   }
 });
@@ -241,11 +240,12 @@ test("item は kind ごとにまとまり、長い item は直しを次の行に
     },
     { kind: "grammar", from: "how's the impelment is?", to: "how would I implement it?" },
   ];
-  engine(on, "hidden", COMPANION, JSON.stringify({ status: "ok", items }));
+  engine(on, "closed", COMPANION, JSON.stringify({ status: "ok", items }));
+  await open($);
   await typed($, "x x x");
   await settle();
 
-  const ui = await $.ui.mount({ ...BAND, surface: "terminal" });
+  const ui = await $.ui.mount({ ...PANE, surface: "terminal" });
   const text = (await ui.find({ type: "Box" }))?.text ?? "";
   expect(text.indexOf("I make mod")).toBeLessThan(text.indexOf("impelment"));
   expect(text.indexOf("impelment")).toBeLessThan(text.indexOf(long));

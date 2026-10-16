@@ -64,8 +64,8 @@ test("model は config の akapen.model、無ければ opus", () => {
   expect(
     resolveAkapenModel({
       ...defaultConfig(),
-      features: {
-        ...defaultConfig().features,
+      extensions: {
+        ...defaultConfig().extensions,
         akapen: { agent: "claude", model: "sonnet", effort: null },
       },
     }),

@@ -20,7 +20,7 @@ key at its default. Fails if the file already exists.
 `,
   "bake-secrets": `usage: kura bake-secrets
 
-Resolve every op:// reference in features.<name>.publish.discord.webhook in config.json through
+Resolve every op:// reference in extensions.<name>.publish.discord.webhook in config.json through
 1Password (op read) into the state dir's secrets.json (mode 600), which the
 publish jobs read. Run it again after changing a reference.
 `,
@@ -127,7 +127,7 @@ Turn one prompt read from stdin into an English feedback card and print it
 as JSON: {status, model, items}, each item {kind, from, to} with kind one of
 romaji, grammar, natural. Prompts under 3 characters or starting with <, /
 or ! print {"status":"skipped"}. Nothing is stored. The model is
-features.akapen.model in config.json (default opus).
+extensions.akapen.model in config.json (default opus).
 `,
   "extension run tldr": `usage: kura extension run tldr < turns.json
 
@@ -135,7 +135,7 @@ Compress the last answer of a conversation into three lines and print it as
 JSON: {status, model, text, question}. question is the last question in one
 line, or null when the reply did not give one. stdin is {"turns": [{question, answer}, ...]},
 oldest first; up to 3 turns before the last one are passed as context.
-Nothing is stored. The model is features.tldr.model in config.json (default opus).
+Nothing is stored. The model is extensions.tldr.model in config.json (default opus).
 `,
   "extension run verbatim": `usage: kura extension run verbatim < prompt.json
 
@@ -145,7 +145,7 @@ material becomes [pasted]), and print it as JSON: {status, model, text}.
 stdin is {"input": string, "turns"?: [{question, answer}, ...]}, the turns
 before it oldest first; the last one is passed as context. An input under 3
 characters or starting with <, / or ! prints {"status":"skipped"}. Invalid
-stdin exits 2. Nothing is stored. The model is features.verbatim.model in
+stdin exits 2. Nothing is stored. The model is extensions.verbatim.model in
 config.json (default opus).
 `,
 };

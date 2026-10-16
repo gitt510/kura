@@ -34,7 +34,7 @@ const CONTEXT_CLIP = 1500;
 // native の言い回しが価値なので既定は opus (config の既定値)。
 // null は CLI の既定に任せる。
 export function resolveVerbatimModel(config: KuraConfig = loadConfig()): string | null {
-  return resolvePromptGeneration("verbatim", config.features.verbatim).model;
+  return resolvePromptGeneration("verbatim", config.extensions.verbatim).model;
 }
 
 function isTurn(value: unknown): value is Turn {
@@ -90,7 +90,7 @@ export async function generateVerbatim(input: VerbatimInput): Promise<VerbatimRe
       "verbatim",
       buildPrompt(input),
       model,
-      resolvePromptGeneration("verbatim", loadConfig().features.verbatim).effort,
+      resolvePromptGeneration("verbatim", loadConfig().extensions.verbatim).effort,
     );
   } catch {
     return { text: null, model, status: "error" }; // claude CLI が無い

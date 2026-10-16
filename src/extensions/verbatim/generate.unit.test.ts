@@ -41,6 +41,6 @@ test("stdin は input 必須、turns 省略可、形が違えば拒否", () => {
 test("model の既定は opus、null と書けば CLI の既定", () => {
   expect(resolveVerbatimModel(defaultConfig())).toBe("opus");
   const config = defaultConfig();
-  config.features.verbatim.model = null;
+  config.extensions.verbatim.model = null;
   expect(resolveVerbatimModel(config)).toBeNull();
 });

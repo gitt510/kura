@@ -71,7 +71,7 @@ function publishState(feature: PublishFeature): State {
 // feature の生成設定を 1 cell に: `codex · gpt-5.6 · high`。null は CLI の既定。
 function generationState(feature: PublishFeature): string {
   try {
-    const { agent, options } = resolveGeneration(feature, loadConfig().features[feature]);
+    const { agent, options } = resolveGeneration(feature, loadConfig().extensions[feature]);
     return `${agent} · ${options.model ?? "CLI default"} · ${options.effort ?? "CLI default"}`;
   } catch {
     return "ERROR";

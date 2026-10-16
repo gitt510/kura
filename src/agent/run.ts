@@ -335,7 +335,7 @@ export function runSkillJson(
   skill: PublishedFeature,
   workDir: string,
   args: string[] = [],
-  generation: Generation = loadConfig().features[skill],
+  generation: Generation = loadConfig().extensions[skill],
 ): AgentJsonRun {
   const resolved = resolveGeneration(skill, generation);
   const { agent } = resolved;

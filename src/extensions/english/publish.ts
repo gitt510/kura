@@ -2,7 +2,7 @@
 //
 // orchestrator (hourly-job) が publishEnglish() を import して使う。CLI でも叩ける（手動再送）。
 //   - データは english table から引く (DB が真実)。カード生成 (insert) は別責務。
-//   - webhook と avatar は config の features.english.publish.discord。username は生成 provenance
+//   - webhook と avatar は config の extensions.english.publish.discord。username は生成 provenance
 //     ("claude-fable-5 (high)")、旧 row (gen_model 無し) は "English Feed"。avatar 未設定なら
 //     webhook 既定の avatar。帯色 green。
 //   - 外部送信なので非冪等。冪等ガードは published_at。
@@ -42,7 +42,7 @@ interface Row {
 // english table の 1 hour を配信する。投稿できたら published、既 publish / カード無しは
 // skipped を返す（正常系）。POST 失敗は throw（呼び手が扱う）。
 export async function publishEnglish(target: HourTarget): Promise<PublishResult> {
-  const { avatar } = loadConfig().features.english.publish.discord;
+  const { avatar } = loadConfig().extensions.english.publish.discord;
   const { windowStart } = target;
   const db = openKura();
   try {

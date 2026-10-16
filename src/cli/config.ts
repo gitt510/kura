@@ -28,8 +28,8 @@ function initConfig(): number {
 }
 
 function bakeSecrets(): number {
-  const { features } = loadConfig();
-  const references = PUBLISHED_FEATURES.map((name) => features[name].publish.discord.webhook)
+  const { extensions } = loadConfig();
+  const references = PUBLISHED_FEATURES.map((name) => extensions[name].publish.discord.webhook)
     .filter((value): value is string => !!value)
     .filter(isSecretReference);
   if (references.length === 0) {

@@ -31,7 +31,7 @@ const CONTEXT_CLIP = 1500;
 
 // null は CLI の既定に任せる。
 export function resolveTldrModel(config: KuraConfig = loadConfig()): string | null {
-  return resolvePromptGeneration("tldr", config.features.tldr).model;
+  return resolvePromptGeneration("tldr", config.extensions.tldr).model;
 }
 
 function isTurn(value: unknown): value is Turn {
@@ -93,7 +93,7 @@ export async function generateTldr(input: TldrInput): Promise<TldrResult> {
       "tldr",
       buildPrompt(input),
       model,
-      resolvePromptGeneration("tldr", loadConfig().features.tldr).effort,
+      resolvePromptGeneration("tldr", loadConfig().extensions.tldr).effort,
     );
   } catch {
     return { text: null, question: null, model, status: "error" }; // claude CLI が無い

@@ -25,7 +25,7 @@ export type PublishResult =
 
 // feature 間の差分だけを注入する interface。T = LLM が生成する JSON の型。
 export interface HourlyFeature<T> {
-  name: PublishedFeature; // log 名 / tmp path / skill 起動 (`/${name}`) / config の features.<name> を兼ねる
+  name: PublishedFeature; // log 名 / tmp path / skill 起動 (`/${name}`) / config の extensions.<name> を兼ねる
   isGenerated(windowStart: string): boolean;
   parseGenerated(value: unknown): T;
   // 素材 (messages.json) を差し替える（決定論）。window に feature 固有の材料

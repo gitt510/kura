@@ -25,7 +25,7 @@ const ALLOWED_TOOLS = [
 ].join(",");
 
 test("feature の生成設定を agent ごとの option に解決する", () => {
-  expect(resolveGeneration("timeline", defaultConfig().features.timeline)).toEqual({
+  expect(resolveGeneration("timeline", defaultConfig().extensions.timeline)).toEqual({
     agent: "claude",
     options: { model: null, effort: null },
   });

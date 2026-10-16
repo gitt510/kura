@@ -28,7 +28,7 @@ function writeWebhook(webhook: string) {
   mkdirSync(join(home, "config", "kura"), { recursive: true });
   writeFileSync(
     configFile(),
-    JSON.stringify({ features: { timeline: { publish: { discord: { webhook } } } } }),
+    JSON.stringify({ extensions: { timeline: { publish: { discord: { webhook } } } } }),
   );
 }
 
@@ -51,11 +51,11 @@ test("publish enable は webhook と明示 opt-in を要求し、config の他�
   expect(run("timeline", "enable").exitCode).toBe(0);
 
   const config = JSON.parse(readFileSync(configFile(), "utf-8"));
-  expect(config.features.timeline.publish).toEqual({
+  expect(config.extensions.timeline.publish).toEqual({
     enabled: true,
     discord: { webhook: "https://example.test/webhook", avatar: null },
   });
-  expect(config.features.english.publish.enabled).toBe(false);
+  expect(config.extensions.english.publish.enabled).toBe(false);
   expect(statSync(configFile()).mode & 0o777).toBe(0o600);
   expect(run("timeline", "check").exitCode).toBe(0);
 });

@@ -42,7 +42,7 @@ const ERROR_MS = 30_000;
 // kura verbatim に context として渡す直前の turn の数。
 const VERBATIM_CONTEXT = 1;
 
-// 打った prompt ごとに 1 entry、古い順。band は最新を、pane は全部を出す。
+// 打った prompt ごとに 1 entry、古い順。pane が全部を出す。
 const history = atom({ plugin: "kura", key: "history" } as const, []);
 // 直近に打った prompt とその native 英訳。1 つだけ持ち、次の prompt で置き換わる。
 const sentence = atom({ plugin: "kura", key: "sentence" } as const, null);
@@ -975,8 +975,6 @@ async function openPane($: EngineInterface): Promise<void> {
   await $.ui.open({
     id: PANE,
     title: "kura companion",
-    ...(companion.columns ? { columns: companion.columns } : {}),
-    ...(companion.rows ? { rows: companion.rows } : {}),
   });
 }
 
@@ -1216,18 +1214,13 @@ export const register: Register = (on) => {
     return next(e);
   });
 
+  // prompt 欄は session の間ずっと描かれる。mod が session の途中で読み込まれても、ここで
+  // command を登録する。この mod は prompt 欄に何も描かない。
   on("ui.render", { component: "AbovePrompt" }, async ($, e, next) => {
     void declare($).catch(() => {
       isDeclared = false;
     });
-    const newest = (await read($, history)).at(-1);
-    if (e.props.hasSurvey || newest === undefined) return next(e);
-    // pane が開いていて見えていない間 (tab の裏・幅が足りない) だけ、band に最新の card を出す。
-    const pane = await paneState($);
-    if (!pane.isOpen || pane.isInView) return next(e);
-
-    const now = newest.card.status === "pending" ? await read($, frame) : 0;
-    return cardRows($.ui.resolve(e), newest, e.props.bodyColumns, now);
+    return next(e);
   });
 
   on("turn.start", async ($, e, next) => {

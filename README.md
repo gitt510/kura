@@ -98,7 +98,7 @@ $EDITOR "${XDG_CONFIG_HOME:-$HOME/.config}/kura/config.json"
 
 ```json
 {
-  "features": {
+  "extensions": {
     "akapen": { "agent": "claude", "model": "opus", "effort": null },
     "tldr": { "agent": "claude", "model": "opus", "effort": null },
     "verbatim": { "agent": "claude", "model": "opus", "effort": null },
@@ -114,8 +114,6 @@ $EDITOR "${XDG_CONFIG_HOME:-$HOME/.config}/kura/config.json"
   "mod": {
     "companion": {
       "autoOpen": false,
-      "columns": null,
-      "rows": null,
       "widgets": ["akapen", "tldr"],
       "ratio": [0.5, 0.5]
     }
@@ -125,23 +123,23 @@ $EDITOR "${XDG_CONFIG_HOME:-$HOME/.config}/kura/config.json"
 
 | Key | Consumer |
 | --- | --- |
-| `features.<name>.agent` | CLI that generates the feature: `claude` (default) or `codex`; `akapen` / `tldr` / `verbatim` accept `claude` only (rejected at load) |
-| `features.<name>.model` | Model for that feature; omitted means the feature default (`akapen` / `tldr` / `verbatim`: `opus`, others: CLI default), `null` means the CLI default |
-| `features.<name>.effort` | Effort for that feature in the agent's own vocabulary; `null` leaves it to the CLI |
-| `features.<timeline\|english>.publish.enabled` | Discord delivery opted in; written by `kura extension publish` |
-| `features.<timeline\|english>.publish.discord.webhook` | Discord webhook URL or `op://` reference |
-| `features.<timeline\|english>.publish.discord.avatar` | Avatar URL for that feature's Discord posts |
+| `extensions.<name>.agent` | CLI that generates the extension: `claude` (default) or `codex`; `akapen` / `tldr` / `verbatim` accept `claude` only (rejected at load) |
+| `extensions.<name>.model` | Model for that extension; omitted means the extension default (`akapen` / `tldr` / `verbatim`: `opus`, others: CLI default), `null` means the CLI default |
+| `extensions.<name>.effort` | Effort for that extension in the agent's own vocabulary; `null` leaves it to the CLI |
+| `extensions.<timeline\|english>.publish.enabled` | Discord delivery opted in; written by `kura extension publish` |
+| `extensions.<timeline\|english>.publish.discord.webhook` | Discord webhook URL or `op://` reference |
+| `extensions.<timeline\|english>.publish.discord.avatar` | Avatar URL for that extension's Discord posts |
 | `mod.companion.autoOpen` | Open the companion pane when a Claude Code session starts (default `false`) |
-| `mod.companion.columns` / `mod.companion.rows` | Companion pane width when docked / height when inline; `null` leaves it to Claude Code |
 | `mod.companion.widgets` | Companion pane widgets, top to bottom, at most 3: `akapen`, `verbatim`, `tldr`, `agents`; empty turns the companion off |
 | `mod.companion.ratio` | Each widget's share of the rows, in `widgets` order (default `[0.5, 0.5]`); divided by their sum, so they need not add up to 1; a length that differs from `widgets` is rejected at load |
 
-- `features.<name>.model` / `effort` apply only to that feature's generation; normal CLI usage is untouched
+- `extensions.<name>.model` / `effort` apply only to that extension's generation; normal CLI usage is untouched
 - `null` model / effort injects no flag; the CLI's own default applies
-- A key the schema does not know is rejected at load with its path (`features.timeline has unknown key "webhok"`)
+- A key the schema does not know is rejected at load with its path (`extensions.timeline has unknown key "webhok"`); a key from an earlier
+  version names its replacement (`config has unknown key "features" (renamed to "extensions")`)
 - Invalid effort values are rejected at run time with the accepted list
-- A webhook alone does not enable delivery; `just publish enable <feature>`
-  sets `features.<feature>.publish.enabled` to `true`
+- A webhook alone does not enable delivery; `just publish enable <extension>`
+  sets `extensions.<extension>.publish.enabled` to `true`
 - A webhook may be a 1Password reference (`op://...`); `just bake-secrets`
   resolves every reference into `~/.local/state/kura/secrets.json` (mode 600),
   which delivery reads, so scheduled jobs need no 1Password sign-in
@@ -216,8 +214,8 @@ kura config
   0.15 s of CPU per run)
 - `agents` is cut from the bottom when it outgrows its rows; `akapen` / `tldr`
   are cut from the top, keeping the newest
-- While the pane is open but out of view, the newest card shows above the
-  prompt instead
+- The companion draws only in its side pane, never above the prompt; Claude
+  Code decides the pane's size
 - `mod.companion.*` is read at session start and each time the pane opens;
   reopen the pane to apply a change
 - A widget id other than `akapen` / `verbatim` / `tldr` / `agents` is skipped
