@@ -11,7 +11,7 @@ biome := "bunx @biomejs/biome@2.5.15"
 _default:
     @just --list --unsorted
 
-# Set up local entrypoints without enabling history sources or features.
+# Set up local entrypoints without enabling recording or extensions.
 [group('setup')]
 setup:
     @bun install --frozen-lockfile --cwd "{{repo}}"
@@ -27,43 +27,47 @@ init-config:
 bake-secrets:
     @bun "{{repo}}/src/cli.ts" bake-secrets
 
-# Enable or disable a conversation history source.
+# Start recording an agent's conversations (claude, codex, or all).
 [group('setup')]
-history action source:
-    @bun "{{repo}}/src/cli.ts" history "{{action}}" "{{source}}"
+enable agent:
+    @bun "{{repo}}/src/cli.ts" enable "{{agent}}"
 
-# Enable or disable scheduled generation for a feature.
-[group('features')]
-schedule action feature:
-    @bun "{{repo}}/src/cli.ts" schedule "{{action}}" "{{feature}}"
+# Stop recording an agent's conversations (claude, codex, or all).
+[group('setup')]
+disable agent:
+    @bun "{{repo}}/src/cli.ts" disable "{{agent}}"
 
-# Enable or disable external publish for a feature.
-[group('features')]
-publish action feature:
-    @bun "{{repo}}/src/cli.ts" publish "{{action}}" "{{feature}}"
+# Enable or disable scheduled generation for an extension.
+[group('extensions')]
+schedule action extension:
+    @bun "{{repo}}/src/cli.ts" extension schedule "{{action}}" "{{extension}}"
 
-# Disable history sources and features, then remove local entrypoints.
+# Enable or disable external publish for an extension.
+[group('extensions')]
+publish action extension:
+    @bun "{{repo}}/src/cli.ts" extension publish "{{action}}" "{{extension}}"
+
+# Disable recording and extensions, then remove local entrypoints.
 [group('setup')]
 teardown:
     @bun "{{repo}}/src/cli.ts" teardown
 
-# Show setup and feature state.
+# Show setup and extension state.
 [group('operations')]
 status:
     @bun "{{repo}}/src/cli.ts" status
 
-# Browse the state DBs in a local Datasette web UI (read-only). Runs via uvx; nothing installed.
+# Browse kura.db in a local Datasette web UI (read-only). Runs via uvx; nothing installed.
 [group('operations')]
 view-db:
     #!/usr/bin/env bash
     set -euo pipefail
     command -v uvx >/dev/null || { echo "error: uvx not found — install uv: https://docs.astral.sh/uv/"; exit 1; }
-    shopt -s nullglob
-    dbs=("${XDG_STATE_HOME:-$HOME/.local/state}"/kura/*.db)
-    (( ${#dbs[@]} )) || { echo "error: no DB found in ${XDG_STATE_HOME:-$HOME/.local/state}/kura"; exit 1; }
-    exec uvx datasette --open "${dbs[@]}"
+    db="${XDG_STATE_HOME:-$HOME/.local/state}/kura/kura.db"
+    [[ -f "$db" ]] || { echo "error: $db not found"; exit 1; }
+    exec uvx datasette --open "$db"
 
-# Show LLM token usage and cost per feature.
+# Show LLM token usage and cost per extension.
 [group('operations')]
 usage *args:
     @bun "{{repo}}/src/cli.ts" usage {{args}}

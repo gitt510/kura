@@ -46,10 +46,10 @@ test("agent spawn の検出 pattern は直書きの spawn を捕まえる", () =
 });
 
 // 実行の入口は src/cli.ts の subcommand だけ。launchd も mod も手動も同じ入口を通り、
-// config・引数解釈・log が揃う。features は関数を export するだけで、process を持たない。
-test("features は実行の入口を持たない", () => {
+// config・引数解釈・log が揃う。extensions は関数を export するだけで、process を持たない。
+test("extensions は実行の入口を持たない", () => {
   const violations = sources()
-    .filter((file) => file.startsWith(join(src, "features")))
+    .filter((file) => file.startsWith(join(src, "extensions")))
     .filter((file) =>
       /import\.meta\.main|process\.exit|process\.argv|Bun\.stdin/.test(readFileSync(file, "utf-8")),
     );
@@ -57,14 +57,15 @@ test("features は実行の入口を持たない", () => {
   expect(violations).toEqual([]);
 });
 
-// src 直下 = app 全体の土台、directory = 1 domain、cli/ = subcommand の入口。
-// features を import できるのは features 自身と cli/ だけ。
-test("features と cli 以外は features に依存しない", () => {
-  const allowed = ["features", "cli"].map((dir) => `${join(src, dir)}/`);
+// src 直下 = app 全体の土台、store/ = core (会話の保存と検索)、extensions/ = opt-in の機能、
+// cli/ = subcommand の入口。extensions を import できるのは extensions 自身と cli/ だけで、
+// core は extension を知らない。
+test("extensions と cli 以外は extensions に依存しない", () => {
+  const allowed = ["extensions", "cli"].map((dir) => `${join(src, dir)}/`);
   const violations = typescriptFiles(src)
     .filter((file) => !allowed.some((dir) => file.startsWith(dir)))
     .filter((file) =>
-      /(from\s+|import\(\s*)["'][^"']*features\//.test(readFileSync(file, "utf-8")),
+      /(from\s+|import\(\s*)["'][^"']*extensions\//.test(readFileSync(file, "utf-8")),
     );
 
   expect(violations).toEqual([]);

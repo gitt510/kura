@@ -1,11 +1,10 @@
-// usage.ts — LLM 呼び出しの token / cost 台帳 (usage.db) への型付きアクセス窓口。
+// usage.ts — LLM 呼び出しの token / cost 台帳 (kura.db の usage table) への型付きアクセス窓口。
 //
-// このファイルが schema owner: openUsageDb() が usage-schema.sql を冪等に適用する。
-// 記録は fail-open — 観測の失敗が生成を壊してはならないので、insert に失敗しても
+// table の形は src/schema.sql が正本。記録は fail-open — 観測の失敗が生成を壊してはならないので、insert に失敗しても
 // stderr に 1 行残して処理を続ける。
 
 import type { Database } from "bun:sqlite";
-import { legacyDbPath, openStateDatabase, stateDbPath } from "../storage.ts";
+import { openKura } from "../db.ts";
 
 // agent の公開出力から読み取った 1 call 分の消費量。
 export interface AgentUsage {
@@ -35,21 +34,9 @@ export interface UsageSummaryRow {
   cost_usd: number | null; // 全 row が cost 無し (Codex) なら null
 }
 
-const SCHEMA_SQL = `${import.meta.dir}/usage-schema.sql`;
-
-// path 解決は呼び出し時まで遅延する — module load で state dir を作らない
-// (`kura --help` や setup 前の実行が state を生やさないため)。
-export function usageDbPath(): string {
-  return stateDbPath("usage.db", legacyDbPath("usage", "usage.db"));
-}
-
-export function openUsageDb(): Database {
-  return openStateDatabase(usageDbPath(), SCHEMA_SQL);
-}
-
 export function insertCall(db: Database, record: UsageRecord, createdAt: string): void {
   db.query(
-    `INSERT INTO calls
+    `INSERT INTO usage
        (feature, agent, model, ok, input_tokens, cache_creation_tokens,
         cache_read_tokens, output_tokens, cost_usd, created_at)
      VALUES
@@ -71,7 +58,7 @@ export function insertCall(db: Database, record: UsageRecord, createdAt: string)
 
 export function recordUsage(record: UsageRecord): void {
   try {
-    const db = openUsageDb();
+    const db = openKura();
     try {
       insertCall(db, record, new Date().toISOString());
     } finally {
@@ -92,7 +79,7 @@ export function usageSummary(db: Database, since: string | null): UsageSummaryRo
               SUM(cache_read_tokens) AS cache_read_tokens,
               SUM(output_tokens) AS output_tokens,
               SUM(cost_usd) AS cost_usd
-         FROM calls
+         FROM usage
         WHERE $since IS NULL OR created_at >= $since
         GROUP BY feature, model
         ORDER BY feature, model`,

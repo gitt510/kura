@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import { defaultConfig, type KuraConfig } from "../config.ts";
-import { KURA_ROOT } from "../storage.ts";
+import { KURA_ROOT } from "../db.ts";
 import {
   buildClaudeCommand,
   buildClaudePromptCommand,

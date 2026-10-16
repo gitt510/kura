@@ -83,7 +83,7 @@ function engine(
     }
     if (e.argv[0] === "find") return ran("");
     state.calls.push({ argv: [...e.argv], stdin: e.init?.stdin ?? "" });
-    const command = e.argv[1];
+    const command = commandOf(e.argv);
     if (command === "config") return ran(JSON.stringify({ mod: { companion } }));
     if (isHanging) return new Promise<never>(() => {});
     if (command === "tldr") return ran(JSON.stringify(tldr));
@@ -168,6 +168,11 @@ function engine(
 const SELF = "9c48e030-f8d5-4a82-a57f-5e0f4dc15b2c";
 
 // kura config の読み出しを除いた、生成の呼び出し。
+// `kura extension run <name>` は <name>、それ以外は subcommand。
+function commandOf(argv: string[]): string | undefined {
+  return argv[1] === "extension" ? argv[3] : argv[1];
+}
+
 function generated(state: Engine) {
   return state.calls.filter((call) => call.argv[1] !== "config");
 }
@@ -185,7 +190,7 @@ test("pane が閉じていても card は作り、band には出さない", asyn
   const text = "I think kono houhou is good";
   await typed($, text);
   await settle();
-  expect(generated(state)).toEqual([{ argv: ["kura", "akapen"], stdin: text }]);
+  expect(generated(state)).toEqual([{ argv: ["kura", "extension", "run", "akapen"], stdin: text }]);
 
   const ui = await $.ui.mount({ ...BAND, surface: "terminal" });
   expect(await ui.find({ type: "Text", text: /this approach/ })).toBeUndefined();
@@ -205,7 +210,7 @@ test("pane が開いていて見えない間は、打った prompt の card を 
   const text = "I think kono houhou is good";
   await typed($, text);
   await settle();
-  expect(generated(state)).toEqual([{ argv: ["kura", "akapen"], stdin: text }]);
+  expect(generated(state)).toEqual([{ argv: ["kura", "extension", "run", "akapen"], stdin: text }]);
 
   for (const surface of ["terminal", "desktop"] as const) {
     const ui = await $.ui.mount({ ...BAND, surface });
@@ -337,7 +342,7 @@ test("回答ごとに直前の turn ごと kura tldr に渡し、要約を出す
   }
   await settle();
 
-  const sent = state.calls.filter((call) => call.argv[1] === "tldr").at(-1);
+  const sent = state.calls.filter((call) => commandOf(call.argv) === "tldr").at(-1);
   expect(JSON.parse(sent?.stdin ?? "{}")).toEqual({
     turns: [2, 3, 4, 5].map((n) => ({ question: `q${n}`, answer: `a${n}` })),
   });
@@ -466,7 +471,7 @@ test("中断した turn は tldr から消し、command は turn にしない", 
     await pane.find({ type: "Text", text: /The next answer is summarized here/ }),
   ).toBeDefined();
   await pane.unmount();
-  expect(state.calls.filter((call) => call.argv[1] === "tldr")).toEqual([]);
+  expect(state.calls.filter((call) => commandOf(call.argv) === "tldr")).toEqual([]);
 });
 
 test("/kura-handoff はこの session の id を kura handoff に渡すだけ", async ($, on) => {
@@ -719,7 +724,7 @@ test("verbatim は載っている間だけ prompt ごとに kura verbatim を呼
 // kura <command> に渡した stdin (JSON) の列。
 function sentTo(state: Engine, command: string): unknown[] {
   return state.calls
-    .filter((call) => call.argv[1] === command)
+    .filter((call) => commandOf(call.argv) === command)
     .map((call) => JSON.parse(call.stdin));
 }
 
@@ -766,7 +771,7 @@ test("verbatim が載っていなければ kura verbatim は呼ばない", async
   const state = engine(on, "closed");
   await typed($, "fix this");
   await settle();
-  expect(state.calls.filter((call) => call.argv[1] === "verbatim")).toEqual([]);
+  expect(state.calls.filter((call) => commandOf(call.argv) === "verbatim")).toEqual([]);
 });
 
 test("kura が skip する prompt は kura verbatim に送らず、前の英訳を残す", async ($, on) => {

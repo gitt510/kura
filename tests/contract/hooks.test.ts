@@ -3,7 +3,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 
-const script = join(import.meta.dir, "..", "..", "src", "history", "hooks.ts");
+const script = join(import.meta.dir, "..", "..", "src", "store", "hooks.ts");
 
 function run(home: string, source: "claude" | "codex" | "all", action: string) {
   return Bun.spawnSync([process.execPath, script, source, action], {

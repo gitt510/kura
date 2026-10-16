@@ -2,9 +2,10 @@
 
 # kura — 蔵
 
-A personal knowledge pipeline that stores Claude Code / Codex conversations in
-SQLite and ships them back out to Discord as learning cards and activity
-timelines. (*kura* / 蔵 is a traditional storehouse — you *put things away*
+A personal storehouse that keeps Claude Code / Codex conversations in one
+SQLite database (`kura.db`). Opt-in extensions build on it: activity timelines
+and English learning cards shipped to Discord, and live English feedback in a
+Claude Code mod. (*kura* / 蔵 is a traditional storehouse — you *put things away*
 quietly and *take them out* only when you need them.)
 
 ## Why kura
@@ -19,7 +20,7 @@ quietly and *take them out* only when you need them.)
   with the verbatim transcript entry
 - Recall is deliberate: stored history enters a session only when
   `search-history` (or `kura search` / `kura show`) is invoked explicitly
-- Recall reads the history database without modifying it
+- Recall reads `kura.db` without modifying it
 
 ## Requirements
 
@@ -42,30 +43,31 @@ just setup
 ```
 
 - `just setup` installs the dependencies from `bun.lock` and creates the
-  local entrypoints only; no history source, scheduled job, or publish is
+  local entrypoints only; no recording, scheduled job, or publish is
   enabled
 - `~/.local/share/kura` is symlinked to the checkout
 - `~/.local/bin/kura` is deployed as a stable CLI
 
 ```bash
-just history enable claude
-just history enable codex
+just enable claude
+just enable codex
 just status
 ```
 
-- History storage is enabled per agent
-- `just history enable claude` wires both the Stop and UserPromptSubmit
+- Recording is enabled per agent; `just disable <agent>` stops it and keeps
+  what was recorded
+- `just enable claude` wires both the Stop and UserPromptSubmit
   hooks; re-run it after upgrading from a Stop-only version
 - Hooks are fail-open: a failed write is never retried and never blocks the
   session, so a prompt is lost only when its provisional write fails and its
   turn also never completes
-- For Codex, run `/hooks` once after `just history enable codex`
+- For Codex, run `/hooks` once after `just enable codex`
 
 ## Skill installation
 
 - `just setup` does not install the user-scope skills under
   `plugin/skills/`; the public skill is `search-history`
-- `src/features/*/skills/` are used at project scope by the scheduled jobs;
+- `src/extensions/*/skills/` are used at project scope by the scheduled jobs;
   do not install them at user scope
 - Install through exactly one channel; installing through both defines the
   same skill twice (`kura:search-history` and `search-history`)
@@ -126,7 +128,7 @@ $EDITOR "${XDG_CONFIG_HOME:-$HOME/.config}/kura/config.json"
 | `features.<name>.agent` | CLI that generates the feature: `claude` (default) or `codex`; `akapen` / `tldr` / `verbatim` accept `claude` only (rejected at load) |
 | `features.<name>.model` | Model for that feature; omitted means the feature default (`akapen` / `tldr` / `verbatim`: `opus`, others: CLI default), `null` means the CLI default |
 | `features.<name>.effort` | Effort for that feature in the agent's own vocabulary; `null` leaves it to the CLI |
-| `features.<timeline\|english>.publish.enabled` | Discord delivery opted in; written by `kura publish` |
+| `features.<timeline\|english>.publish.enabled` | Discord delivery opted in; written by `kura extension publish` |
 | `features.<timeline\|english>.publish.discord.webhook` | Discord webhook URL or `op://` reference |
 | `features.<timeline\|english>.publish.discord.avatar` | Avatar URL for that feature's Discord posts |
 | `mod.companion.autoOpen` | Open the companion pane when a Claude Code session starts (default `false`) |
@@ -166,8 +168,8 @@ kura config
 - `akapen` / `verbatim` / `tldr` / `agents` run only while listed in
   `mod.companion.widgets`; with the list empty nothing is generated and
   `/kura-companion` only says so. `/kura-handoff` works either way
-- From session start, every typed prompt gets a `kura akapen` card and a
-  `kura verbatim` translation, and every answer a `kura tldr` summary,
+- From session start, every typed prompt gets an `akapen` card and a
+  `verbatim` translation, and every answer a `tldr` summary,
   whether the pane is open or not — one call each, kept for the session
   (last 30; `verbatim` keeps only the newest)
 - `akapen` shows the cards with something to fix, oldest at the top; a card
@@ -179,12 +181,12 @@ kura config
   first line. It keeps its `ratio` share of the rows: the
   English fits first, the prompt takes what is left, and either is cut with
   `…` at the end.
-  A prompt `kura verbatim` would skip (under 3 characters, or starting with
+  A prompt `verbatim` would skip (under 3 characters, or starting with
   `<`, `/` or `!`) is not sent and leaves the previous translation in place
 - `tldr` shows each turn from the moment its prompt is typed, as a spinner
   until the summary is made; then `> question` on one line and the summary
   below it, oldest at the top, with the 3 turns before it as summary context
-- The question line is the one-line question `kura tldr` returns, or the
+- The question line is the one-line question `tldr` returns, or the
   typed prompt cut at the pane width when it returns none
 - A row still waiting shows a spinner with the seconds since the prompt and
   what it waits on (`waiting`, `summarizing`, `proofreading`,
@@ -247,8 +249,22 @@ kura show <session-id-or-prefix>
 
 - These commands return JSON
 
+### Extensions
+
+Extensions are opt-in features built on top of kura. Every extension runs
+through one entrypoint, `kura extension run <name>`; the mod and the
+scheduled jobs call the same command.
+
+| Extension | Stored output | Schedule |
+| --- | --- | --- |
+| `timeline` | Activity timeline (`timeline` table) | Hourly at `:00` |
+| `english` | English learning card (`english` table) | Hourly at `:05` |
+| `akapen` | Nothing — prints one card as JSON | None — on demand |
+| `tldr` | Nothing — prints three lines as JSON | None — on demand |
+| `verbatim` | Nothing — prints one translation as JSON | None — on demand |
+
 ```bash
-echo "I make mod. kono houhou is good" | kura akapen
+echo "I make mod. kono houhou is good" | kura extension run akapen
 ```
 
 - Prints one English feedback card for the prompt on stdin as JSON:
@@ -267,7 +283,7 @@ echo "I make mod. kono houhou is good" | kura akapen
   tools, MCP servers, skills, settings, or `CLAUDE.md`
 
 ```bash
-echo '{"turns": [{"question": "...", "answer": "..."}]}' | kura tldr
+echo '{"turns": [{"question": "...", "answer": "..."}]}' | kura extension run tldr
 ```
 
 - Prints the last turn's answer compressed into three lines as JSON:
@@ -280,7 +296,7 @@ echo '{"turns": [{"question": "...", "answer": "..."}]}' | kura tldr
 - Generation runs headless Claude with `KURA_NO_HISTORY=1`, like `akapen`
 
 ```bash
-echo '{"input": "なんだっけ、あー、うーんと、わすれちゃった。まあ。fix this"}' | kura verbatim
+echo '{"input": "なんだっけ、あー、うーんと、わすれちゃった。まあ。fix this"}' | kura extension run verbatim
 ```
 
 - Prints `input` as the English a native developer would have typed, as
@@ -301,8 +317,8 @@ echo '{"input": "なんだっけ、あー、うーんと、わすれちゃった
 - Generation runs headless Claude with `KURA_NO_HISTORY=1`, like `akapen`
 
 ```bash
-kura timeline [<YYYY-MM-DD> <hour 0-23>]
-kura english [<YYYY-MM-DD> <hour 0-23>]
+kura extension run timeline [<YYYY-MM-DD> <hour 0-23>]
+kura extension run english [<YYYY-MM-DD> <hour 0-23>]
 ```
 
 - Generates, stores, and (when opted in) publishes one JST hour; without
@@ -315,31 +331,23 @@ kura usage [--days=N]
 just usage --days=7
 ```
 
-- Prints one row per feature and model, plus a `TOTAL` row: calls, input,
+- Prints one row per extension and model, plus a `TOTAL` row: calls, input,
   output, cache-read and cache-write tokens, and cost in USD
 - `--days=N` limits the table to calls from the last N days; the default
   covers all recorded calls
-- One row per call in `usage.db`, written by the agent runner
-  (`src/agent/run.ts`) — features never touch usage themselves
+- One row per call in the `usage` table, written by the agent runner
+  (`src/agent/run.ts`) — extensions never touch usage themselves
 - Calls the agent reported as errors are recorded too — the tokens are spent
   either way — but a call that produced no parseable output (crash, dropped
   connection) reports no token counts and records nothing
 - Cost comes from the agent's own output: the Claude CLI reports it, Codex's
   public events carry token counts only, so Codex rows show `-`
-- A feature with `"agent": "codex"` shows `-`; `akapen`, `verbatim` and `tldr`
+- An extension with `"agent": "codex"` shows `-`; `akapen`, `verbatim` and `tldr`
   run Claude and always report cost
 - Claude's figure is what the API would charge for those tokens; under a
   subscription plan it is not an additional charge
 - Recording is fail-open: a storage failure prints one line and never fails
   the generation it was measuring
-
-| Feature | Stored output | Schedule |
-| --- | --- | --- |
-| `timeline` | Activity timeline | Hourly at `:00` |
-| `english` | English learning card | Hourly at `:05` |
-| `akapen` | Nothing — prints one card as JSON | None — on demand `kura akapen` |
-| `tldr` | Nothing — prints three lines as JSON | None — on demand `kura tldr` |
-| `verbatim` | Nothing — prints one translation as JSON | None — on demand `kura verbatim` |
 
 ```bash
 just schedule enable timeline
@@ -348,15 +356,16 @@ just status
 ```
 
 - Scheduled generation stores its output locally; Discord delivery is a
-  separate per-feature opt-in
+  separate per-extension opt-in
 - Generation and publish have independent `enable` / `disable` controls
-- `enable all` is not provided; each source, feature, and publisher is
+- `enable all` is not provided; each agent, extension, and publisher is
   enabled explicitly
-- `just history|schedule|publish disable all` disables a whole control at once
+- `just disable all` and `just schedule|publish disable all` disable a whole
+  control at once
 - Generated data is persisted before publish; a failed publish is retried
   from the stored row without rerunning the LLM
-- `just status` shows setup state, the generation runtime, and each feature's
-  database / schedule / publish state without changing local state
+- `just status` shows setup state, the generation runtime, and each
+  extension's schedule / publish state without changing local state
 - `just status` uses color only in interactive terminals; `NO_COLOR` disables
   it explicitly
 
@@ -383,26 +392,31 @@ just status
 - Unattended runs have stdin closed
 - Webhook URLs are never stored in the checkout; keep them in the process
   environment or the XDG config
-- Review `src/features/*/skills/` and `src/agent/run.ts` before enabling
+- Review `src/extensions/*/skills/` and `src/agent/run.ts` before enabling
   scheduled generation
 
 ## Privacy and data
 
 | Data | Location | Mode |
 | --- | --- | --- |
-| Databases and logs | `${XDG_STATE_HOME:-$HOME/.local/state}/kura` | `0700`, created on first use |
+| `kura.db` and logs | `${XDG_STATE_HOME:-$HOME/.local/state}/kura` | `0700`, created on first use |
 | Configuration | `${XDG_CONFIG_HOME:-$HOME/.config}/kura` | `0600` |
 
 - Stored data: user and assistant messages, Claude tool-use names and inputs,
   session IDs, working directories, timestamps, model metadata, and generated
   output
-- `usage.db` stores per-call token counts, model names, and cost — metering
-  only, no prompt or response content
-- The SQLite databases are not encrypted by kura
-- When a scheduled feature is enabled, relevant stored conversation content
+- Every table lives in one SQLite database, `kura.db`: the recorded
+  conversations, each extension's output, and LLM usage
+- The `usage` table stores per-call token counts, model names, and cost —
+  metering only, no prompt or response content
+- `kura.db` is not encrypted by kura
+- The first run after upgrading copies `history.db`, `timeline.db`,
+  `english.db` and `usage.db` into `kura.db` and leaves the old files in
+  place; delete them once `kura.db` looks right
+- When a scheduled extension is enabled, relevant stored conversation content
   is processed through the configured agent and its LLM provider
 - Generated output is sent to Discord only when publishing is explicitly
-  enabled for that feature
+  enabled for that extension
 - kura does not manage retention or backups; retaining, backing up, and
   deleting local data is the user's responsibility
 
@@ -412,8 +426,8 @@ just status
 just teardown
 ```
 
-- Disables every publish policy, scheduled generation job, and history
-  source, then removes the entrypoints created by `just setup`
+- Disables every publish policy, scheduled generation job, and recording
+  hook, then removes the entrypoints created by `just setup`
 - Safe to run repeatedly
 - Leaves intact: the state and config directories, and skills installed by an
   external skill manager

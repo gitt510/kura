@@ -5,6 +5,7 @@ import { join } from "node:path";
 
 const cli = join(import.meta.dir, "..", "..", "src", "cli.ts");
 const usageModule = join(import.meta.dir, "..", "..", "src", "agent", "usage.ts");
+const dbModule = join(import.meta.dir, "..", "..", "src", "db.ts");
 
 function run(args: string[], stateHome: string) {
   return Bun.spawnSync([process.execPath, cli, "usage", ...args], {
@@ -12,11 +13,12 @@ function run(args: string[], stateHome: string) {
   });
 }
 
-// usage.db に 1 call を direct insert する (LLM を呼ばずに記録経路を通す)。
+// kura.db の usage table に 1 call を direct insert する (LLM を呼ばずに記録経路を通す)。
 function seed(stateHome: string, feature: string, createdAt: string) {
   const script = `
-    const { openUsageDb, insertCall } = await import(${JSON.stringify(usageModule)});
-    const db = openUsageDb();
+    const { insertCall } = await import(${JSON.stringify(usageModule)});
+    const { openKura } = await import(${JSON.stringify(dbModule)});
+    const db = openKura();
     insertCall(db, {
       feature: ${JSON.stringify(feature)},
       agent: "claude",
