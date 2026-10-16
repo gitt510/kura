@@ -288,6 +288,22 @@ test("直すところの無い card は一瞬だけ出して、pane から消す
   await pane.unmount();
 });
 
+test("生成に失敗した card は 30 秒だけ出して、pane から消す", async ($, on) => {
+  const clock = mock.clock(on);
+  engine(on, "closed", COMPANION, "not json");
+  await open($);
+  await typed($, "broken prompt");
+  await settle();
+
+  const pane = await $.ui.mount({ ...PANE, surface: "terminal" });
+  expect(await pane.find({ type: "Text", text: /generation failed/ })).toBeDefined();
+  await clock.advance(29_000);
+  expect(await pane.find({ type: "Text", text: /generation failed/ })).toBeDefined();
+  await clock.advance(1_000);
+  expect(await pane.find({ type: "Text", text: /generation failed/ })).toBeUndefined();
+  await pane.unmount();
+});
+
 test("知らない widget は飛ばし、残りで pane を描く", async ($, on) => {
   engine(on, "closed", {
     ...COMPANION,
