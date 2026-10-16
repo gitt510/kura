@@ -51,6 +51,7 @@ kura config        # prints the effective config
 ```
 
 - `config.json` is kura's only configuration source
+- [`src/config.ts`](src/config.ts) defines every key, its default, and its validation
 - `extensions.<name>` sets each extension's agent, model, and effort
 - `mod.companion` sets the pane's widgets and their shares of the rows
 
