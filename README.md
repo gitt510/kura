@@ -54,12 +54,14 @@ kura config        # prints the effective config
 - `extensions.<name>` sets each extension's agent, model, and effort
 - `mod.companion` sets the pane's widgets and their shares of the rows
 
-## Companion pane and handoff
+## Claude Code mods
 
 ```bash
-/kura-companion   # Claude Code: toggle the pane
-/kura-handoff     # Claude Code: hand this session to a new tmux pane
+/kura-companion   # toggle the companion pane
+/kura-handoff     # hand this session to a new tmux pane
 ```
+
+- Both mods ship in the `kura` plugin
 
 | Widget | Shows |
 | --- | --- |
