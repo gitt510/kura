@@ -37,6 +37,8 @@ const CONTEXT_TURNS = 4;
 const TIMEOUT_MS = 120_000;
 // 直すところの無い card を pane に出しておく時間。
 const FLASH_MS = 2_000;
+// 生成に失敗した card を pane に出しておく時間。見ても打つ手が無いので、残し続けない。
+const ERROR_MS = 30_000;
 // kura verbatim に context として渡す直前の turn の数。
 const VERBATIM_CONTEXT = 1;
 
@@ -751,10 +753,12 @@ type PaneData = {
 type Size = { columns: number; rows: number };
 type Draw = (elements: Elements, data: PaneData, size: Size) => RenderElement;
 
-// 直すところのある card。直すところの無い card は FLASH_MS の間だけ出す。
+// 生成中の card と、直すところのある card。直すところの無い card は FLASH_MS、失敗した card は
+// ERROR_MS の間だけ出す。
 function fixable(list: Entry[]): Entry[] {
   return list.filter(
-    (entry) => entry.card.status !== "ok" || entry.card.items.length > 0 || entry.isFlashing,
+    ({ card, isFlashing }) =>
+      card.status === "pending" || (card.status === "ok" && card.items.length > 0) || isFlashing,
   );
 }
 
@@ -1115,6 +1119,15 @@ export const register: Register = (on) => {
           ? list.filter((entry) => entry.id !== id)
           : list.map((entry) => (entry.id === id ? { ...entry, card } : entry)),
       );
+    // card を ms の間だけ出して消す。
+    const flashFor = async (ms: number) => {
+      const flash = (isFlashing: boolean) =>
+        update($, history, (list) =>
+          list.map((entry) => (entry.id === id ? { ...entry, isFlashing } : entry)),
+        );
+      await flash(true);
+      $.clock.after(ms, () => void flash(false).catch(() => {}));
+    };
     void (async () => {
       if (!(await isListed($, "akapen"))) return;
       // spinner が経った秒数を出す起点。時刻が取れなければ秒数は出さない。
@@ -1151,17 +1164,12 @@ export const register: Register = (on) => {
         }
         await settle(card);
         // 直すところが無ければ、その旨を一瞬だけ出して消す。
-        if (card?.status === "ok" && card.items.length === 0) {
-          const flash = (isFlashing: boolean) =>
-            update($, history, (list) =>
-              list.map((entry) => (entry.id === id ? { ...entry, isFlashing } : entry)),
-            );
-          await flash(true);
-          $.clock.after(FLASH_MS, () => void flash(false).catch(() => {}));
-        }
+        if (card?.status === "ok" && card.items.length === 0) await flashFor(FLASH_MS);
+        if (card?.status === "error") await flashFor(ERROR_MS);
       } catch (error) {
         debug($, "akapen", error);
         await settle({ status: "error" });
+        await flashFor(ERROR_MS);
       }
     })().catch(() => {});
 

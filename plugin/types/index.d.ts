@@ -1,7 +1,7 @@
 export type ItemKind = "romaji" | "grammar" | "natural";
 export type Item = { kind: ItemKind; from: string; to: string };
 export type Card = { status: "pending" } | { status: "ok"; items: Item[] } | { status: "error" };
-// isFlashing の間は、直すところの無い card も pane に一瞬だけ出す。
+// isFlashing の間は、直すところの無い card と失敗した card も pane に出す。
 // startedAt は spinner が経った秒数を出す起点 (ms)。
 export type Entry = {
   id: string;
