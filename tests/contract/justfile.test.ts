@@ -1,6 +1,5 @@
 import { expect, test } from "bun:test";
 import {
-  chmodSync,
   existsSync,
   lstatSync,
   mkdirSync,
@@ -29,20 +28,12 @@ test("just は setup group に記録の enable / disable を公開する", () =>
   expect(output(dryRun("disable", "codex"))).toContain('src/cli.ts" disable "codex"');
 });
 
-test("just は extensions group に schedule interface を公開する", () => {
-  const result = dryRun("schedule", "enable", "timeline");
-  expect(result.exitCode).toBe(0);
-  expect(output(result)).toContain('src/cli.ts" extension schedule "enable" "timeline"');
-});
-
 test("just の default recipe は非公開で recipe 一覧を返す", () => {
   const result = Bun.spawnSync(["just", "--justfile", justfile]);
   expect(result.exitCode).toBe(0);
   expect(result.stdout.toString()).toContain("enable agent");
   expect(result.stdout.toString()).toContain("disable agent");
-  expect(result.stdout.toString()).toContain("schedule action extension");
   expect(result.stdout.toString()).toContain("[setup]");
-  expect(result.stdout.toString()).toContain("[extensions]");
   expect(result.stdout.toString()).toContain("[operations]");
   expect(result.stdout.toString()).not.toContain("[automation]");
   expect(result.stdout.toString()).not.toContain("[cli]");
@@ -50,55 +41,27 @@ test("just の default recipe は非公開で recipe 一覧を返す", () => {
   expect(result.stdout.toString()).not.toContain("_default");
 });
 
-test("schedule の public action は enable / disable に限定する", () => {
-  const { home, bin } = setupHome();
-  try {
-    const result = runWithHome(home, bin, "", "schedule", "status", "timeline");
-    expect(result.exitCode).toBe(2);
-    expect(output(result)).toContain(`<enable|disable>`);
-  } finally {
-    rmSync(home, { recursive: true, force: true });
-  }
-});
-
-function setupHome(): { home: string; bin: string } {
-  const home = mkdtempSync(join(tmpdir(), "kura-justfile-"));
-  const bin = join(home, "bin");
-  mkdirSync(bin, { recursive: true });
-  const launchctl = join(bin, "launchctl");
-  writeFileSync(
-    launchctl,
-    `#!/bin/sh
-if [ "$1" = "list" ]; then
-  [ "\${KURA_TEST_ENABLED:-}" = "$2" ]
-  exit
-fi
-exit 0
-`,
-  );
-  chmodSync(launchctl, 0o755);
-  return { home, bin };
+function tempHome(): string {
+  return mkdtempSync(join(tmpdir(), "kura-justfile-"));
 }
 
-function runWithHome(home: string, bin: string, enabled: string, ...args: string[]) {
+function runWithHome(home: string, ...args: string[]) {
   return Bun.spawnSync(["just", "--justfile", justfile, ...args], {
     env: {
       ...process.env,
       HOME: home,
-      PATH: `${bin}:${process.env.PATH ?? ""}`,
       XDG_CONFIG_HOME: join(home, ".config"),
       XDG_STATE_HOME: join(home, "state"),
-      KURA_TEST_ENABLED: enabled,
     },
   });
 }
 
 test("setup は local entrypoint だけを作成する", () => {
-  const { home, bin } = setupHome();
+  const home = tempHome();
   const runtime = join(home, ".local", "share", "kura");
   const cli = join(home, ".local", "bin", "kura");
   try {
-    expect(runWithHome(home, bin, "", "setup").exitCode).toBe(0);
+    expect(runWithHome(home, "setup").exitCode).toBe(0);
     expect(readlinkSync(runtime)).toBe(repo);
     expect(readlinkSync(cli)).toBe(join(runtime, "src", "cli.ts"));
     expect(existsSync(join(home, "state", "kura"))).toBe(false);
@@ -107,59 +70,52 @@ test("setup は local entrypoint だけを作成する", () => {
   }
 });
 
-test("teardown は記録の hook・extension control・entrypoint を除去し、data を残す", () => {
-  const { home, bin } = setupHome();
+test("teardown は記録の hook と entrypoint を除去し、data を残す", () => {
+  const home = tempHome();
   const runtime = join(home, ".local", "share", "kura");
   const cli = join(home, ".local", "bin", "kura");
   const stateDir = join(home, "state", "kura");
   const configDir = join(home, ".config", "kura");
   const claudeSettings = join(home, ".claude", "settings.json");
-  const timelineJob = join(home, "Library", "LaunchAgents", "kura.timeline.plist");
   try {
-    expect(runWithHome(home, bin, "", "setup").exitCode).toBe(0);
-    expect(runWithHome(home, bin, "", "enable", "claude").exitCode).toBe(0);
-    expect(runWithHome(home, bin, "", "schedule", "enable", "timeline").exitCode).toBe(0);
+    expect(runWithHome(home, "setup").exitCode).toBe(0);
+    expect(runWithHome(home, "enable", "claude").exitCode).toBe(0);
 
     mkdirSync(stateDir, { recursive: true });
     writeFileSync(join(stateDir, "kura.db"), "data");
     mkdirSync(configDir, { recursive: true });
-    writeFileSync(
-      join(configDir, "config.json"),
-      JSON.stringify({ extensions: { timeline: { agent: "codex" } } }),
-    );
+    writeFileSync(join(configDir, "config.json"), "{}");
 
-    const result = runWithHome(home, bin, "kura.timeline", "teardown");
+    const result = runWithHome(home, "teardown");
     expect(result.exitCode).toBe(0);
     expect(() => lstatSync(runtime)).toThrow();
     expect(() => lstatSync(cli)).toThrow();
-    expect(() => lstatSync(timelineJob)).toThrow();
     expect(readFileSync(claudeSettings, "utf-8")).not.toContain(".local/bin/kura");
-    const config = JSON.parse(readFileSync(join(configDir, "config.json"), "utf-8"));
-    expect(config.extensions.timeline.agent).toBe("codex");
+    expect(readFileSync(join(configDir, "config.json"), "utf-8")).toBe("{}");
     expect(readFileSync(join(stateDir, "kura.db"), "utf-8")).toBe("data");
     expect(output(result)).toContain(`retained state: ${stateDir}`);
     expect(output(result)).toContain(`retained config: ${configDir}`);
 
-    expect(runWithHome(home, bin, "", "teardown").exitCode).toBe(0);
+    expect(runWithHome(home, "teardown").exitCode).toBe(0);
   } finally {
     rmSync(home, { recursive: true, force: true });
   }
 });
 
 test("teardown は ownership の preflight に失敗したら何も停止しない", () => {
-  const { home, bin } = setupHome();
+  const home = tempHome();
   const runtime = join(home, ".local", "share", "kura");
+  const cli = join(home, ".local", "bin", "kura");
   const claudeSettings = join(home, ".claude", "settings.json");
-  const foreignJob = join(home, "Library", "LaunchAgents", "kura.english.plist");
   try {
-    expect(runWithHome(home, bin, "", "setup").exitCode).toBe(0);
-    expect(runWithHome(home, bin, "", "enable", "claude").exitCode).toBe(0);
-    mkdirSync(join(home, "Library", "LaunchAgents"), { recursive: true });
-    writeFileSync(foreignJob, "foreign");
+    expect(runWithHome(home, "setup").exitCode).toBe(0);
+    expect(runWithHome(home, "enable", "claude").exitCode).toBe(0);
+    rmSync(cli);
+    writeFileSync(cli, "foreign");
 
-    const result = runWithHome(home, bin, "", "teardown");
+    const result = runWithHome(home, "teardown");
     expect(result.exitCode).toBe(1);
-    expect(output(result)).toContain(`refusing to remove existing path: ${foreignJob}`);
+    expect(output(result)).toContain(`refusing to remove existing path: ${cli}`);
     expect(readlinkSync(runtime)).toBe(repo);
     expect(readFileSync(claudeSettings, "utf-8")).toContain(".local/bin/kura");
   } finally {
@@ -167,30 +123,19 @@ test("teardown は ownership の preflight に失敗したら何も停止しな�
   }
 });
 
-test("status は setup と extensions を表形式で表示する", () => {
-  const { home, bin } = setupHome();
+test("status は setup を表形式で表示する", () => {
+  const home = tempHome();
   const stateDir = join(home, "state", "kura");
   const configDir = join(home, ".config", "kura");
   try {
-    expect(runWithHome(home, bin, "", "setup").exitCode).toBe(0);
-    expect(runWithHome(home, bin, "", "enable", "claude").exitCode).toBe(0);
+    expect(runWithHome(home, "setup").exitCode).toBe(0);
+    expect(runWithHome(home, "enable", "claude").exitCode).toBe(0);
     mkdirSync(stateDir, { recursive: true });
     writeFileSync(join(stateDir, "kura.db"), "data");
     mkdirSync(configDir, { recursive: true });
-    writeFileSync(
-      join(configDir, "config.json"),
-      JSON.stringify({
-        extensions: {
-          timeline: {
-            agent: "codex",
-            model: "gpt-test",
-            effort: "high",
-          },
-        },
-      }),
-    );
+    writeFileSync(join(configDir, "config.json"), "{}");
 
-    const result = runWithHome(home, bin, "kura.timeline", "status");
+    const result = runWithHome(home, "status");
     const text = output(result);
     expect(result.exitCode).toBe(0);
     expect(text).toContain("Setup\n┌");
@@ -199,10 +144,6 @@ test("status は setup と extensions を表形式で表示する", () => {
     expect(text).toMatch(/kura\.db\s+│ PRESENT\s+│/);
     expect(text).toMatch(/claude\s+│ ENABLED\s+│ Stop \+ UserPromptSubmit hooks/);
     expect(text).toMatch(/codex\s+│ DISABLED\s+│ Stop hook/);
-    expect(text).toMatch(/timeline\s+│ codex · gpt-test · high\s+│/);
-    expect(text).toMatch(/english\s+│ claude · CLI default · CLI default\s+│/);
-    expect(text).toMatch(/timeline\s+│ codex · gpt-test · high\s+│ ENABLED\s+│/);
-    expect(text).toMatch(/english\s+│ claude · CLI default · CLI default\s+│ DISABLED\s+│/);
   } finally {
     rmSync(home, { recursive: true, force: true });
   }

@@ -43,16 +43,8 @@ test("config.json が無ければ既定値で動く", () => {
 });
 
 test("書かれていない項目は既定値で埋め、null と空文字は CLI の既定として扱う", () => {
-  const config = parseConfig(
-    { extensions: { timeline: { agent: "codex", model: "gpt-5.6", effort: " " } } },
-    "config.json",
-  );
-  expect(config.extensions.timeline).toEqual({
-    agent: "codex",
-    model: "gpt-5.6",
-    effort: null,
-  });
-  expect(config.extensions.english).toEqual({ agent: "claude", model: null, effort: null });
+  const config = parseConfig({ extensions: { tldr: { model: "sonnet", effort: " " } } }, "c.json");
+  expect(config.extensions.tldr).toEqual({ agent: "claude", model: "sonnet", effort: null });
   expect(config.extensions.akapen).toEqual({ agent: "claude", model: "opus", effort: null });
   expect(Object.keys(config)).toEqual(["extensions", "mod"]);
   // model は書かなければ feature の既定、null (や空白) は CLI の既定
@@ -65,17 +57,14 @@ test("書かれていない項目は既定値で埋め、null と空文字は CL
 });
 
 test("型の違う項目は path と項目名付きで拒否する", () => {
-  expect(() => parseConfig({ extensions: { timeline: { model: 5 } } }, "c.json")).toThrow(
-    /^invalid config .*\/c\.json: extensions\.timeline\.model must be a string$/,
+  expect(() => parseConfig({ extensions: { tldr: { model: 5 } } }, "c.json")).toThrow(
+    /^invalid config .*\/c\.json: extensions\.tldr\.model must be a string$/,
   );
   expect(() => parseConfig({ extensions: { akapen: { agent: "codex" } } }, "c.json")).toThrow(
     'extensions.akapen.agent must be "claude"',
   );
-  expect(() => parseConfig({ extensions: { timeline: { agent: "gemini" } } }, "c.json")).toThrow(
-    'extensions.timeline.agent must be "claude" or "codex"',
-  );
-  expect(() => parseConfig({ extensions: { timeline: { webhok: 1 } } }, "c.json")).toThrow(
-    'extensions.timeline has unknown key "webhok"',
+  expect(() => parseConfig({ extensions: { tldr: { modle: 1 } } }, "c.json")).toThrow(
+    'extensions.tldr has unknown key "modle"',
   );
   expect(() => parseConfig({ generator: "codex" }, "c.json")).toThrow(
     'config has unknown key "generator"',
@@ -85,7 +74,7 @@ test("型の違う項目は path と項目名付きで拒否する", () => {
 test("saveConfig は 0600 で書き、loadConfig で同じ値に戻る", () => {
   const path = join(tempDir(), "kura", "config.json");
   const config = defaultConfig();
-  config.extensions.timeline.agent = "codex";
+  config.extensions.tldr.model = "sonnet";
   saveConfig(config, path);
   expect(statSync(path).mode & 0o777).toBe(0o600);
   expect(loadConfig(path)).toEqual(config);
@@ -108,8 +97,8 @@ test("前の版の key は、今の書き方を添えて拒否する", () => {
   expect(() => parseConfig({ features: {} }, "c.json")).toThrow(
     'config has unknown key "features" (renamed to "extensions")',
   );
-  expect(() => parseConfig({ extensions: { english: { publish: {} } } }, "c.json")).toThrow(
-    'extensions.english has unknown key "publish" (removed with Discord delivery)',
+  expect(() => parseConfig({ extensions: { timeline: {} } }, "c.json")).toThrow(
+    'extensions has unknown key "timeline" (removed)',
   );
   expect(() => parseConfig({ mod: { companion: { rows: 10 } } }, "c.json")).toThrow(
     'mod.companion has unknown key "rows" (removed; the pane size is left to Claude Code)',

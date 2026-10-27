@@ -15,7 +15,6 @@
 
 import { openKura } from "../db.ts";
 import type { MessageRow } from "./db.ts";
-import { HISTORY_NOISE_PREDICATE } from "./noise.ts";
 
 export interface SessionMeta {
   session: string;
@@ -110,79 +109,6 @@ export function getSession(sessionId: string): Session | null {
         model: meta.model,
         span: { start: meta.span_start ?? "", end: meta.span_end ?? "" },
         volume: { msgs: meta.msgs, user: meta.user, assistant: meta.assistant },
-      },
-      messages,
-    };
-  } finally {
-    db.close();
-  }
-}
-
-// ── per-hour window (timeline skill 用) ──────────────────────────────
-// session 単位でなく「JST のある 1 時間」を全 session 横断で引く。
-// timeline がスレッド別に束ねるための素材 = その hour のユーザ発話 + volume/cwds メタ。
-
-export interface HourWindowMessage {
-  jst: string; // "YYYY-MM-DD HH:MM:SS" (JST)
-  cwd: string | null;
-  text: string;
-}
-
-export interface HourWindow {
-  meta: {
-    date: string; // JST "YYYY-MM-DD"
-    hour: number; // 0-23 (JST)
-    window_start: string; // JST "YYYY-MM-DD HH:00:00"
-    window_end: string; // JST "YYYY-MM-DD HH:00:00" (+1h, 23 時台は翌日 00:00:00)
-    cwds: string[]; // この hour に触った cwd 一覧
-    volume: { msgs: number; user: number }; // msgs=全 message, user=ノイズ除外後の発話数
-  };
-  messages: HourWindowMessage[]; // ユーザ発話のみ (ノイズ除外, JST 昇順)
-}
-
-// timestamp は UTC ISO で格納。比較は既存 (drain) と同じく "+9 hours" で JST 面に寄せて行う。
-// /clear や tool_result, malformed retry などの非発話ノイズは除外する。
-const WINDOW_PREDICATE =
-  "datetime(timestamp, '+9 hours') >= $start " +
-  "AND datetime(timestamp, '+9 hours') < datetime($start, '+1 hour')";
-// JST の date (YYYY-MM-DD) と hour (0-23) で 1 時間枠 [HH:00, HH+1:00) を引く。
-export function getHourWindow(date: string, hour: number): HourWindow {
-  const db = openKura();
-  try {
-    const start = `${date} ${String(hour).padStart(2, "0")}:00:00`;
-
-    const bounds = db
-      .query("SELECT datetime($start, '+1 hour') AS win_end")
-      .get({ $start: start }) as { win_end: string };
-
-    const vol = db
-      .query(
-        "SELECT COUNT(*) AS msgs, " +
-          `SUM(CASE WHEN role = 'user' AND ${HISTORY_NOISE_PREDICATE} THEN 1 ELSE 0 END) AS user ` +
-          `FROM messages WHERE ${WINDOW_PREDICATE}`,
-      )
-      .get({ $start: start }) as { msgs: number; user: number };
-
-    const cwdRows = db
-      .query("SELECT DISTINCT cwd FROM messages " + `WHERE cwd IS NOT NULL AND ${WINDOW_PREDICATE}`)
-      .all({ $start: start }) as { cwd: string }[];
-
-    const messages = db
-      .query(
-        "SELECT datetime(timestamp, '+9 hours') AS jst, cwd, text FROM messages " +
-          `WHERE role = 'user' AND ${WINDOW_PREDICATE} AND ${HISTORY_NOISE_PREDICATE} ` +
-          "ORDER BY timestamp",
-      )
-      .all({ $start: start }) as HourWindowMessage[];
-
-    return {
-      meta: {
-        date,
-        hour,
-        window_start: start,
-        window_end: bounds.win_end,
-        cwds: cwdRows.map((r) => r.cwd),
-        volume: { msgs: vol.msgs, user: vol.user ?? 0 },
       },
       messages,
     };

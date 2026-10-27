@@ -60,28 +60,14 @@ function setup(): void {
 
 function teardown(): void {
   const userHome = home();
-  if (!Bun.which("launchctl")) throw new Error("launchctl is required");
-
   const runtime = join(userHome, ".local", "share", "kura");
   const cli = join(userHome, ".local", "bin", "kura");
   const cliTarget = join(runtime, "src", "cli.ts");
   assertOwnedSymlink(cli, cliTarget, "remove");
   assertOwnedSymlink(runtime, repo, "remove");
 
-  const jobs = ["timeline", "english"] as const;
-  for (const job of jobs) {
-    assertOwnedSymlink(
-      join(userHome, "Library", "LaunchAgents", `kura.${job}.plist`),
-      join(repo, "src", "launchd", `kura.${job}.plist`),
-      "remove",
-    );
-  }
-
   const hooks = join(repo, "src", "store", "hooks.ts");
-  const launchd = join(repo, "src", "launchd", "jobs.ts");
   runManager(hooks, ["all", "status"], true);
-
-  runManager(launchd, ["all", "disable"]);
   runManager(hooks, ["all", "disable"]);
 
   if (lstatOrNull(cli)) unlinkSync(cli);
@@ -89,7 +75,7 @@ function teardown(): void {
 
   const stateDir = join(process.env.XDG_STATE_HOME || join(userHome, ".local", "state"), "kura");
   const configDir = join(process.env.XDG_CONFIG_HOME || join(userHome, ".config"), "kura");
-  process.stdout.write("kura recording hooks, extensions, and local entrypoints removed\n");
+  process.stdout.write("kura recording hooks and local entrypoints removed\n");
   process.stdout.write(`retained state: ${stateDir}\n`);
   process.stdout.write(`retained config: ${configDir}\n`);
 }

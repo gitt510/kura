@@ -30,28 +30,21 @@ const flag = z.boolean({ error: "must be a boolean" });
 const object = (shape: z.ZodRawShape) =>
   z.strictObject(shape, { error: "must be an object" }).prefault({});
 
-// feature ごとの生成設定。agent はその feature を回せる CLI、model / effort は null なら CLI の既定。
-// model は書かなければ feature の既定 (akapen / tldr / verbatim は opus)、null と書けば CLI の既定。
-// effort の値の妥当性は agent ごとに違うので使う側 (agent/run.ts) が検証する。
-const AGENTS = ["claude", "codex"] as const;
-export type Agent = (typeof AGENTS)[number];
-export type Generation = { agent: Agent; model: string | null; effort: string | null };
-const generationShape = (agents: readonly Agent[], model: string | null) => ({
-  agent: z
-    .enum(agents, { error: `must be ${agents.map((name) => `"${name}"`).join(" or ")}` })
-    .default("claude"),
-  model: z
-    .string({ error: "must be a string" })
-    .nullable()
-    .default(model)
-    .transform((value) => value?.trim() || null),
-  effort: text,
-});
-// prompt 一発の feature は system prompt と出力の契約が Claude 前提なので claude だけ。
-const prompted = (model: string | null) => object(generationShape(["claude"], model));
-// 1 hour ごとに生成する feature。skill を回せる CLI ならどちらでもよい。
-export type HourlyExtension = "timeline" | "english";
-const hourly = object(generationShape(AGENTS, null));
+// feature ごとの生成設定。model / effort は null なら CLI の既定。
+// model は書かなければ feature の既定 (opus)、null と書けば CLI の既定。
+// effort の値の妥当性は使う側 (agent/run.ts) が検証する。
+// system prompt と出力の契約が Claude 前提なので agent は claude だけ。
+export type Generation = { agent: "claude"; model: string | null; effort: string | null };
+const prompted = (model: string | null) =>
+  object({
+    agent: z.enum(["claude"], { error: 'must be "claude"' }).default("claude"),
+    model: z
+      .string({ error: "must be a string" })
+      .nullable()
+      .default(model)
+      .transform((value) => value?.trim() || null),
+    effort: text,
+  });
 
 // root は「誰のための設定か」で 2 つ: extensions (kura の上で動く opt-in の機能ごと)、mod (Claude Code mod)。
 const Config = z.strictObject(
@@ -60,8 +53,6 @@ const Config = z.strictObject(
       akapen: prompted("opus"), // 速さより質 — 既定は opus
       tldr: prompted("opus"),
       verbatim: prompted("opus"), // 訳語の自然さが価値 — 既定は opus
-      timeline: hourly,
-      english: hourly,
     }),
     mod: object({
       // Claude Code の mod (plugin/) の pane。null は Claude Code の既定に任せる。
@@ -121,8 +112,8 @@ export function configPath(env: Environment = process.env): string {
 // 前の版にあった key。知らない key として拒否しつつ、今の書き方を添える。
 const RETIRED_KEYS: Record<string, string> = {
   features: 'renamed to "extensions"',
-  "extensions.timeline.publish": "removed with Discord delivery",
-  "extensions.english.publish": "removed with Discord delivery",
+  "extensions.timeline": "removed",
+  "extensions.english": "removed",
   "mod.companion.columns": "removed; the pane size is left to Claude Code",
   "mod.companion.rows": "removed; the pane size is left to Claude Code",
 };

@@ -1,49 +1,22 @@
 import { existsSync } from "node:fs";
-import { type Generation, type HourlyExtension, loadConfig } from "../config.ts";
-import { KURA_ROOT } from "../db.ts";
+import type { Generation } from "../config.ts";
 import { type AgentUsage, recordUsage } from "./usage.ts";
 
-export type Generator = "claude" | "codex";
-// Claude CLI の --effort が受ける 5 段。Codex の 8 段とは語彙が別物なので enum を共有しない。
+// Claude CLI の --effort が受ける 5 段。
 export type ClaudeEffort = "low" | "medium" | "high" | "xhigh" | "max";
-export type CodexEffort =
-  | "none"
-  | "minimal"
-  | "low"
-  | "medium"
-  | "high"
-  | "xhigh"
-  | "max"
-  | "ultra";
 
 export interface ClaudeOptions {
   model: string | null;
   effort: ClaudeEffort | null;
 }
 
-export interface CodexOptions {
-  model: string | null;
-  effort: CodexEffort | null;
-}
-
-// tool を持たない 1 回きりの prompt 実行の結果。runSkillJson の skill 契約
-// (素材 JSON の交換) が過剰な呼び手向け。
+// tool を持たない 1 回きりの prompt 実行の結果。
 export interface ClaudePromptRun {
   ok: boolean;
   exitCode: number;
   result: string; // agent の最終テキスト
   model: string | null; // 実行結果を優先し、無ければ要求した model
   stderr: string; // 失敗理由の提示は呼び手に委ねる
-}
-
-export interface AgentJsonRun {
-  ok: boolean; // process が正常終了し、agent の出力が完了を示した
-  exitCode: number;
-  isError: boolean; // agent 自身が報告した実行エラー
-  model: string | null; // 実行結果 (Claude の modelUsage) を優先し、無ければ env の明示指定値
-  effort: string | null; // env の明示指定値のみ。自動判定値は公開出力から取得しない
-  result: string; // agent の最終テキスト（ログ・デバッグ用）
-  raw: string; // 生 stdout（パース失敗時の調査用）
 }
 
 interface ParsedAgentOutput {
@@ -56,45 +29,9 @@ interface ParsedAgentOutput {
 
 const CLAUDE_EFFORTS = new Set<ClaudeEffort>(["low", "medium", "high", "xhigh", "max"]);
 
-const CODEX_EFFORTS = new Set<CodexEffort>([
-  "none",
-  "minimal",
-  "low",
-  "medium",
-  "high",
-  "xhigh",
-  "max",
-  "ultra",
-]);
-
-export type ResolvedGeneration =
-  | { agent: "claude"; options: ClaudeOptions }
-  | { agent: "codex"; options: CodexOptions };
-
-// feature の生成設定を agent ごとの option に解決する。effort は agent ごとの語彙で検証する。
-export function resolveGeneration(
-  feature: string,
-  { agent, model, effort }: Generation,
-): ResolvedGeneration {
-  if (agent === "claude") {
-    if (effort && !CLAUDE_EFFORTS.has(effort as ClaudeEffort)) {
-      throw new Error(
-        `${feature}.effort must be one of ${[...CLAUDE_EFFORTS].join(", ")} for claude (got: ${effort})`,
-      );
-    }
-    return { agent, options: { model, effort: effort as ClaudeEffort | null } };
-  }
-  if (effort && !CODEX_EFFORTS.has(effort as CodexEffort)) {
-    throw new Error(
-      `${feature}.effort must be one of ${[...CODEX_EFFORTS].join(", ")} for codex (got: ${effort})`,
-    );
-  }
-  return { agent, options: { model, effort: effort as CodexEffort | null } };
-}
-
 // agent の binary を知るのはこの module だけ — spawn 経路を 1 本に保ち、
 // usage 記録が呼び手の善意に依存しないようにする (tests/architecture.test.ts が強制)。
-function agentExecutable(agent: Generator): string {
+function agentExecutable(agent: "claude"): string {
   const discovered = Bun.which(agent);
   if (discovered) return discovered;
 
@@ -144,109 +81,6 @@ export function parseClaudeJson(raw: string): ParsedAgentOutput {
   }
 }
 
-export function parseCodexJsonl(raw: string): ParsedAgentOutput {
-  let complete = false;
-  let isError = false;
-  let result = "";
-  let usage: AgentUsage | null = null;
-
-  for (const line of raw.split("\n")) {
-    if (!line.trim()) continue;
-    let event: {
-      type?: string;
-      item?: { type?: string; text?: string };
-      usage?: {
-        input_tokens?: number;
-        cached_input_tokens?: number;
-        cache_write_input_tokens?: number;
-        output_tokens?: number;
-      };
-    };
-    try {
-      event = JSON.parse(line);
-    } catch {
-      return { complete: false, isError: true, model: null, result: "", usage: null };
-    }
-
-    if (event.type === "turn.completed") {
-      complete = true;
-      if (event.usage) {
-        // Codex の event は cost を持たない (token 数のみ)。
-        usage = {
-          inputTokens: event.usage.input_tokens ?? 0,
-          cacheCreationTokens: event.usage.cache_write_input_tokens ?? 0,
-          cacheReadTokens: event.usage.cached_input_tokens ?? 0,
-          outputTokens: event.usage.output_tokens ?? 0,
-          costUsd: null,
-        };
-      }
-    }
-    if (event.type === "turn.failed" || event.type === "error") isError = true;
-    if (
-      event.type === "item.completed" &&
-      event.item?.type === "agent_message" &&
-      typeof event.item.text === "string"
-    ) {
-      result = event.item.text;
-    }
-  }
-
-  // Codex の公開 JSONL event は実行 model を含まない。内部 session file には依存しない。
-  return { complete, isError, model: null, result, usage };
-}
-
-export function skillPrompt(agent: Generator, skill: string, args: string[]): string {
-  const invocation = agent === "claude" ? `/${skill}` : `$${skill}`;
-  return [invocation, ...args].join(" ");
-}
-
-// model / effort は env で明示されたときだけ flag を注入する — 未設定なら CLI の既定に任せる
-// (古い claude CLI は --effort を知らないため、無指定運用を壊さない)。
-//
-// 無人 Claude に許す tool は固定 allowlist のみで、permission bypass の経路は持たない。
-// 生成 skill の契約は「workDir の素材 JSON を Read し、workDir へ generated JSON を Write する」
-// だけ。KURA_ROOT の Read は skill 本体（SKILL.md 等）用。
-// rule の `//` prefix は filesystem 絶対 path を意味する。headless `-p` では
-// allowlist 外の tool は自動 deny されるため、prompt 待ちにはならない。
-export function buildClaudeCommand(
-  executable: string,
-  prompt: string,
-  options: ClaudeOptions,
-  workDir: string,
-): string[] {
-  return [
-    executable,
-    "-p",
-    prompt,
-    "--output-format",
-    "json",
-    "--allowedTools",
-    [`Read(/${workDir}/**)`, `Write(/${workDir}/**)`, `Read(/${KURA_ROOT}/**)`].join(","),
-    ...(options.model ? ["--model", options.model] : []),
-    ...(options.effort ? ["--effort", options.effort] : []),
-  ];
-}
-
-export function buildCodexCommand(
-  executable: string,
-  prompt: string,
-  options: CodexOptions,
-): string[] {
-  return [
-    executable,
-    "--ask-for-approval",
-    "never",
-    "exec",
-    "--ephemeral",
-    "--sandbox",
-    "workspace-write",
-    ...(options.model ? ["--model", options.model] : []),
-    ...(options.effort ? ["--config", `model_reasoning_effort="${options.effort}"`] : []),
-    "--json",
-    prompt,
-  ];
-}
-
 // tool も文脈も持たない 1 回きりの対話。system が model の立場と規則、prompt が user の発話。
 export interface ClaudePrompt {
   system: string;
@@ -281,17 +115,20 @@ export function buildClaudePromptCommand(
   ];
 }
 
-// tool を一切許さない 1 回の対話を Claude で実行する (非同期)。
-// skill 契約も generator 選択も持たない代わりに、model は呼び手が明示する。
-// prompt 一発の生成 (akapen / tldr)。system prompt と出力 JSON の契約が Claude 前提なので claude 固定。
-export function resolvePromptGeneration(feature: string, generation: Generation): ClaudeOptions {
-  const resolved = resolveGeneration(feature, generation);
-  if (resolved.agent !== "claude") {
-    throw new Error(`${feature}.agent must be "claude" (got: ${resolved.agent})`);
+// feature の生成設定を Claude の option に解決する。effort は Claude の語彙で検証する。
+export function resolvePromptGeneration(
+  feature: string,
+  { model, effort }: Generation,
+): ClaudeOptions {
+  if (effort && !CLAUDE_EFFORTS.has(effort as ClaudeEffort)) {
+    throw new Error(
+      `${feature}.effort must be one of ${[...CLAUDE_EFFORTS].join(", ")} (got: ${effort})`,
+    );
   }
-  return resolved.options;
+  return { model, effort: effort as ClaudeEffort | null };
 }
 
+// tool を一切許さない 1 回の対話を Claude で実行する (非同期)。model は呼び手が明示する。
 export async function runClaudePrompt(
   feature: string,
   input: ClaudePrompt,
@@ -325,55 +162,4 @@ export async function runClaudePrompt(
     });
   }
   return { ok, exitCode, result: parsed.result, model: parsed.model ?? model, stderr };
-}
-
-// repo-owned skill を選択した agent で非対話実行し、出力形式の差を共通結果へ畳む。
-// Claude は単一 JSON、Codex は JSONL。途中で接続断・不正出力になった場合は ok=false に倒し、
-// 呼び手が stamp を書かず次の trigger で再試行できるようにする。
-// workDir = その skill に読み書きを許す唯一の交換 directory。
-export function runSkillJson(
-  skill: HourlyExtension,
-  workDir: string,
-  args: string[] = [],
-  generation: Generation = loadConfig().extensions[skill],
-): AgentJsonRun {
-  const resolved = resolveGeneration(skill, generation);
-  const { agent } = resolved;
-  const claudeOptions = resolved.agent === "claude" ? resolved.options : null;
-  const codexOptions = resolved.agent === "codex" ? resolved.options : null;
-  const prompt = skillPrompt(agent, skill, args);
-  const command =
-    agent === "claude"
-      ? buildClaudeCommand(agentExecutable(agent), prompt, claudeOptions!, workDir)
-      : buildCodexCommand(agentExecutable(agent), prompt, codexOptions!);
-
-  const child = Bun.spawnSync(command, {
-    env: agentEnv(),
-    stdin: "ignore", // stdin 待ちを避け、prompt のみを入力にする
-    stdout: "pipe",
-    stderr: "inherit",
-  });
-  const raw = child.stdout?.toString() ?? "";
-  const parsed = agent === "claude" ? parseClaudeJson(raw) : parseCodexJsonl(raw);
-  const exitCode = child.exitCode ?? 1;
-
-  if (parsed.usage) {
-    recordUsage({
-      feature: skill,
-      agent,
-      model: parsed.model ?? claudeOptions?.model ?? codexOptions?.model ?? null,
-      ok: exitCode === 0 && parsed.complete && !parsed.isError,
-      usage: parsed.usage,
-    });
-  }
-
-  return {
-    ok: exitCode === 0 && parsed.complete && !parsed.isError,
-    exitCode,
-    isError: parsed.isError,
-    model: parsed.model ?? claudeOptions?.model ?? codexOptions?.model ?? null,
-    effort: claudeOptions?.effort ?? codexOptions?.effort ?? null,
-    result: parsed.result,
-    raw,
-  };
 }

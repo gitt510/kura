@@ -1,6 +1,6 @@
 // db.ts — kura の runtime state の置き場と、唯一の DB kura.db の窓口。
 //
-// table は core も extension も usage も kura.db 1 つに置き、schema は schema.sql 1 つが正本。
+// table は core も usage も kura.db 1 つに置き、schema は schema.sql 1 つが正本。
 // 機能ごとに分かれていた旧 DB (history.db など) は、kura.db を初めて作るときに一度だけ写す。
 
 import { Database } from "bun:sqlite";
@@ -17,7 +17,6 @@ export const KURA_DB = `${KURA_STATE_DIR}/kura.db`;
 const SCHEMA_SQL = `${import.meta.dir}/schema.sql`;
 
 // 旧 DB の file と、その table を kura.db のどの table に写すか。
-// english の feeds は entries より前の名前。
 const LEGACY: { file: string; tables: [from: string[], to: string][] }[] = [
   {
     file: "history.db",
@@ -26,8 +25,6 @@ const LEGACY: { file: string; tables: [from: string[], to: string][] }[] = [
       [["tool_uses"], "tool_uses"],
     ],
   },
-  { file: "timeline.db", tables: [[["timelines"], "timeline"]] },
-  { file: "english.db", tables: [[["entries", "feeds"], "english"]] },
   { file: "usage.db", tables: [[["calls"], "usage"]] },
 ];
 
@@ -60,7 +57,7 @@ export function openKura(): Database {
   return db;
 }
 
-// 一時 file に schema と旧 DB の中身を作り切ってから kura.db に置く。hook と launchd が同時に
+// 一時 file に schema と旧 DB の中身を作り切ってから kura.db に置く。hook が同時に
 // 作りに来ても、link は既にある kura.db を上書きしないので、先に置けた 1 つだけが残る。
 // 旧 DB は消さない — 写せたことを人が確かめてから消す。
 function createKura(): void {

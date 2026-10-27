@@ -16,8 +16,7 @@ const usage = `usage: kura enable <claude|codex|all>
        kura disable <claude|codex|all>
        kura search [--limit=N] <keyword...>
        kura show <session-id-or-prefix>
-       kura extension run <timeline|english|akapen|tldr|verbatim> [args]
-       kura extension schedule <enable|disable> <timeline|english|all>
+       kura extension run <akapen|tldr|verbatim> [args]
        kura setup
        kura teardown
        kura status

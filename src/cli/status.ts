@@ -1,9 +1,8 @@
-// status.ts — setup / extension state の収集と rich 表示。
+// status.ts — setup state の収集と rich 表示。
 
 import { existsSync, lstatSync, readlinkSync } from "node:fs";
 import { join, resolve } from "node:path";
-import { resolveGeneration } from "../agent/run.ts";
-import { configPath, type HourlyExtension, loadConfig } from "../config.ts";
+import { configPath } from "../config.ts";
 import { paint, type Row, renderTable, stateColor } from "./terminal.ts";
 
 type State =
@@ -59,16 +58,6 @@ function managerState(script: string, target: string): State {
   return "ERROR";
 }
 
-// feature の生成設定を 1 cell に: `codex · gpt-5.6 · high`。null は CLI の既定。
-function generationState(feature: HourlyExtension): string {
-  try {
-    const { agent, options } = resolveGeneration(feature, loadConfig().extensions[feature]);
-    return `${agent} · ${options.model ?? "CLI default"} · ${options.effort ?? "CLI default"}`;
-  } catch {
-    return "ERROR";
-  }
-}
-
 function tableCell(padded: string, raw: string, _rowIndex: number, columnIndex: number): string {
   if (columnIndex > 0) return stateColor(raw, padded);
   return padded;
@@ -81,7 +70,6 @@ function renderStatus(): number {
   const cli = join(userHome, ".local", "bin", "kura");
   const cliTarget = join(runtime, "src", "cli.ts");
   const hooks = join(repo, "src", "store", "hooks.ts");
-  const jobs = join(repo, "src", "launchd", "jobs.ts");
   const kuraDb = join(stateDir, "kura.db");
   const config = configPath();
 
@@ -98,15 +86,7 @@ function renderStatus(): number {
   process.stdout.write(
     `${renderTable(["Component", "State", "Detail"], setupRows, (cell, raw, row, column) =>
       column === 2 ? paint.dim(cell) : tableCell(cell, raw, row, column),
-    )}\n\n`,
-  );
-
-  const extensionRows: Row[] = [
-    ["timeline", generationState("timeline"), managerState(jobs, "timeline")],
-    ["english", generationState("english"), managerState(jobs, "english")],
-  ];
-  process.stdout.write(
-    `${renderTable(["Extension", "Agent", "Schedule"], extensionRows, tableCell)}\n`,
+    )}\n`,
   );
   return 0;
 }
