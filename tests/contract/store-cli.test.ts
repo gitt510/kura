@@ -5,7 +5,6 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 const cli = join(import.meta.dir, "..", "..", "src", "cli.ts");
-const queryHour = join(import.meta.dir, "..", "..", "src", "store", "query-hour.ts");
 const schema = join(import.meta.dir, "..", "..", "src", "schema.sql");
 let root = "";
 
@@ -165,16 +164,6 @@ test("kura.db が無ければ、旧 DB の中身を写して作り、旧 DB は�
        NULL, '2026-07-01T00:00:00.000Z', 0);`,
   );
   legacy(
-    "timeline.db",
-    `CREATE TABLE timelines (window_start TEXT PRIMARY KEY, title TEXT);
-     INSERT INTO timelines VALUES ('2026-07-01 09:00:00', 'old hour');`,
-  );
-  legacy(
-    "english.db",
-    `CREATE TABLE feeds (window_start TEXT PRIMARY KEY, cards TEXT);
-     INSERT INTO feeds VALUES ('2026-07-01 09:00:00', '[]');`,
-  );
-  legacy(
     "usage.db",
     `CREATE TABLE calls (feature TEXT, agent TEXT, model TEXT, ok INTEGER, input_tokens INTEGER,
        cache_creation_tokens INTEGER, cache_read_tokens INTEGER, output_tokens INTEGER,
@@ -189,8 +178,6 @@ test("kura.db が無ければ、旧 DB の中身を写して作り、旧 DB は�
     const count = (table: string) =>
       (db.query(`SELECT COUNT(*) AS n FROM ${table}`).get() as { n: number }).n;
     expect(count("messages")).toBe(1);
-    expect(count("timeline")).toBe(1);
-    expect(count("english")).toBe(1);
     expect(count("usage")).toBe(1);
     const columns = (db.query("PRAGMA table_info(messages)").all() as { name: string }[]).map(
       (column) => column.name,
@@ -200,23 +187,13 @@ test("kura.db が無ければ、旧 DB の中身を写して作り、旧 DB は�
   } finally {
     db.close();
   }
-  for (const file of ["history.db", "timeline.db", "english.db", "usage.db"]) {
+  for (const file of ["history.db", "usage.db"]) {
     expect(existsSync(join(state, file))).toBe(true);
   }
 });
 
-test("malformed retry message は search と hourly query の両方から除外する", () => {
+test("malformed retry message は search から除外する", () => {
   const search = run("search", "malformed");
   expect(search.exitCode).toBe(0);
   expect(JSON.parse(search.stdout.toString()).count).toBe(0);
-
-  const hourly = Bun.spawnSync([process.execPath, queryHour, "2026-07-20", "10"], {
-    env: { ...process.env, XDG_STATE_HOME: root },
-  });
-  expect(hourly.exitCode).toBe(0);
-  const window = JSON.parse(hourly.stdout.toString());
-  expect(window.meta.volume.user).toBe(1);
-  expect(window.messages.map((message: { text: string }) => message.text)).toEqual([
-    "choose SQLite for local storage",
-  ]);
 });

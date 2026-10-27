@@ -29,30 +29,23 @@ Stop recording an agent's conversations by removing its hooks. Recorded
 conversations stay in kura.db.
 `,
   extension: `usage: kura extension run <name> [args]
-       kura extension schedule <enable|disable> <timeline|english|all>
 
-Extensions are opt-in features built on top of kura.
-
-  run       run one extension once; see kura extension run <name> --help
-  schedule  toggle the launchd job that runs timeline / english every hour
+Run one extension once; see kura extension run <name> --help.
 
 extensions:
-  timeline  summarize one hour of recorded sessions
-  english   turn one hour of your prompts into an English practice card
   akapen    English feedback on one prompt
   tldr      three-line summary of the last answer
   verbatim  one prompt said again as native English
 `,
   teardown: `usage: kura teardown
 
-Disable scheduled jobs and recording hooks, then remove the
+Disable recording hooks, then remove the
 symlinks created by setup. State (~/.local/state/kura) and config
 (~/.config/kura) are retained.
 `,
   status: `usage: kura status
 
-Show setup state (runtime, cli, config, kura.db, hooks) and
-per-extension state (schedule) as tables.
+Show setup state (runtime, cli, config, kura.db, hooks) as a table.
 `,
   usage: `usage: kura usage [--days=N]
 
@@ -97,19 +90,6 @@ Open a new Claude Code session in a tmux pane to the right, in the current
 directory. The session gets only the given session id in its system prompt
 and loads that conversation with kura show when a request depends on it.
 It starts idle: type the first instruction there. Fails outside tmux.
-`,
-  "extension run timeline": `usage: kura extension run timeline [<YYYY-MM-DD> <hour 0-23>]
-
-Summarize one JST hour of recorded sessions into kura.db. Without
-arguments, targets the last completed hour. An hour already generated is
-skipped.
-The scheduled job runs this command.
-`,
-  "extension run english": `usage: kura extension run english [<YYYY-MM-DD> <hour 0-23>]
-
-Turn one JST hour of your prompts into an English practice card in
-kura.db. Without arguments, targets the last completed hour. An hour
-already generated is skipped. The scheduled job runs this command.
 `,
   "extension run akapen": `usage: kura extension run akapen < prompt.txt
 

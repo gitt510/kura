@@ -3,7 +3,7 @@
 # kura — 蔵
 
 - kura keeps Claude Code and Codex conversations verbatim in one SQLite database, `kura.db`
-- Opt-in extensions build on `kura.db`, from hourly activity timelines to live English feedback in a Claude Code pane
+- A Claude Code pane gives live English feedback and three-line summaries beside the session
 - The name *kura* (蔵) means a storehouse: things are put away quietly and taken out only when needed
 
 ## Why kura
@@ -16,7 +16,8 @@
 | Requirement | Needed for |
 | --- | --- |
 | macOS, [Bun](https://bun.sh/), [just](https://github.com/casey/just) | everything |
-| [Claude Code](https://docs.anthropic.com/en/docs/claude-code) or [Codex](https://developers.openai.com/codex/cli/) | recording and generation |
+| [Claude Code](https://docs.anthropic.com/en/docs/claude-code) or [Codex](https://developers.openai.com/codex/cli/) | recording |
+| Claude Code | the companion pane |
 | tmux | handoff |
 
 ## Setup
@@ -73,22 +74,17 @@ kura config        # prints the effective config
 
 ## Extensions
 
-| Extension | Output | Schedule |
-| --- | --- | --- |
-| `timeline` | activity timeline in `kura.db` | hourly |
-| `english` | English learning card in `kura.db` | hourly |
-| `akapen` / `tldr` / `verbatim` | JSON on stdout | on demand |
+- `akapen`, `tldr`, and `verbatim` generate the companion widgets and print JSON on stdout
 
 ```bash
 kura extension run <name> --help
-just schedule enable timeline   # hourly generation
-kura usage                      # tokens and cost per extension
+kura usage                        # tokens and cost per extension
 ```
 
 ## Privacy
 
 - `kura.db` lives unencrypted in `~/.local/state/kura`
-- A scheduled extension sends stored conversations to its agent's LLM provider
+- A companion widget sends the newest prompt or the latest turns to Claude
 - `just teardown` removes everything `just setup` created and keeps `kura.db` and the config
 
 ## Development

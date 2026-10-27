@@ -1,4 +1,4 @@
-// user 発話として扱わない transcript noise。search と hourly generation で共有する。
+// user 発話として扱わない transcript noise。search が使う。
 export const HISTORY_NOISE_PREDICATE =
   "text NOT LIKE '%tool_use_id%' " +
   "AND text NOT LIKE '<command-name>%' " +

@@ -45,7 +45,7 @@ test("agent spawn の検出 pattern は直書きの spawn を捕まえる", () =
   }
 });
 
-// 実行の入口は src/cli.ts の subcommand だけ。launchd も mod も手動も同じ入口を通り、
+// 実行の入口は src/cli.ts の subcommand だけ。mod も手動も同じ入口を通り、
 // config・引数解釈・log が揃う。extensions は関数を export するだけで、process を持たない。
 test("extensions は実行の入口を持たない", () => {
   const violations = sources()

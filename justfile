@@ -29,17 +29,12 @@ enable agent:
 disable agent:
     @bun "{{repo}}/src/cli.ts" disable "{{agent}}"
 
-# Enable or disable scheduled generation for an extension.
-[group('extensions')]
-schedule action extension:
-    @bun "{{repo}}/src/cli.ts" extension schedule "{{action}}" "{{extension}}"
-
-# Disable recording and extensions, then remove local entrypoints.
+# Disable recording, then remove local entrypoints.
 [group('setup')]
 teardown:
     @bun "{{repo}}/src/cli.ts" teardown
 
-# Show setup and extension state.
+# Show setup state.
 [group('operations')]
 status:
     @bun "{{repo}}/src/cli.ts" status
