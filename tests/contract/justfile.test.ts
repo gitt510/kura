@@ -35,40 +35,27 @@ test("just は extensions group に schedule interface を公開する", () => {
   expect(output(result)).toContain('src/cli.ts" extension schedule "enable" "timeline"');
 });
 
-test("just は extensions group に publish interface を公開する", () => {
-  const result = dryRun("publish", "disable", "timeline");
-  expect(result.exitCode).toBe(0);
-  expect(output(result)).toContain('src/cli.ts" extension publish "disable" "timeline"');
-});
-
 test("just の default recipe は非公開で recipe 一覧を返す", () => {
   const result = Bun.spawnSync(["just", "--justfile", justfile]);
   expect(result.exitCode).toBe(0);
   expect(result.stdout.toString()).toContain("enable agent");
   expect(result.stdout.toString()).toContain("disable agent");
   expect(result.stdout.toString()).toContain("schedule action extension");
-  expect(result.stdout.toString()).toContain("publish action extension");
   expect(result.stdout.toString()).toContain("[setup]");
   expect(result.stdout.toString()).toContain("[extensions]");
   expect(result.stdout.toString()).toContain("[operations]");
   expect(result.stdout.toString()).not.toContain("[automation]");
   expect(result.stdout.toString()).not.toContain("[cli]");
   expect(result.stdout.toString()).not.toContain("[generation]");
-  expect(result.stdout.toString()).not.toContain("[publish]");
   expect(result.stdout.toString()).not.toContain("_default");
 });
 
-test("個別 control の public action は enable / disable に限定する", () => {
+test("schedule の public action は enable / disable に限定する", () => {
   const { home, bin } = setupHome();
   try {
-    for (const [control, target] of [
-      ["schedule", "timeline"],
-      ["publish", "timeline"],
-    ]) {
-      const result = runWithHome(home, bin, "", control!, "status", target!);
-      expect(result.exitCode).toBe(2);
-      expect(output(result)).toContain(`<enable|disable>`);
-    }
+    const result = runWithHome(home, bin, "", "schedule", "status", "timeline");
+    expect(result.exitCode).toBe(2);
+    expect(output(result)).toContain(`<enable|disable>`);
   } finally {
     rmSync(home, { recursive: true, force: true });
   }
@@ -138,7 +125,7 @@ test("teardown は記録の hook・extension control・entrypoint を除去し�
     mkdirSync(configDir, { recursive: true });
     writeFileSync(
       join(configDir, "config.json"),
-      JSON.stringify({ extensions: { timeline: { agent: "codex", publish: { enabled: true } } } }),
+      JSON.stringify({ extensions: { timeline: { agent: "codex" } } }),
     );
 
     const result = runWithHome(home, bin, "kura.timeline", "teardown");
@@ -148,7 +135,6 @@ test("teardown は記録の hook・extension control・entrypoint を除去し�
     expect(() => lstatSync(timelineJob)).toThrow();
     expect(readFileSync(claudeSettings, "utf-8")).not.toContain(".local/bin/kura");
     const config = JSON.parse(readFileSync(join(configDir, "config.json"), "utf-8"));
-    expect(config.extensions.timeline.publish.enabled).toBe(false);
     expect(config.extensions.timeline.agent).toBe("codex");
     expect(readFileSync(join(stateDir, "kura.db"), "utf-8")).toBe("data");
     expect(output(result)).toContain(`retained state: ${stateDir}`);
@@ -163,17 +149,11 @@ test("teardown は記録の hook・extension control・entrypoint を除去し�
 test("teardown は ownership の preflight に失敗したら何も停止しない", () => {
   const { home, bin } = setupHome();
   const runtime = join(home, ".local", "share", "kura");
-  const configDir = join(home, ".config", "kura");
   const claudeSettings = join(home, ".claude", "settings.json");
   const foreignJob = join(home, "Library", "LaunchAgents", "kura.english.plist");
   try {
     expect(runWithHome(home, bin, "", "setup").exitCode).toBe(0);
     expect(runWithHome(home, bin, "", "enable", "claude").exitCode).toBe(0);
-    mkdirSync(configDir, { recursive: true });
-    writeFileSync(
-      join(configDir, "config.json"),
-      JSON.stringify({ extensions: { timeline: { publish: { enabled: true } } } }),
-    );
     mkdirSync(join(home, "Library", "LaunchAgents"), { recursive: true });
     writeFileSync(foreignJob, "foreign");
 
@@ -182,10 +162,6 @@ test("teardown は ownership の preflight に失敗したら何も停止しな�
     expect(output(result)).toContain(`refusing to remove existing path: ${foreignJob}`);
     expect(readlinkSync(runtime)).toBe(repo);
     expect(readFileSync(claudeSettings, "utf-8")).toContain(".local/bin/kura");
-    expect(
-      JSON.parse(readFileSync(join(configDir, "config.json"), "utf-8")).extensions.timeline.publish
-        .enabled,
-    ).toBe(true);
   } finally {
     rmSync(home, { recursive: true, force: true });
   }
@@ -209,7 +185,6 @@ test("status は setup と extensions を表形式で表示する", () => {
             agent: "codex",
             model: "gpt-test",
             effort: "high",
-            publish: { enabled: true },
           },
         },
       }),
@@ -226,10 +201,8 @@ test("status は setup と extensions を表形式で表示する", () => {
     expect(text).toMatch(/codex\s+│ DISABLED\s+│ Stop hook/);
     expect(text).toMatch(/timeline\s+│ codex · gpt-test · high\s+│/);
     expect(text).toMatch(/english\s+│ claude · CLI default · CLI default\s+│/);
-    expect(text).toMatch(/timeline\s+│ codex · gpt-test · high\s+│ ENABLED\s+│ ENABLED/);
-    expect(text).toMatch(
-      /english\s+│ claude · CLI default · CLI default\s+│ DISABLED\s+│ DISABLED/,
-    );
+    expect(text).toMatch(/timeline\s+│ codex · gpt-test · high\s+│ ENABLED\s+│/);
+    expect(text).toMatch(/english\s+│ claude · CLI default · CLI default\s+│ DISABLED\s+│/);
   } finally {
     rmSync(home, { recursive: true, force: true });
   }

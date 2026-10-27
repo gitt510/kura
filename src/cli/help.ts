@@ -11,18 +11,12 @@ own. Idempotent.
   config: `usage: kura config
 
 Print the effective config as JSON: config.json with every unset key at its
-default. Webhooks that are not op:// references are printed as <redacted>.
+default.
 `,
   "init-config": `usage: kura init-config
 
 Create the config file (~/.config/kura/config.json, mode 600) with every
 key at its default. Fails if the file already exists.
-`,
-  "bake-secrets": `usage: kura bake-secrets
-
-Resolve every op:// reference in extensions.<name>.publish.discord.webhook in config.json through
-1Password (op read) into the state dir's secrets.json (mode 600), which the
-publish jobs read. Run it again after changing a reference.
 `,
   enable: `usage: kura enable <claude|codex|all>
 
@@ -36,14 +30,11 @@ conversations stay in kura.db.
 `,
   extension: `usage: kura extension run <name> [args]
        kura extension schedule <enable|disable> <timeline|english|all>
-       kura extension publish <enable|disable> <timeline|english|all>
 
 Extensions are opt-in features built on top of kura.
 
   run       run one extension once; see kura extension run <name> --help
   schedule  toggle the launchd job that runs timeline / english every hour
-  publish   toggle Discord delivery for timeline / english; disabled
-            extensions still run and record, they just stop delivering
 
 extensions:
   timeline  summarize one hour of recorded sessions
@@ -54,14 +45,14 @@ extensions:
 `,
   teardown: `usage: kura teardown
 
-Disable publishing, scheduled jobs, and recording hooks, then remove the
+Disable scheduled jobs and recording hooks, then remove the
 symlinks created by setup. State (~/.local/state/kura) and config
 (~/.config/kura) are retained.
 `,
   status: `usage: kura status
 
 Show setup state (runtime, cli, config, kura.db, hooks) and
-per-extension state (schedule / publish) as tables.
+per-extension state (schedule) as tables.
 `,
   usage: `usage: kura usage [--days=N]
 
@@ -109,17 +100,16 @@ It starts idle: type the first instruction there. Fails outside tmux.
 `,
   "extension run timeline": `usage: kura extension run timeline [<YYYY-MM-DD> <hour 0-23>]
 
-Summarize one JST hour of recorded sessions into kura.db, then publish
-it to Discord when publishing is enabled. Without arguments, targets the
-last completed hour. An hour already generated (or published) is skipped.
+Summarize one JST hour of recorded sessions into kura.db. Without
+arguments, targets the last completed hour. An hour already generated is
+skipped.
 The scheduled job runs this command.
 `,
   "extension run english": `usage: kura extension run english [<YYYY-MM-DD> <hour 0-23>]
 
 Turn one JST hour of your prompts into an English practice card in
-kura.db, then publish it to Discord when publishing is enabled. Without
-arguments, targets the last completed hour. An hour already generated (or
-published) is skipped. The scheduled job runs this command.
+kura.db. Without arguments, targets the last completed hour. An hour
+already generated is skipped. The scheduled job runs this command.
 `,
   "extension run akapen": `usage: kura extension run akapen < prompt.txt
 

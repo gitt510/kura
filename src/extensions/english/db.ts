@@ -1,22 +1,21 @@
 // db.ts — kura.db の english table への型付きアクセス窓口。
 //
-// table の形は src/schema.sql が正本。writer (insert.ts) / publisher (publish.ts) がここを
-// import して同じ型を共有する。読み出し元の会話は core の table (reader: store/query.ts)。
+// table の形は src/schema.sql が正本。writer (insert.ts) がここを
+// import して型を共有する。読み出し元の会話は core の table (reader: store/query.ts)。
 
 import type { Database } from "bun:sqlite";
 
 // 1 カード = その hour のユーザ発話 1 つを英語学習用に解剖したもの (1 hour 1 枚)。
-// 並び順は Discord 表示順と同じ。ja / phrase / read が常時表示、en 以降は spoiler。
 //   ja     : 🇯🇵 言いたいこと (clean 版。typo / 固有名詞は修正、逐語ではない)
 //   phrase : 💎 持ち帰る再利用フレーズ 1 つ ("..." 込み)。常時表示のヒント役
 //   read   : 🗣 en を流れで読んだカタカナ。連結・弱形・脱落を反映 (例 "スワ ピナ")
-//            常時表示 — これだけを見て en を書き起こすのが主な使い方
-//   en     : 🇺🇸 その英訳 1 文 (casual / hedged)。書き取りの正解なので spoiler
+//            これだけを見て en を書き起こすのが主な使い方
+//   en     : 🇺🇸 その英訳 1 文 (casual / hedged)。書き取りの正解
 //   syl    : 🔤 en の音節分割。単語間 " / "・音節間 "·" (例 "Pass·ing / the / da·ta·base")
-//   memo   : 連結・音変化の解説 1〜2 点の配列 (無い文では省略可)。publish が bullet に整形する。
-//            旧 row は string 1 本 (2026-08 に配列化) — publish 側で両方受ける
+//   memo   : 連結・音変化の解説 1〜2 点の配列 (無い文では省略可)。
+//            旧 row は string 1 本 (2026-08 に配列化)
 //   alt    : ✨ 同じ意図の別の言い方 1 文 (en と構文を変える)
-// en/alt 以外の optional 群は 2026-07 の拡張 — 旧 row には無いので publish 側は optional 扱いする。
+// en/alt 以外の optional 群は 2026-07 の拡張 — 旧 row には無い。
 export interface Card {
   ja: string;
   phrase: string;
@@ -60,14 +59,5 @@ export function upsertEnglishEntry(db: Database, row: EnglishEntry): void {
     $gen_model: row.gen_model,
     $gen_effort: row.gen_effort,
     $now: now,
-  });
-}
-
-// publish 成功時に published_at を stamp する (publish.ts が呼ぶ)。
-// 再生成 (upsertEnglishEntry) は published_at を触らないので、再生成しても publish 状態は保たれる。
-export function markPublished(db: Database, windowStart: string): void {
-  db.query("UPDATE english SET published_at = $now WHERE window_start = $ws").run({
-    $now: new Date().toISOString(),
-    $ws: windowStart,
   });
 }

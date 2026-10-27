@@ -1,7 +1,7 @@
 // db.ts — kura.db の timeline table への型付きアクセス窓口。
 //
-// table の形は src/schema.sql が正本。writer (insert.ts) / publisher (publish.ts) がここを
-// import して同じ型を共有する。読み出し元の会話は core の table (reader: store/query.ts)。
+// table の形は src/schema.sql が正本。writer (insert.ts) がここを
+// import して型を共有する。読み出し元の会話は core の table (reader: store/query.ts)。
 
 import type { Database } from "bun:sqlite";
 
@@ -57,14 +57,5 @@ export function upsertTimeline(db: Database, row: TimelineRow): void {
     $gen_model: row.gen_model,
     $gen_effort: row.gen_effort,
     $now: now,
-  });
-}
-
-// publish 成功時に published_at を stamp する (publish.ts が呼ぶ)。
-// 再生成 (upsertTimeline) は published_at を触らないので、再生成しても publish 状態は保たれる。
-export function markPublished(db: Database, windowStart: string): void {
-  db.query("UPDATE timeline SET published_at = $now WHERE window_start = $ws").run({
-    $now: new Date().toISOString(),
-    $ws: windowStart,
   });
 }

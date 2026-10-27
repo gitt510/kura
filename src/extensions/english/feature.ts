@@ -1,11 +1,9 @@
 // feature.ts — english の hourly job 定義。`kura extension run english` (src/cli/extension.ts) が実行する。
-// orchestrator (hourly-job) に素材取得・DB 書き込み・配信を委ね、LLM には生成だけ任せる。
+// orchestrator (hourly-job) に素材取得・DB 書き込みを委ね、LLM には生成だけ任せる。
 
 import { openKura } from "../../db.ts";
-import { isPublishEnabled } from "../../publish/policy.ts";
 import type { HourlyFeature } from "../hourly-job.ts";
 import { type EnglishGenerated, insertEnglish, parseEnglishGenerated } from "./insert.ts";
-import { publishEnglish } from "./publish.ts";
 
 const isGenerated = (windowStart: string): boolean => {
   const db = openKura();
@@ -16,26 +14,9 @@ const isGenerated = (windowStart: string): boolean => {
   }
 };
 
-const isPublished = (windowStart: string): boolean => {
-  const db = openKura();
-  try {
-    const row = db
-      .query("SELECT published_at FROM english WHERE window_start = ?")
-      .get(windowStart) as { published_at: string | null } | null;
-    return !!row?.published_at;
-  } finally {
-    db.close();
-  }
-};
-
 export const feature = {
   name: "english",
   isGenerated,
   parseGenerated: parseEnglishGenerated,
   insert: insertEnglish,
-  publish: {
-    enabled: () => isPublishEnabled("english"),
-    isPublished,
-    run: publishEnglish,
-  },
 } satisfies HourlyFeature<EnglishGenerated>;

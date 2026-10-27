@@ -1,6 +1,6 @@
 ---
 name: timeline
-description: ある 1 時間 (JST の hour bucket) に全 agent セッション横断で何をしたかを、repo/テーマ別のスレッドに束ねた timeline に要約する。素材の取得・DB への UPSERT・Discord 配信はオーケストレーター `kura timeline` が行い、この skill は生成だけを担う。/timeline または $timeline の明示指名か、orchestrator が生成 agent で起動したときのみ動く。
+description: ある 1 時間 (JST の hour bucket) に全 agent セッション横断で何をしたかを、repo/テーマ別のスレッドに束ねた timeline に要約する。素材の取得・DB への UPSERT はオーケストレーター `kura timeline` が行い、この skill は生成だけを担う。/timeline または $timeline の明示指名か、orchestrator が生成 agent で起動したときのみ動く。
 disable-model-invocation: true
 ---
 
@@ -10,7 +10,7 @@ Goal: **JST のある 1 時間**を、後から「その時間に何をしてい
 **repo/テーマ別のスレッド timeline** にする。*hour 単位*で全 session を横断し、
 同じ 1 時間に複数 repo を行き来した実態を束ねる。
 
-この skill は **生成だけ**を担う（非決定的な判断）。素材取得・kura.db への UPSERT・Discord 配信は
+この skill は **生成だけ**を担う（非決定的な判断）。素材取得・kura.db への UPSERT は
 **orchestrator (`kura extension run timeline`) の責務**であり、この skill は決定論的な処理を一切行わない。
 
 入力は `/tmp/kura-timeline/messages.json`（orchestrator が用意）。出力は `/tmp/kura-timeline/generated.json`
@@ -21,7 +21,7 @@ Goal: **JST のある 1 時間**を、後から「その時間に何をしてい
 ```
 /tmp/kura-timeline/
 ├── messages.json   ← orchestrator が用意 (この skill の入力)。{ meta, messages } 形
-└── generated.json  ← この skill が書く (narrative)。orchestrator がこれを DB へ UPSERT・配信する
+└── generated.json  ← この skill が書く (narrative)。orchestrator がこれを DB へ UPSERT する
 ```
 
 kura.db は触らない（読むのも書くのも orchestrator 側）。
@@ -54,7 +54,7 @@ meta は**作らない**。数えるのは DB の仕事（orchestrator が引き
 
 step 2 で作った narrative を `/tmp/kura-timeline/generated.json` に Write する。
 
-これで完了。DB への UPSERT と Discord 配信は orchestrator が generated.json を読んで行う。
+これで完了。DB への UPSERT は orchestrator が generated.json を読んで行う。
 
 ## generated.json schema
 

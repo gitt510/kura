@@ -22,11 +22,6 @@ setup:
 init-config:
     @bun "{{repo}}/src/cli.ts" init-config
 
-# Resolve the op:// webhook references in config.json into the state dir. Requires 'op signin'.
-[group('setup')]
-bake-secrets:
-    @bun "{{repo}}/src/cli.ts" bake-secrets
-
 # Start recording an agent's conversations (claude, codex, or all).
 [group('setup')]
 enable agent:
@@ -41,11 +36,6 @@ disable agent:
 [group('extensions')]
 schedule action extension:
     @bun "{{repo}}/src/cli.ts" extension schedule "{{action}}" "{{extension}}"
-
-# Enable or disable external publish for an extension.
-[group('extensions')]
-publish action extension:
-    @bun "{{repo}}/src/cli.ts" extension publish "{{action}}" "{{extension}}"
 
 # Disable recording and extensions, then remove local entrypoints.
 [group('setup')]

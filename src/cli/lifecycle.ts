@@ -79,11 +79,8 @@ function teardown(): void {
 
   const hooks = join(repo, "src", "store", "hooks.ts");
   const launchd = join(repo, "src", "launchd", "jobs.ts");
-  const publish = join(repo, "src", "publish", "manage.ts");
   runManager(hooks, ["all", "status"], true);
-  runManager(publish, ["all", "status"], true);
 
-  runManager(publish, ["all", "disable"]);
   runManager(launchd, ["all", "disable"]);
   runManager(hooks, ["all", "disable"]);
 

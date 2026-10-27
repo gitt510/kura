@@ -1,8 +1,18 @@
 import { afterEach, expect, test } from "bun:test";
-import { mkdtempSync, rmSync, statSync, writeFileSync } from "node:fs";
+import {
+  chmodSync,
+  existsSync,
+  lstatSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  statSync,
+  symlinkSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { configPath, defaultConfig, loadConfig, redactConfig, saveConfig } from "./config.ts";
+import { configPath, defaultConfig, loadConfig, saveConfig } from "./config.ts";
 
 const roots: string[] = [];
 
@@ -41,14 +51,8 @@ test("書かれていない項目は既定値で埋め、null と空文字は CL
     agent: "codex",
     model: "gpt-5.6",
     effort: null,
-    publish: { enabled: false, discord: { webhook: null, avatar: null } },
   });
-  expect(config.extensions.english).toEqual({
-    agent: "claude",
-    model: null,
-    effort: null,
-    publish: { enabled: false, discord: { webhook: null, avatar: null } },
-  });
+  expect(config.extensions.english).toEqual({ agent: "claude", model: null, effort: null });
   expect(config.extensions.akapen).toEqual({ agent: "claude", model: "opus", effort: null });
   expect(Object.keys(config)).toEqual(["extensions", "mod"]);
   // model は書かなければ feature の既定、null (や空白) は CLI の既定
@@ -76,15 +80,12 @@ test("型の違う項目は path と項目名付きで拒否する", () => {
   expect(() => parseConfig({ generator: "codex" }, "c.json")).toThrow(
     'config has unknown key "generator"',
   );
-  expect(() =>
-    parseConfig({ extensions: { timeline: { publish: { enabled: "yes" } } } }, "c.json"),
-  ).toThrow("extensions.timeline.publish.enabled must be a boolean");
 });
 
 test("saveConfig は 0600 で書き、loadConfig で同じ値に戻る", () => {
   const path = join(tempDir(), "kura", "config.json");
   const config = defaultConfig();
-  config.extensions.timeline.publish.enabled = true;
+  config.extensions.timeline.agent = "codex";
   saveConfig(config, path);
   expect(statSync(path).mode & 0o777).toBe(0o600);
   expect(loadConfig(path)).toEqual(config);
@@ -107,6 +108,9 @@ test("前の版の key は、今の書き方を添えて拒否する", () => {
   expect(() => parseConfig({ features: {} }, "c.json")).toThrow(
     'config has unknown key "features" (renamed to "extensions")',
   );
+  expect(() => parseConfig({ extensions: { english: { publish: {} } } }, "c.json")).toThrow(
+    'extensions.english has unknown key "publish" (removed with Discord delivery)',
+  );
   expect(() => parseConfig({ mod: { companion: { rows: 10 } } }, "c.json")).toThrow(
     'mod.companion has unknown key "rows" (removed; the pane size is left to Claude Code)',
   );
@@ -127,14 +131,27 @@ test("companion の不正な値は項目名付きで拒否する", () => {
   ).toThrow("mod.companion.ratio must list one share per widget in mod.companion.widgets");
 });
 
-test("redactConfig は参照でない webhook だけを伏せる", () => {
-  const config = defaultConfig();
-  config.extensions.english.publish.discord.webhook = "op://Dev/Discord/english/webhook";
-  config.extensions.timeline.publish.discord.webhook = "https://discord.com/api/webhooks/1/secret";
-  const shown = redactConfig(config).extensions;
-  expect(shown.english.publish.discord.webhook).toBe("op://Dev/Discord/english/webhook");
-  expect(shown.timeline.publish.discord.webhook).toBe("<redacted>");
-  expect(config.extensions.timeline.publish.discord.webhook).toBe(
-    "https://discord.com/api/webhooks/1/secret",
-  );
+test("saveConfig は symlink を残したまま実体に書く", () => {
+  const root = tempDir();
+  const targetRoot = tempDir();
+  chmodSync(targetRoot, 0o755);
+  const real = join(targetRoot, "real.json");
+  const link = join(root, "link.json");
+  writeFileSync(real, "{}\n");
+  symlinkSync(real, link);
+  saveConfig(defaultConfig(), link);
+  expect(lstatSync(link).isSymbolicLink()).toBe(true);
+  expect(JSON.parse(readFileSync(real, "utf-8"))).toEqual(defaultConfig());
+  expect(statSync(targetRoot).mode & 0o777).toBe(0o755);
+  expect(statSync(real).mode & 0o777).toBe(0o600);
+});
+
+test("saveConfig は壊れた symlink を置き換えずに失敗する", () => {
+  const root = tempDir();
+  const real = join(root, "missing.json");
+  const link = join(root, "link.json");
+  symlinkSync(real, link);
+  expect(() => saveConfig(defaultConfig(), link)).toThrow();
+  expect(lstatSync(link).isSymbolicLink()).toBe(true);
+  expect(existsSync(real)).toBe(false);
 });

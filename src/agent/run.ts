@@ -1,5 +1,5 @@
 import { existsSync } from "node:fs";
-import { type Generation, loadConfig, type PublishedFeature } from "../config.ts";
+import { type Generation, type HourlyExtension, loadConfig } from "../config.ts";
 import { KURA_ROOT } from "../db.ts";
 import { type AgentUsage, recordUsage } from "./usage.ts";
 
@@ -332,7 +332,7 @@ export async function runClaudePrompt(
 // 呼び手が stamp を書かず次の trigger で再試行できるようにする。
 // workDir = その skill に読み書きを許す唯一の交換 directory。
 export function runSkillJson(
-  skill: PublishedFeature,
+  skill: HourlyExtension,
   workDir: string,
   args: string[] = [],
   generation: Generation = loadConfig().extensions[skill],

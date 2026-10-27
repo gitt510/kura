@@ -55,8 +55,7 @@ CREATE TABLE IF NOT EXISTS timeline (
   gen_model       TEXT,               -- この行を生成した LLM の model id (provenance.ts の自己 introspection)
   gen_effort      TEXT,               -- 同 effort。取れない環境では NULL
   created_at      TEXT,               -- レコード初回作成 (再生成でも保持)
-  updated_at      TEXT,               -- レコード最終更新 (再生成で追従)
-  published_at    TEXT                -- Discord publish 済み時刻 (NULL = 未送信)
+  updated_at      TEXT                -- レコード最終更新 (再生成で追従)
 );
 
 CREATE INDEX IF NOT EXISTS idx_timeline_date ON timeline(date);
@@ -73,8 +72,7 @@ CREATE TABLE IF NOT EXISTS english (
   gen_model       TEXT,               -- この行を生成した LLM の model id (provenance.ts の自己 introspection)
   gen_effort      TEXT,               -- 同 effort。取れない環境では NULL
   created_at      TEXT,               -- レコード初回作成 (再生成でも保持)
-  updated_at      TEXT,               -- レコード最終更新 (再生成で追従)
-  published_at    TEXT                -- Discord publish 済み時刻 (NULL = 未送信)
+  updated_at      TEXT                -- レコード最終更新 (再生成で追従)
 );
 
 CREATE INDEX IF NOT EXISTS idx_english_date ON english(date);
