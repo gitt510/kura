@@ -44,7 +44,7 @@ teardown:
 status:
     @bun "{{repo}}/src/cli.ts" status
 
-# Browse kura.db in a local Datasette web UI (read-only). Runs via uvx; nothing installed.
+# Browse kura.db in Datasette (read-only).
 [group('operations')]
 view-db:
     #!/usr/bin/env bash
@@ -73,9 +73,3 @@ fmt:
 [group('development')]
 test:
     @bun test ./src ./tests
-
-# Validate the Claude Code plugin and run its tests against the engine. Requires the claude CLI.
-[group('development')]
-test-plugin:
-    @claude plugin validate "{{repo}}/plugin"
-    @claude plugin test "{{repo}}/plugin"
