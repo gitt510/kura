@@ -3,7 +3,7 @@
 # kura — 蔵
 
 - kura keeps Claude Code and Codex conversations verbatim in one SQLite database, `kura.db`
-- Opt-in extensions build on `kura.db`, from hourly Discord digests to live English feedback in a Claude Code pane
+- Opt-in extensions build on `kura.db`, from hourly activity timelines to live English feedback in a Claude Code pane
 - The name *kura* (蔵) means a storehouse: things are put away quietly and taken out only when needed
 
 ## Why kura
@@ -18,7 +18,6 @@
 | macOS, [Bun](https://bun.sh/), [just](https://github.com/casey/just) | everything |
 | [Claude Code](https://docs.anthropic.com/en/docs/claude-code) or [Codex](https://developers.openai.com/codex/cli/) | recording and generation |
 | tmux | handoff |
-| Discord webhook, [1Password CLI](https://developer.1password.com/docs/cli/) | Discord delivery |
 
 ## Setup
 
@@ -54,6 +53,7 @@ kura config        # prints the effective config
 - [`src/config.ts`](src/config.ts) defines every key, its default, and its validation
 - `extensions.<name>` sets each extension's agent, model, and effort
 - `mod.companion` sets the pane's widgets and their shares of the rows
+- [`docs/config.md`](docs/config.md) lists every config by consumer and sensitivity
 
 ## Claude Code mods
 
@@ -75,14 +75,13 @@ kura config        # prints the effective config
 
 | Extension | Output | Schedule |
 | --- | --- | --- |
-| `timeline` | activity timeline, optionally to Discord | hourly |
-| `english` | English learning card, optionally to Discord | hourly |
+| `timeline` | activity timeline in `kura.db` | hourly |
+| `english` | English learning card in `kura.db` | hourly |
 | `akapen` / `tldr` / `verbatim` | JSON on stdout | on demand |
 
 ```bash
 kura extension run <name> --help
 just schedule enable timeline   # hourly generation
-just publish enable timeline    # Discord delivery
 kura usage                      # tokens and cost per extension
 ```
 
@@ -90,7 +89,6 @@ kura usage                      # tokens and cost per extension
 
 - `kura.db` lives unencrypted in `~/.local/state/kura`
 - A scheduled extension sends stored conversations to its agent's LLM provider
-- Output reaches Discord only when publishing is enabled for that extension
 - `just teardown` removes everything `just setup` created and keeps `kura.db` and the config
 
 ## Development

@@ -1,6 +1,6 @@
 ---
 name: english
-description: ある 1 時間 (JST の hour bucket) に自分が agent へ打った日本語の発話から、英語学習カード 1 枚 (en 2 案 + 発音ブロック) を作る。素材 (messages) の取得・DB への UPSERT・Discord 配信はオーケストレーター `kura english` が行い、この skill は生成だけを担う。/english または $english の明示指名か、orchestrator が生成 agent で起動したときのみ動く。
+description: ある 1 時間 (JST の hour bucket) に自分が agent へ打った日本語の発話から、英語学習カード 1 枚 (en 2 案 + 発音ブロック) を作る。素材 (messages) の取得・DB への UPSERT はオーケストレーター `kura english` が行い、この skill は生成だけを担う。/english または $english の明示指名か、orchestrator が生成 agent で起動したときのみ動く。
 disable-model-invocation: true
 ---
 
@@ -9,7 +9,7 @@ disable-model-invocation: true
 Goal: 待ち時間にちらっと見るだけで英語が積み上がるよう、**自分が実際に agent へ打った日本語**を
 素材に、再利用できる英語表現を 1 時間ごとに **カード 1 枚**へ落とす。
 
-この skill は **生成だけ**を担う（非決定的な判断）。素材取得・kura.db への UPSERT・Discord 配信は
+この skill は **生成だけ**を担う（非決定的な判断）。素材取得・kura.db への UPSERT は
 **orchestrator (`kura extension run english`) の責務**であり、この skill は決定論的な処理を一切行わない。
 
 入力は `/tmp/kura-english/messages.json`（orchestrator が用意）。出力は `/tmp/kura-english/generated.json`
@@ -20,7 +20,7 @@ Goal: 待ち時間にちらっと見るだけで英語が積み上がるよう�
 ```
 /tmp/kura-english/
 ├── messages.json   ← orchestrator が用意 (この skill の入力)。{ meta, messages } 形
-└── generated.json  ← この skill が書く (cards)。orchestrator がこれを DB へ UPSERT・配信する
+└── generated.json  ← この skill が書く (cards)。orchestrator がこれを DB へ UPSERT する
 ```
 
 kura.db は触らない（読むのも書くのも orchestrator 側）。
@@ -90,7 +90,7 @@ Discord では **ja / phrase / read が常時表示**、**syl / memo / alt が�
 
 step 2 で作った cards を `/tmp/kura-english/generated.json` に Write する。
 
-これで完了。DB への UPSERT と Discord 配信は orchestrator が generated.json を読んで行う。
+これで完了。DB への UPSERT は orchestrator が generated.json を読んで行う。
 
 ## generated.json schema
 

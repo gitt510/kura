@@ -3,8 +3,7 @@
 import { existsSync, lstatSync, readlinkSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { resolveGeneration } from "../agent/run.ts";
-import { configPath, loadConfig } from "../config.ts";
-import { isPublishEnabled, type PublishFeature } from "../publish/policy.ts";
+import { configPath, type HourlyExtension, loadConfig } from "../config.ts";
 import { paint, type Row, renderTable, stateColor } from "./terminal.ts";
 
 type State =
@@ -60,16 +59,8 @@ function managerState(script: string, target: string): State {
   return "ERROR";
 }
 
-function publishState(feature: PublishFeature): State {
-  try {
-    return isPublishEnabled(feature) ? "ENABLED" : "DISABLED";
-  } catch {
-    return "ERROR";
-  }
-}
-
 // feature の生成設定を 1 cell に: `codex · gpt-5.6 · high`。null は CLI の既定。
-function generationState(feature: PublishFeature): string {
+function generationState(feature: HourlyExtension): string {
   try {
     const { agent, options } = resolveGeneration(feature, loadConfig().extensions[feature]);
     return `${agent} · ${options.model ?? "CLI default"} · ${options.effort ?? "CLI default"}`;
@@ -111,16 +102,11 @@ function renderStatus(): number {
   );
 
   const extensionRows: Row[] = [
-    [
-      "timeline",
-      generationState("timeline"),
-      managerState(jobs, "timeline"),
-      publishState("timeline"),
-    ],
-    ["english", generationState("english"), managerState(jobs, "english"), publishState("english")],
+    ["timeline", generationState("timeline"), managerState(jobs, "timeline")],
+    ["english", generationState("english"), managerState(jobs, "english")],
   ];
   process.stdout.write(
-    `${renderTable(["Extension", "Agent", "Schedule", "Publish"], extensionRows, tableCell)}\n`,
+    `${renderTable(["Extension", "Agent", "Schedule"], extensionRows, tableCell)}\n`,
   );
   return 0;
 }

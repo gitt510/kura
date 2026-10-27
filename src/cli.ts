@@ -18,14 +18,12 @@ const usage = `usage: kura enable <claude|codex|all>
        kura show <session-id-or-prefix>
        kura extension run <timeline|english|akapen|tldr|verbatim> [args]
        kura extension schedule <enable|disable> <timeline|english|all>
-       kura extension publish <enable|disable> <timeline|english|all>
        kura setup
        kura teardown
        kura status
        kura usage [--days=N]
        kura config
        kura init-config
-       kura bake-secrets
        kura handoff <session-id>
        kura --help
 `;
@@ -58,7 +56,7 @@ async function main(): Promise<number> {
     if (command === "setup" || command === "teardown") {
       return await runLifecycle(command, args);
     }
-    if (command === "config" || command === "init-config" || command === "bake-secrets") {
+    if (command === "config" || command === "init-config") {
       return await runConfig(command, args);
     }
     if (

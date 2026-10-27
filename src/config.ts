@@ -4,9 +4,18 @@
 // 置き場所だけは XDG 規約 (XDG_CONFIG_HOME) に従う。file が無ければ既定値で動く。
 // schema は下の Config 1 つが正本: 型・既定値・検証をここから引く。
 
-import { existsSync, readFileSync } from "node:fs";
+import {
+  chmodSync,
+  existsSync,
+  lstatSync,
+  mkdirSync,
+  readFileSync,
+  realpathSync,
+  renameSync,
+  writeFileSync,
+} from "node:fs";
+import { dirname } from "node:path";
 import { z } from "zod";
-import { isSecretReference, writePrivateJson } from "./secrets.ts";
 
 type Environment = Readonly<Record<string, string | undefined>>;
 
@@ -40,15 +49,9 @@ const generationShape = (agents: readonly Agent[], model: string | null) => ({
 });
 // prompt 一発の feature は system prompt と出力の契約が Claude 前提なので claude だけ。
 const prompted = (model: string | null) => object(generationShape(["claude"], model));
-// 配信する feature。publish.enabled は `kura publish` が書く明示 opt-in。
-// discord.webhook は URL か op:// 参照、discord.avatar は投稿者アイコンの URL。
-const published = object({
-  ...generationShape(AGENTS, null),
-  publish: object({
-    enabled: flag.default(false),
-    discord: object({ webhook: text, avatar: text }),
-  }),
-});
+// 1 hour ごとに生成する feature。skill を回せる CLI ならどちらでもよい。
+export type HourlyExtension = "timeline" | "english";
+const hourly = object(generationShape(AGENTS, null));
 
 // root は「誰のための設定か」で 2 つ: extensions (kura の上で動く opt-in の機能ごと)、mod (Claude Code mod)。
 const Config = z.strictObject(
@@ -57,8 +60,8 @@ const Config = z.strictObject(
       akapen: prompted("opus"), // 速さより質 — 既定は opus
       tldr: prompted("opus"),
       verbatim: prompted("opus"), // 訳語の自然さが価値 — 既定は opus
-      timeline: published,
-      english: published,
+      timeline: hourly,
+      english: hourly,
     }),
     mod: object({
       // Claude Code の mod (plugin/) の pane。null は Claude Code の既定に任せる。
@@ -118,6 +121,8 @@ export function configPath(env: Environment = process.env): string {
 // 前の版にあった key。知らない key として拒否しつつ、今の書き方を添える。
 const RETIRED_KEYS: Record<string, string> = {
   features: 'renamed to "extensions"',
+  "extensions.timeline.publish": "removed with Discord delivery",
+  "extensions.english.publish": "removed with Discord delivery",
   "mod.companion.columns": "removed; the pane size is left to Claude Code",
   "mod.companion.rows": "removed; the pane size is left to Claude Code",
 };
@@ -150,25 +155,17 @@ export function loadConfig(path: string = configPath()): KuraConfig {
   return parseConfig(raw, path);
 }
 
-export function saveConfig(config: KuraConfig, path: string = configPath()): void {
-  writePrivateJson(path, config);
-}
-
-export const PUBLISHED_FEATURES = ["timeline", "english"] as const;
-export type PublishedFeature = (typeof PUBLISHED_FEATURES)[number];
-
-// 表示用の config。参照でない webhook は実値なので伏せる — 参照 (op://) はそのまま見せる。
-export function redactConfig(config: KuraConfig): KuraConfig {
-  const extensions = { ...config.extensions };
-  for (const name of PUBLISHED_FEATURES) {
-    const { publish } = extensions[name];
-    const { webhook } = publish.discord;
-    if (webhook && !isSecretReference(webhook)) {
-      extensions[name] = {
-        ...extensions[name],
-        publish: { ...publish, discord: { ...publish.discord, webhook: "<redacted>" } },
-      };
-    }
+// 0600 で一時 file に書いてから rename する — 途中で落ちても壊れた file を残さない。
+// symlink は実体に書く — dotfiles の stow link を普通の file で置き換えない。
+export function saveConfig(config: KuraConfig, linkPath: string = configPath()): void {
+  const path = lstatSync(linkPath, { throwIfNoEntry: false }) ? realpathSync(linkPath) : linkPath;
+  mkdirSync(dirname(path), { recursive: true, mode: 0o700 });
+  const temp = `${path}.kura-${process.pid}`;
+  writeFileSync(temp, `${JSON.stringify(config, null, 2)}\n`, { mode: 0o600 });
+  renameSync(temp, path);
+  try {
+    chmodSync(path, 0o600);
+  } catch {
+    /* filesystem may not support POSIX permissions */
   }
-  return { ...config, extensions };
 }

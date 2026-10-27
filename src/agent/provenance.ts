@@ -13,10 +13,3 @@ export interface Provenance {
 export function runProvenance(model: string | null, effort: string | null = null): Provenance {
   return { model, effort };
 }
-
-// 名前表示用の一行 ("<model> (<effort>)") — webhook username などにそのまま使う。
-// model が取れないとき effort 単独では出所を示せないので null (fallback の判断は呼び手)。
-export function provenanceName(model: string | null, effort: string | null): string | null {
-  if (!model) return null;
-  return effort ? `${model} (${effort})` : model;
-}
