@@ -10,7 +10,7 @@ import { publishEnglish } from "./publish.ts";
 const isGenerated = (windowStart: string): boolean => {
   const db = openKura();
   try {
-    return !!db.query("SELECT 1 AS x FROM entries WHERE window_start = ?").get(windowStart);
+    return !!db.query("SELECT 1 AS x FROM english WHERE window_start = ?").get(windowStart);
   } finally {
     db.close();
   }
@@ -20,7 +20,7 @@ const isPublished = (windowStart: string): boolean => {
   const db = openKura();
   try {
     const row = db
-      .query("SELECT published_at FROM entries WHERE window_start = ?")
+      .query("SELECT published_at FROM english WHERE window_start = ?")
       .get(windowStart) as { published_at: string | null } | null;
     return !!row?.published_at;
   } finally {
