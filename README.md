@@ -50,11 +50,25 @@ just init-config   # writes ~/.config/kura/config.json with every default
 kura config        # prints the effective config
 ```
 
-- `config.json` is kura's only configuration source
+- `config.json` holds every kura setting; recording is switched by `just enable` / `just disable`, which edit each agent's hooks file
 - [`src/config.ts`](src/config.ts) defines every key, its default, and its validation
-- `extensions.<name>` sets each extension's agent, model, and effort
-- `mod.companion` sets the pane's widgets and their shares of the rows
-- [`docs/config.md`](docs/config.md) lists every config by consumer and sensitivity
+
+| Consumer | Secret | Non-secret |
+| --- | --- | --- |
+| `akapen` / `tldr` / `verbatim` | — | `extensions.<name>`: `agent`, `model`, `effort` |
+| companion pane | — | `mod.companion`: `autoOpen`, `widgets`, `ratio` |
+| recording hooks | — | enabled or not, in each agent's hooks file |
+| `claude` / `codex` CLI | OAuth token | — |
+
+## Extensions
+
+- An extension generates one result with an LLM and prints it as JSON on stdout
+- `akapen`, `tldr`, and `verbatim` are the extensions; the companion pane consumes them
+
+```bash
+kura extension run <name> --help
+kura usage                        # tokens and cost per extension
+```
 
 ## Claude Code mods
 
@@ -64,6 +78,7 @@ kura config        # prints the effective config
 ```
 
 - Both mods ship in the `kura` plugin
+- The companion runs an extension only while its widget is listed in `mod.companion.widgets`
 
 | Widget | Shows |
 | --- | --- |
@@ -71,15 +86,6 @@ kura config        # prints the effective config
 | `verbatim` | the newest prompt as native English |
 | `tldr` | each answer in three lines |
 | `agents` | the sessions in `claude agents` |
-
-## Extensions
-
-- `akapen`, `tldr`, and `verbatim` generate the companion widgets and print JSON on stdout
-
-```bash
-kura extension run <name> --help
-kura usage                        # tokens and cost per extension
-```
 
 ## Privacy
 
