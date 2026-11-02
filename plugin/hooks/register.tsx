@@ -1281,6 +1281,7 @@ export const register: Register = (on) => {
     if (shown.isClosed) return next(e);
 
     const elements = $.ui.resolve(e);
+    // button は英訳より目立たせない: 休んでいる間は dim、focus と pointer の下で地の色。
     const { Box, Button } = elements;
     const columns = e.props.bodyColumns;
     const lead = "[native] ".length;
@@ -1301,12 +1302,13 @@ export const register: Register = (on) => {
                 key="expand"
                 hotkey="1"
                 plain
+                dimColor
                 onPress={() => set({ isExpanded: !shown.isExpanded })}
               >
                 {shown.isExpanded ? "collapse" : "expand"}
               </Button>
             )}
-            <Button key="close" hotkey="0" plain onPress={() => set({ isClosed: true })}>
+            <Button key="close" hotkey="0" plain dimColor onPress={() => set({ isClosed: true })}>
               close
             </Button>
           </Box>
