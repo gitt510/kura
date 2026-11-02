@@ -7,22 +7,30 @@ const CARD = {
   items: [{ kind: "romaji", from: "kono houhou", to: "this approach" }],
 };
 
-const COMPANION = {
+const SIDEBAR = {
   autoOpen: false,
   widgets: ["akapen", "tldr"],
   ratio: [0.6, 0.4],
 };
+// `kura config` の mod section。既定では band (abovePrompt) に何も出さない。
+type Mod = { sidebar: typeof SIDEBAR; abovePrompt: { widgets: string[] } };
+const MOD: Mod = { sidebar: SIDEBAR, abovePrompt: { widgets: [] } };
 
-// band が読むのは hasSurvey と bodyColumns、pane は bodyColumns と scroll.bodyRows だけ。
+// sidebar だけを変えた mod section。
+function sidebar(patch: Partial<typeof SIDEBAR>): Mod {
+  return { ...MOD, sidebar: { ...SIDEBAR, ...patch } };
+}
+
+// band が読むのは hasSurvey と bodyColumns と maxRows、pane は bodyColumns と scroll.bodyRows だけ。
 const BAND = {
   plugin: "kura",
   component: "AbovePrompt",
-  props: { hasSurvey: false, bodyColumns: 80 } as never,
+  props: { hasSurvey: false, bodyColumns: 60, maxRows: 20 } as never,
 } as const;
 const PANE = {
   plugin: "kura",
   component: "Pane",
-  requestId: "kura-companion",
+  requestId: "kura-sidebar",
   props: { bodyColumns: 60, scroll: { offset: 0, bodyRows: 30 } } as never,
 } as const;
 
@@ -58,7 +66,7 @@ type Engine = {
 function engine(
   on: On,
   pane: Pane,
-  companion = COMPANION,
+  mod = MOD,
   card = JSON.stringify(CARD),
   isHanging = false,
   tldr: object = { status: "ok", text: "three lines" },
@@ -82,7 +90,7 @@ function engine(
     if (e.argv[0] === "find") return ran("");
     state.calls.push({ argv: [...e.argv], stdin: e.init?.stdin ?? "" });
     const command = commandOf(e.argv);
-    if (command === "config") return ran(JSON.stringify({ mod: { companion } }));
+    if (command === "config") return ran(JSON.stringify({ mod }));
     if (isHanging) return new Promise<never>(() => {});
     if (command === "tldr") return ran(JSON.stringify(tldr));
     if (command === "verbatim") {
@@ -152,8 +160,8 @@ function engine(
         ? []
         : [
             {
-              id: "kura-companion",
-              title: "kura companion",
+              id: "kura-sidebar",
+              title: "kura sidebar",
               isShown: state.pane === "shown",
               isFocused: false,
               isPlaced: true,
@@ -176,7 +184,7 @@ function generated(state: Engine) {
 }
 
 async function open($: EngineInterface): Promise<void> {
-  await $.command.run({ command: "kura-companion" });
+  await $.command.run({ command: "kura-sidebar" });
 }
 
 function typed($: EngineInterface, text: string) {
@@ -195,11 +203,11 @@ test("pane が閉じていても card は作り、prompt 欄には出さない",
   await ui.unmount();
 });
 
-test("/kura-companion は kura config を読み、大きさを Claude Code に任せて pane を開く", async ($, on) => {
+test("/kura-sidebar は kura config を読み、大きさを Claude Code に任せて pane を開く", async ($, on) => {
   const state = engine(on, "closed");
   await open($);
   expect(state.calls.map((call) => call.argv)).toEqual([["kura", "config"]]);
-  expect(state.opened).toEqual([expect.objectContaining({ id: "kura-companion" })]);
+  expect(state.opened).toEqual([expect.objectContaining({ id: "kura-sidebar" })]);
   expect(state.opened[0]).not.toHaveProperty("columns");
   expect(state.opened[0]).not.toHaveProperty("rows");
 });
@@ -240,7 +248,7 @@ test("item は kind ごとにまとまり、長い item は直しを次の行に
     },
     { kind: "grammar", from: "how's the impelment is?", to: "how would I implement it?" },
   ];
-  engine(on, "closed", COMPANION, JSON.stringify({ status: "ok", items }));
+  engine(on, "closed", MOD, JSON.stringify({ status: "ok", items }));
   await open($);
   await typed($, "x x x");
   await settle();
@@ -280,7 +288,7 @@ test("pane は config の順に akapen (prompt は出さない) と tldr を積�
 
 test("直すところの無い card は一瞬だけ出して、pane から消す", async ($, on) => {
   const clock = mock.clock(on);
-  engine(on, "closed", COMPANION, JSON.stringify({ status: "ok", model: "opus", items: [] }));
+  engine(on, "closed", MOD, JSON.stringify({ status: "ok", model: "opus", items: [] }));
   await open($);
   await typed($, "fine prompt");
   await settle();
@@ -295,7 +303,7 @@ test("直すところの無い card は一瞬だけ出して、pane から消す
 
 test("生成に失敗した card は 30 秒だけ出して、pane から消す", async ($, on) => {
   const clock = mock.clock(on);
-  engine(on, "closed", COMPANION, "not json");
+  engine(on, "closed", MOD, "not json");
   await open($);
   await typed($, "broken prompt");
   await settle();
@@ -310,10 +318,7 @@ test("生成に失敗した card は 30 秒だけ出して、pane から消す",
 });
 
 test("知らない widget は飛ばし、残りで pane を描く", async ($, on) => {
-  engine(on, "closed", {
-    ...COMPANION,
-    widgets: ["nope", "tldr"],
-  });
+  engine(on, "closed", sidebar({ widgets: ["nope", "tldr"] }));
   await open($);
 
   const pane = await $.ui.mount({ ...PANE, surface: "terminal" });
@@ -372,7 +377,7 @@ test("tldr は turn を古い順に、question 1 行と要約で出す", async (
 });
 
 test("要約ができたら、question は kura tldr がまとめた 1 行で出す", async ($, on) => {
-  engine(on, "closed", COMPANION, JSON.stringify(CARD), false, {
+  engine(on, "closed", MOD, JSON.stringify(CARD), false, {
     status: "ok",
     text: "three lines",
     question: "asked about kura",
@@ -405,20 +410,20 @@ test("pane が閉じている間にたまった card と要約を、開いたと
 });
 
 test("widgets が空なら何も生成せず、pane も開かない", async ($, on) => {
-  const state = engine(on, "closed", { ...COMPANION, widgets: [] });
+  const state = engine(on, "closed", sidebar({ widgets: [] }));
   await typed($, "I think kono houhou is good");
   await settle();
   await answered($, "a");
   await settle();
   expect(generated(state)).toEqual([]);
 
-  const result = await $.command.run({ command: "kura-companion" });
-  expect(JSON.stringify(result)).toContain("companion.widgets");
+  const result = await $.command.run({ command: "kura-sidebar" });
+  expect(JSON.stringify(result)).toContain("sidebar.widgets");
   expect(state.opened).toEqual([]);
 });
 
 test("生成を待つ間は文言と記号の spinner を出す", async ($, on) => {
-  engine(on, "closed", COMPANION, JSON.stringify(CARD), true);
+  engine(on, "closed", MOD, JSON.stringify(CARD), true);
   await open($);
   await typed($, "I think kono houhou is good");
   await settle();
@@ -483,7 +488,7 @@ test("/kura-handoff はこの session の id を kura handoff に渡すだけ", 
   expect(state.opened).toEqual([]);
 });
 
-const AGENTS = { ...COMPANION, widgets: ["agents"] };
+const AGENTS = sidebar({ widgets: ["agents"] });
 
 test("agents widget は claude agents の行を status / name / cwd / kind / sessionId / age で、status の順、name の順に出す", async ($, on) => {
   const clock = mock.clock(on);
@@ -695,9 +700,10 @@ test("turn を終えた session は、background shell で busy のままでも 
   expect(await text()).toMatch(/1 agent {2}[·✢✳✶✻✽] 1 busy {2}○ 0 idle/);
 });
 
-const VERBATIM = { ...COMPANION, widgets: ["verbatim", "akapen", "tldr"], ratio: [0.2, 0.4, 0.4] };
+// verbatim を band (abovePrompt) に出す。sidebar は既定のまま。
+const VERBATIM: Mod = { sidebar: SIDEBAR, abovePrompt: { widgets: ["verbatim"] } };
 
-test("verbatim は載っている間だけ prompt ごとに kura verbatim を呼び、直近の英訳だけを出す", async ($, on) => {
+test("verbatim は載っている間だけ prompt ごとに kura verbatim を呼び、直近の英訳を pane ではなく band に出す", async ($, on) => {
   mock.clock(on);
   const state = engine(on, "closed", VERBATIM);
   await open($);
@@ -709,16 +715,56 @@ test("verbatim は載っている間だけ prompt ごとに kura verbatim を呼
     { input: "まあ、いいや", turns: [] },
   ]);
 
-  const pane = await $.ui.mount({ ...PANE, surface: "terminal" });
-  const text = (await pane.find({ type: "Box" }))?.text ?? "";
+  const band = await $.ui.mount({ ...BAND, surface: "terminal" });
+  const text = (await band.find({ type: "Box" }))?.text ?? "";
   expect(text).toContain("en: まあ、いいや");
   expect(text).not.toContain("en: なんだっけ");
-  // 訳した prompt を英訳の上に出す。
-  expect(text.indexOf("まあ、いいや")).toBeLessThan(text.indexOf("en: まあ"));
-  // 上から verbatim、akapen、tldr の順。
-  expect(text.indexOf("en: まあ")).toBeLessThan(text.indexOf("this approach"));
-  expect(text.indexOf("this approach")).toBeLessThan(text.indexOf("[tldr]"));
+  // 訳した prompt そのものは出さない。
+  expect(text).not.toContain("[input]");
+  await band.unmount();
+
+  const pane = await $.ui.mount({ ...PANE, surface: "terminal" });
+  expect(await pane.find({ type: "Text", text: /en: まあ/ })).toBeUndefined();
   await pane.unmount();
+});
+
+test("band の英訳は時間では消えず、0 で閉じれば次の prompt まで出さない", async ($, on) => {
+  const clock = mock.clock(on);
+  engine(on, "closed", VERBATIM);
+  await typed($, "fix this");
+  await settle();
+  await clock.advance(60_000);
+
+  const band = await $.ui.mount({ ...BAND, surface: "terminal" });
+  expect(await band.find({ type: "Text", text: /en: fix this/ })).toBeDefined();
+  // 3 行に収まる英訳には expand を出さない。
+  expect((await band.find({ type: "Box" }))?.text).not.toContain("expand");
+  await band.press({ key: "close" });
+  expect(await band.find({ type: "Text", text: /en: fix this/ })).toBeUndefined();
+
+  await typed($, "and this");
+  await settle();
+  expect(await band.find({ type: "Text", text: /en: and this/ })).toBeDefined();
+  await band.unmount();
+});
+
+test("sidebar に置いた verbatim は prompt と英訳を出し、band と違って時間で消さない", async ($, on) => {
+  const clock = mock.clock(on);
+  engine(on, "closed", sidebar({ widgets: ["verbatim", "akapen"], ratio: [0.5, 0.5] }));
+  await open($);
+  await typed($, "fix this");
+  await settle();
+  await clock.advance(60_000);
+
+  const pane = await $.ui.mount({ ...PANE, surface: "terminal" });
+  expect(await pane.find({ type: "Text", text: /\[input\] fix this/ })).toBeDefined();
+  expect(await pane.find({ type: "Text", text: /en: fix this/ })).toBeDefined();
+  await pane.unmount();
+
+  // abovePrompt に載っていなければ band には出さない。
+  const band = await $.ui.mount({ ...BAND, surface: "terminal" });
+  expect(await band.find({ type: "Text", text: /en: fix this/ })).toBeUndefined();
+  await band.unmount();
 });
 
 // kura <command> に渡した stdin (JSON) の列。
@@ -745,25 +791,30 @@ test("verbatim には回答の済んだ直前の turn を context に渡す", as
   ]);
 });
 
-test("verbatim は ratio の行数に prompt と英訳を収め、はみ出す分は切って … を出す", async ($, on) => {
+test("band は英訳を 3 行に畳んで … で切り、1 で広げて全文を出し、もう一度 1 で畳む", async ($, on) => {
   mock.clock(on);
   engine(on, "closed", VERBATIM);
-  await open($);
   await typed($, "word ".repeat(200).trim());
   await settle();
 
-  const pane = await $.ui.mount({ ...PANE, surface: "terminal" });
-  const text = (await pane.find({ type: "Box" }))?.text ?? "";
-  // Box の text は行を繋げて返す: 区切りの罫線までが verbatim。罫線を除く 28 行の 0.2 で 5 行:
-  // prompt が 1 行、英訳が 4 行。label は最初の行の頭だけに付き、どちらも切られて … で終わる。
-  const shown = text.slice(0, text.indexOf("─"));
-  expect(shown.startsWith("[input] word word")).toBe(true);
-  expect(shown).toContain("…[native] en: word");
-  expect(shown.match(/\[(input|native)\]/g)).toHaveLength(2);
-  expect(shown.endsWith("…")).toBe(true);
-  expect(shown.length).toBeLessThanOrEqual(60 * 5);
-  expect(shown.length).toBeGreaterThan(60 * 4);
-  await pane.unmount();
+  const band = await $.ui.mount({ ...BAND, surface: "terminal" });
+  const text = async () => (await band.find({ type: "Box" }))?.text ?? "";
+  // Box の text は行を繋げて返す。英訳が 3 行、label は最初の行の頭だけ、続いて button。
+  const folded = await text();
+  expect(folded.startsWith("[native] en: word")).toBe(true);
+  expect(folded.match(/\[(input|native)\]/g)).toHaveLength(1);
+  expect(folded).toContain("…");
+  expect(folded).toContain("expand");
+
+  await band.press({ key: "expand" });
+  const expanded = await text();
+  expect(expanded).not.toContain("…");
+  expect(expanded).toContain("collapse");
+  expect(expanded.length).toBeGreaterThan(folded.length);
+
+  await band.press({ key: "expand" });
+  expect(await text()).toBe(folded);
+  await band.unmount();
 });
 
 test("verbatim が載っていなければ kura verbatim は呼ばない", async ($, on) => {
@@ -784,13 +835,13 @@ test("kura が skip する prompt は kura verbatim に送らず、前の英訳�
   await settle();
   expect(sentTo(state, "verbatim")).toEqual([{ input: "fix this", turns: [] }]);
 
-  const pane = await $.ui.mount({ ...PANE, surface: "terminal" });
-  expect(await pane.find({ type: "Text", text: /en: fix this/ })).toBeDefined();
-  await pane.unmount();
+  const band = await $.ui.mount({ ...BAND, surface: "terminal" });
+  expect(await band.find({ type: "Text", text: /en: fix this/ })).toBeDefined();
+  await band.unmount();
 });
 
 test("人が閉じた pane は autoOpen でも次の session で開かず、開いた pane は autoOpen が無くても開く", async ($, on) => {
-  const state = engine(on, "closed", { ...COMPANION, autoOpen: true });
+  const state = engine(on, "closed", sidebar({ autoOpen: true }));
   const start = async () => {
     await $.session.start({ source: "startup", cwd: "/work/kura" } as never);
     await settle();

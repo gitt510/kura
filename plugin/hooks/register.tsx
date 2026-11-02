@@ -1,11 +1,13 @@
-// register.tsx — kura companion: Claude Code の横に、打った prompt の英語 feedback (akapen) と
-// 直近の prompt の native 英訳 (verbatim) と、回答ごとの 3 行要約 (tldr) と、mod を読み込んだ
-// 全 session の status (agents) を積む pane。
+// register.tsx — kura の widget を 2 つの配信先に出す: Claude Code の横の pane (sidebar) と
+// prompt 欄の上の band (abovePrompt)。widget は打った prompt の英語 feedback (akapen)、
+// 直近の prompt の native 英訳 (verbatim)、回答ごとの 3 行要約 (tldr)、mod を読み込んだ
+// 全 session の status (agents)。
 //
 // 生成は kura の extension (`kura extension run akapen|verbatim|tldr`) が持ち、usage も kura が記録する。
-// この mod は呼んで表示するだけ。配置は `kura config` の mod.companion section が決める。
-// widget が mod.companion.widgets に載っている間、その生成は session の始めから pane と関係なく
-// 常に走り、pane はたまったものをいつでも見せる。載っていなければ何もしない。
+// この mod は呼んで表示するだけ。どの widget をどこに出すかは `kura config` の mod.sidebar と
+// mod.abovePrompt が決める。widget がどちらかに載っている間、その生成は session の始めから
+// 表示と関係なく常に走る。state には生成したものを丸ごと置き、何をいつ出すかは配信先ごとの
+// 描画が決める。どちらにも載っていなければ何もしない。
 //
 // /kura-handoff も置く: この session の id を `kura handoff` に渡し、tmux の右に新しい
 // Claude Code を開く。pane を開くのも system prompt を組むのも kura が持つ。
@@ -26,8 +28,8 @@ import type {
   Turn,
 } from "../types";
 
-const PANE = "kura-companion";
-const COMMAND = "kura-companion";
+const PANE = "kura-sidebar";
+const COMMAND = "kura-sidebar";
 const HANDOFF = "kura-handoff";
 // 人が最後に pane を開いていたか閉じていたか。$.store に session をまたいで残し、autoOpen より優先する。
 const IS_OPEN_KEY = "isPaneOpen";
@@ -41,14 +43,19 @@ const FLASH_MS = 2_000;
 const ERROR_MS = 30_000;
 // kura verbatim に context として渡す直前の turn の数。
 const VERBATIM_CONTEXT = 1;
+const VERBATIM = "verbatim";
+// band (abovePrompt) が畳んだ英訳に使う行数。広げれば band の高さいっぱいまで使う。
+const VERBATIM_ROWS = 3;
 
 // 打った prompt ごとに 1 entry、古い順。pane が全部を出す。
 const history = atom({ plugin: "kura", key: "history" } as const, []);
 // 直近に打った prompt とその native 英訳。1 つだけ持ち、次の prompt で置き換わる。
 const sentence = atom({ plugin: "kura", key: "sentence" } as const, null);
+// band が英訳をどう見せているか。id の英訳にだけ効き、次の prompt の英訳は畳んで出す。
+const bandView = atom({ plugin: "kura", key: "bandView" } as const, null);
 // main loop の question / answer とその要約、古い順。turn は prompt を打った時点で積み、回答で埋める。
 const turns = atom({ plugin: "kura", key: "turns" } as const, []);
-// session の始めか pane を開いたときに読んだ `kura config` の mod.companion section。
+// session の始めか pane を開いたときに読んだ `kura config` の mod.sidebar と mod.abovePrompt。
 const layout = atom({ plugin: "kura", key: "layout" } as const, null);
 // spinner が描く時刻 (ms)。生成を待つものがある間だけ TICK_MS ごとに進む。
 const frame = atom({ plugin: "kura", key: "frame" } as const, 0);
@@ -741,7 +748,7 @@ function drawAgents(elements: Elements, { agents: s, now }: PaneData) {
 // ---- pane ----
 
 // pane は上から widget を積む (最大 3 つ)。行は ratio の比で分け、各 widget は自分の行数で切られる。
-// どれを積むかは config の mod.companion.widgets が決める。
+// どれを積むかは config の mod.sidebar.widgets が決める。
 // align は切る側: bottom は最新が下に来る widget で上の古い方を、top は上から読む widget で下を切る。
 type PaneData = {
   history: Entry[];
@@ -923,6 +930,45 @@ function drawVerbatim(elements: Elements, { sentence: s, now }: PaneData, { colu
   );
 }
 
+// band の verbatim: 直近の prompt の native 英訳 ([native]) だけ。打った prompt は transcript の
+// すぐ上にあるので出さない。label は最初の行の頭にだけ置き、続く行は字下げせず幅いっぱいに使う。
+function drawVerbatimNative(
+  elements: Elements,
+  { sentence: s, now }: PaneData,
+  { columns, rows }: Size,
+) {
+  const { Box, Text } = elements;
+  if (s === null) return <Text dimColor>The last prompt is said again in English here.</Text>;
+  const { translation } = s;
+  const nativeLabel = <Text color={NATIVE_COLOR}>{"[native] "}</Text>;
+  if (translation.status === "pending") {
+    return (
+      <Text wrap="truncate-end">
+        {nativeLabel}
+        {spinner(elements, s.id, now, "interpreting", s.startedAt)}
+      </Text>
+    );
+  }
+  if (translation.status === "error") {
+    return (
+      <Text wrap="truncate-end">
+        {nativeLabel}
+        <Text color="error">interpretation failed</Text>
+      </Text>
+    );
+  }
+  return (
+    <Box flexDirection="column">
+      {wrapSentence(translation.text, columns, rows, "[native] ".length).map((line, index) => (
+        <Text key={`native-${index}`} wrap="truncate-end">
+          {index === 0 && nativeLabel}
+          {line}
+        </Text>
+      ))}
+    </Box>
+  );
+}
+
 type Widget = { draw: Draw; align: "top" | "bottom" };
 const WIDGETS: Record<string, Widget> = {
   akapen: { draw: drawAkapen, align: "bottom" },
@@ -947,15 +993,18 @@ async function paneState($: EngineInterface): Promise<{ isOpen: boolean; isInVie
 }
 
 async function loadLayout($: EngineInterface): Promise<Layout> {
-  const config = JSON.parse(await kura($, ["config"])) as { mod: { companion: Layout } };
-  await update($, layout, () => config.mod.companion);
-  return config.mod.companion;
+  const config = JSON.parse(await kura($, ["config"])) as { mod: Layout };
+  const { sidebar, abovePrompt } = config.mod;
+  await update($, layout, () => ({ sidebar, abovePrompt }));
+  return { sidebar, abovePrompt };
 }
 
-// その widget が載っているか。読めていなければ一度だけ読む。読めなければ載っていないとして扱う。
+// その widget がどちらかの配信先に載っているか。読めていなければ一度だけ読む。読めなければ
+// 載っていないとして扱う。
 async function isListed($: EngineInterface, widget: string): Promise<boolean> {
   try {
-    return ((await read($, layout)) ?? (await loadLayout($))).widgets.includes(widget);
+    const { sidebar, abovePrompt } = (await read($, layout)) ?? (await loadLayout($));
+    return sidebar.widgets.includes(widget) || abovePrompt.widgets.includes(widget);
   } catch (error) {
     debug($, "isListed", error);
     return false;
@@ -964,17 +1013,17 @@ async function isListed($: EngineInterface, widget: string): Promise<boolean> {
 
 // config を読み直してから開く — config の変更は pane を開き直せば効く。
 async function openPane($: EngineInterface): Promise<void> {
-  const companion = await loadLayout($);
-  if (companion.widgets.length === 0) {
-    throw new Error("mod.companion.widgets is empty in kura config");
+  const { sidebar } = await loadLayout($);
+  if (sidebar.widgets.length === 0) {
+    throw new Error("mod.sidebar.widgets is empty in kura config");
   }
-  const unknown = companion.widgets.filter((widget) => !(widget in WIDGETS));
+  const unknown = sidebar.widgets.filter((widget) => !(widget in WIDGETS));
   if (unknown.length > 0) {
     await toast($, null, `unknown widget ${unknown.join(", ")} — skipped`);
   }
   await $.ui.open({
     id: PANE,
-    title: "kura companion",
+    title: "kura sidebar",
   });
 }
 
@@ -1016,7 +1065,7 @@ async function declare($: EngineInterface): Promise<void> {
   isDeclared = true;
   await $.command.register({
     name: COMMAND,
-    description: "Toggle the kura companion pane (English feedback and a three-line tldr)",
+    description: "Toggle the kura sidebar pane (English feedback and a three-line tldr)",
     immediate: true,
   });
   await $.command.register({
@@ -1035,6 +1084,8 @@ export const register: Register = (on) => {
         .filter((entry) => entry.card.status !== "pending")
         .map((entry) => (entry.isFlashing ? { ...entry, isFlashing: false } : entry)),
     );
+    // 前の load が読んだ config は前の形かもしれない: 読み直すまで持たない。
+    await update($, layout, () => null);
     await update($, sentence, (s) => (s?.translation.status === "pending" ? null : s));
     // id の無い turn は要約を turn ごとに持つ前の形、回答を待っていた turn は回答が届かない: 捨てる。
     // 要約の途中だった turn (と要約を持たない前の形) は作り直す。
@@ -1049,20 +1100,20 @@ export const register: Register = (on) => {
     );
     const done = await next(e);
     void (async () => {
-      const companion = await loadLayout($);
-      if (companion.widgets.includes("agents")) {
+      const { sidebar } = await loadLayout($);
+      if (sidebar.widgets.includes("agents")) {
         void pruneEvents($).catch(() => {});
         startPolling($);
       }
-      if (companion.widgets.includes("tldr")) {
+      if (sidebar.widgets.includes("tldr")) {
         for (const turn of await read($, turns)) {
           if (turn.summary.status === "pending") void summarize($, turn.id);
         }
       }
       const wasOpen = (await $.store.get(IS_OPEN_KEY)) as boolean | undefined;
       if (
-        companion.widgets.length > 0 &&
-        (wasOpen ?? companion.autoOpen) &&
+        sidebar.widgets.length > 0 &&
+        (wasOpen ?? sidebar.autoOpen) &&
         !(await paneState($)).isOpen
       ) {
         await openPane($);
@@ -1076,17 +1127,17 @@ export const register: Register = (on) => {
   on("command.run", { command: COMMAND }, async ($) => {
     if ((await paneState($)).isOpen) {
       await $.ui.close({ id: PANE });
-      return { text: "Companion pane closed." };
+      return { text: "Sidebar pane closed." };
     }
     try {
       await openPane($);
       await $.store.set(IS_OPEN_KEY, true);
     } catch (error) {
       return {
-        text: `Companion pane not opened: ${error instanceof Error ? error.message : error}`,
+        text: `Sidebar pane not opened: ${error instanceof Error ? error.message : error}`,
       };
     }
-    return { text: "Companion pane opened." };
+    return { text: "Sidebar pane opened." };
   });
 
   // command でも ctrl+x x でも、人が閉じたら覚えておく。unload (reload / 終了) は人の意思ではない。
@@ -1177,7 +1228,7 @@ export const register: Register = (on) => {
     // (短すぎる・command) は前の英訳を残すため、ここでも同じ規則で触らない。
     // context は回答の済んだ直前の turn: 「これ」「上は」の指示先と口調はそこで決まる。
     void (async () => {
-      if (isTrivial(e.text) || !(await isListed($, "verbatim"))) return;
+      if (isTrivial(e.text) || !(await isListed($, VERBATIM))) return;
       const startedAt = await $.clock.now().catch(() => undefined);
       const context = (await read($, turns))
         .filter((turn) => turn.id !== id && turn.answer.trim() !== "")
@@ -1215,12 +1266,53 @@ export const register: Register = (on) => {
   });
 
   // prompt 欄は session の間ずっと描かれる。mod が session の途中で読み込まれても、ここで
-  // command を登録する。この mod は prompt 欄に何も描かない。
+  // command を登録する。band には、verbatim が mod.abovePrompt に載っていれば直近の英訳を出す。
+  // 畳んで VERBATIM_ROWS 行、1 で広げる / 畳む、0 で閉じる。閉じた英訳は次の prompt まで出さない。
   on("ui.render", { component: "AbovePrompt" }, async ($, e, next) => {
     void declare($).catch(() => {
       isDeclared = false;
     });
-    return next(e);
+    const s = await read($, sentence);
+    const now = await read($, frame);
+    const view = await read($, bandView);
+    if (s === null || e.props.hasSurvey) return next(e);
+    if (!(await read($, layout))?.abovePrompt.widgets.includes(VERBATIM)) return next(e);
+    const shown = view?.id === s.id ? view : { id: s.id, isExpanded: false, isClosed: false };
+    if (shown.isClosed) return next(e);
+
+    const elements = $.ui.resolve(e);
+    const { Box, Button } = elements;
+    const columns = e.props.bodyColumns;
+    const lead = "[native] ".length;
+    const full =
+      s.translation.status === "ok" ? wrapSentence(s.translation.text, columns, 10_000, lead) : [];
+    const isLong = full.length > VERBATIM_ROWS;
+    // 広げても band の高さは越えない。1 行は button に残す。
+    const rows = shown.isExpanded ? Math.max(1, e.props.maxRows - 1) : VERBATIM_ROWS;
+    const set = (patch: { isExpanded?: boolean; isClosed?: boolean }) =>
+      update($, bandView, () => ({ ...shown, ...patch }));
+    return (
+      <Box flexDirection="column">
+        {drawVerbatimNative(elements, { sentence: s, now } as PaneData, { columns, rows })}
+        {s.translation.status !== "pending" && (
+          <Box gap={2}>
+            {isLong && (
+              <Button
+                key="expand"
+                hotkey="1"
+                plain
+                onPress={() => set({ isExpanded: !shown.isExpanded })}
+              >
+                {shown.isExpanded ? "collapse" : "expand"}
+              </Button>
+            )}
+            <Button key="close" hotkey="0" plain onPress={() => set({ isClosed: true })}>
+              close
+            </Button>
+          </Box>
+        )}
+      </Box>
+    );
   });
 
   on("turn.start", async ($, e, next) => {
@@ -1266,7 +1358,7 @@ export const register: Register = (on) => {
       agents: await read($, agents),
       now: await read($, frame),
     };
-    const current = await read($, layout);
+    const current = (await read($, layout))?.sidebar;
     // 知らない widget は ratio ごと飛ばす。ratio が widgets と揃うことは kura config が保証する。
     const listed = (current?.widgets ?? []).map((widget, index) => ({
       widget,
@@ -1275,7 +1367,7 @@ export const register: Register = (on) => {
     const known = listed.filter(({ widget }) => widget in WIDGETS).slice(0, 3);
     const widgets = known.map(({ widget }) => widget);
     if (widgets.length === 0)
-      return <Text dimColor>No widget to show — see mod.companion.widgets.</Text>;
+      return <Text dimColor>No widget to show — see mod.sidebar.widgets.</Text>;
 
     const columns = e.props.bodyColumns;
     const size = { columns, rows: e.props.scroll.bodyRows };

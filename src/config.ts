@@ -55,14 +55,15 @@ const Config = z.strictObject(
       verbatim: prompted("opus"), // 訳語の自然さが価値 — 既定は opus
     }),
     mod: object({
-      // Claude Code の mod (plugin/) の pane。null は Claude Code の既定に任せる。
-      // widget の id が mod に実在するかは mod が判定する。
-      companion: z
+      // Claude Code の mod (plugin/) が widget を出す 2 つの配信先。widget の id が mod に
+      // 実在するかは mod が判定する。akapen / tldr / verbatim の生成は、widget がどちらかに
+      // 載っている間だけ走る。どちらも widgets を空にすればその配信先は off。
+      // sidebar: Claude Code の横の pane。
+      sidebar: z
         .strictObject(
           {
             autoOpen: flag.default(false), // session 開始時に pane を開く
-            // 上から順に積む widget の id。最大 3 つ。空なら companion は何もしない。
-            // akapen / tldr / verbatim の生成はここに載っている間だけ走る。
+            // 上から順に積む widget の id。最大 3 つ。
             widgets: z
               .array(z.string({ error: "must be a list of widget ids" }).min(1), {
                 error: "must be a list of widget ids",
@@ -83,11 +84,20 @@ const Config = z.strictObject(
           },
           { error: "must be an object" },
         )
-        .refine((companion) => companion.ratio.length === companion.widgets.length, {
+        .refine((sidebar) => sidebar.ratio.length === sidebar.widgets.length, {
           path: ["ratio"],
-          error: "must list one share per widget in mod.companion.widgets",
+          error: "must list one share per widget in mod.sidebar.widgets",
         })
         .prefault({}),
+      // abovePrompt: prompt 欄の上の band。1 つだけ出す。
+      abovePrompt: object({
+        widgets: z
+          .array(z.string({ error: "must be a list of widget ids" }).min(1), {
+            error: "must be a list of widget ids",
+          })
+          .max(1, { error: "must list at most 1 widget" })
+          .default([]),
+      }),
     }),
   },
   { error: "must be a JSON object" },
@@ -114,8 +124,7 @@ const RETIRED_KEYS: Record<string, string> = {
   features: 'renamed to "extensions"',
   "extensions.timeline": "removed",
   "extensions.english": "removed",
-  "mod.companion.columns": "removed; the pane size is left to Claude Code",
-  "mod.companion.rows": "removed; the pane size is left to Claude Code",
+  "mod.companion": 'renamed to "mod.sidebar"',
 };
 
 // 書かれていない項目は既定値で埋める。型が違う項目は path と項目名を付けて拒否する。
