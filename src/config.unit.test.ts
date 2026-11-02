@@ -80,17 +80,21 @@ test("saveConfig は 0600 で書き、loadConfig で同じ値に戻る", () => {
   expect(loadConfig(path)).toEqual(config);
 });
 
-test("companion は既定で閉じ、akapen / tldr を半々で積む", () => {
-  expect(parseConfig({}, "config.json").mod.companion).toEqual({
-    autoOpen: false,
-    widgets: ["akapen", "tldr"],
-    ratio: [0.5, 0.5],
-  });
+test("sidebar は既定で閉じ、akapen / tldr を半々で積む。abovePrompt は既定で何も出さない", () => {
+  const { mod } = parseConfig({}, "config.json");
+  expect(mod.sidebar).toEqual({ autoOpen: false, widgets: ["akapen", "tldr"], ratio: [0.5, 0.5] });
+  expect(mod.abovePrompt).toEqual({ widgets: [] });
   const config = parseConfig(
-    { mod: { companion: { autoOpen: true, widgets: ["tldr"], ratio: [1] } } },
+    {
+      mod: {
+        sidebar: { autoOpen: true, widgets: ["tldr"], ratio: [1] },
+        abovePrompt: { widgets: ["verbatim"] },
+      },
+    },
     "config.json",
   );
-  expect(config.mod.companion).toEqual({ autoOpen: true, widgets: ["tldr"], ratio: [1] });
+  expect(config.mod.sidebar).toEqual({ autoOpen: true, widgets: ["tldr"], ratio: [1] });
+  expect(config.mod.abovePrompt).toEqual({ widgets: ["verbatim"] });
 });
 
 test("前の版の key は、今の書き方を添えて拒否する", () => {
@@ -100,24 +104,27 @@ test("前の版の key は、今の書き方を添えて拒否する", () => {
   expect(() => parseConfig({ extensions: { timeline: {} } }, "c.json")).toThrow(
     'extensions has unknown key "timeline" (removed)',
   );
-  expect(() => parseConfig({ mod: { companion: { rows: 10 } } }, "c.json")).toThrow(
-    'mod.companion has unknown key "rows" (removed; the pane size is left to Claude Code)',
+  expect(() => parseConfig({ mod: { companion: {} } }, "c.json")).toThrow(
+    'mod has unknown key "companion" (renamed to "mod.sidebar")',
   );
 });
 
-test("companion の不正な値は項目名付きで拒否する", () => {
-  expect(() => parseConfig({ mod: { companion: { autoOpen: "yes" } } }, "c.json")).toThrow(
-    "mod.companion.autoOpen must be a boolean",
+test("sidebar / abovePrompt の不正な値は項目名付きで拒否する", () => {
+  expect(() => parseConfig({ mod: { sidebar: { autoOpen: "yes" } } }, "c.json")).toThrow(
+    "mod.sidebar.autoOpen must be a boolean",
   );
   expect(() =>
-    parseConfig({ mod: { companion: { widgets: ["a", "b", "c", "d"] } } }, "c.json"),
-  ).toThrow("mod.companion.widgets must list at most 3 widgets");
-  expect(() => parseConfig({ mod: { companion: { ratio: [0.5, 0] } } }, "c.json")).toThrow(
-    "mod.companion.ratio.1 must be a positive number",
+    parseConfig({ mod: { sidebar: { widgets: ["a", "b", "c", "d"] } } }, "c.json"),
+  ).toThrow("mod.sidebar.widgets must list at most 3 widgets");
+  expect(() => parseConfig({ mod: { sidebar: { ratio: [0.5, 0] } } }, "c.json")).toThrow(
+    "mod.sidebar.ratio.1 must be a positive number",
   );
   expect(() =>
-    parseConfig({ mod: { companion: { widgets: ["akapen", "verbatim", "tldr"] } } }, "c.json"),
-  ).toThrow("mod.companion.ratio must list one share per widget in mod.companion.widgets");
+    parseConfig({ mod: { sidebar: { widgets: ["akapen", "verbatim", "tldr"] } } }, "c.json"),
+  ).toThrow("mod.sidebar.ratio must list one share per widget in mod.sidebar.widgets");
+  expect(() =>
+    parseConfig({ mod: { abovePrompt: { widgets: ["verbatim", "tldr"] } } }, "c.json"),
+  ).toThrow("mod.abovePrompt.widgets must list at most 1 widget");
 });
 
 test("saveConfig は symlink を残したまま実体に書く", () => {

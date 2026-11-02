@@ -3,7 +3,7 @@
 # kura — 蔵
 
 - kura keeps Claude Code and Codex conversations verbatim in one SQLite database, `kura.db`
-- A Claude Code pane gives live English feedback and three-line summaries beside the session
+- A Claude Code sidebar and a band above the prompt give live English feedback and three-line summaries beside the session
 - The name *kura* (蔵) means a storehouse: things are put away quietly and taken out only when needed
 
 ## Why kura
@@ -17,7 +17,7 @@
 | --- | --- |
 | macOS, [Bun](https://bun.sh/), [just](https://github.com/casey/just) | everything |
 | [Claude Code](https://docs.anthropic.com/en/docs/claude-code) or [Codex](https://developers.openai.com/codex/cli/) | recording |
-| Claude Code | the companion pane |
+| Claude Code | the sidebar and the band above the prompt |
 | tmux | handoff |
 
 ## Setup
@@ -41,7 +41,7 @@ just status
 npx skills add gitt510/kura --skill search-history
 ```
 
-- The `kura` plugin bundles `search-history`, the companion pane, and handoff
+- The `kura` plugin bundles `search-history`, the sidebar, the band above the prompt, and handoff
 
 ## Configuration
 
@@ -56,14 +56,15 @@ kura config        # prints the effective config
 | Consumer | Secret | Non-secret |
 | --- | --- | --- |
 | `akapen` / `tldr` / `verbatim` | — | `extensions.<name>`: `agent`, `model`, `effort` |
-| companion pane | — | `mod.companion`: `autoOpen`, `widgets`, `ratio` |
+| sidebar | — | `mod.sidebar`: `autoOpen`, `widgets`, `ratio` |
+| band above the prompt | — | `mod.abovePrompt`: `widgets` |
 | recording hooks | — | enabled or not, in each agent's hooks file |
 | `claude` / `codex` CLI | OAuth token | — |
 
 ## Extensions
 
 - An extension generates one result with an LLM and prints it as JSON on stdout
-- `akapen`, `tldr`, and `verbatim` are the extensions; the companion pane consumes them
+- `akapen`, `tldr`, and `verbatim` are the extensions; the sidebar and the band above the prompt consume them
 
 ```bash
 kura extension run <name> --help
@@ -73,12 +74,13 @@ kura usage                        # tokens and cost per extension
 ## Claude Code mods
 
 ```bash
-/kura-companion   # toggle the companion pane
+/kura-sidebar     # toggle the sidebar
 /kura-handoff     # hand this session to a new tmux pane
 ```
 
 - Both mods ship in the `kura` plugin
-- The companion runs an extension only while its widget is listed in `mod.companion.widgets`
+- An extension runs only while its widget is listed in `mod.sidebar.widgets` or `mod.abovePrompt.widgets`
+- Each place is off while its `widgets` is empty; the band takes `verbatim` only, folded to three lines (`1` expands, `0` closes)
 
 | Widget | Shows |
 | --- | --- |
@@ -90,7 +92,7 @@ kura usage                        # tokens and cost per extension
 ## Privacy
 
 - `kura.db` lives unencrypted in `~/.local/state/kura`
-- A companion widget sends the newest prompt or the latest turns to Claude
+- A widget sends the newest prompt or the latest turns to Claude
 - `just teardown` removes everything `just setup` created and keeps `kura.db` and the config
 
 ## Development

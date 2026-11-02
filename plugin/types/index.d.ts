@@ -35,11 +35,19 @@ export type Sentence = {
   translation: Translation;
   startedAt?: number;
 };
-// `kura config` の mod.companion section。null は Claude Code の既定に任せる。
-export type Layout = {
+// band が id の英訳をどう見せているか。広げているか、閉じたか。
+export type BandView = { id: string; isExpanded: boolean; isClosed: boolean };
+// `kura config` の mod.sidebar section: Claude Code の横の pane。
+export type Sidebar = {
   autoOpen: boolean;
-  widgets: string[]; // 上から順、最大 3 つ。akapen / tldr / verbatim の生成はここに載っている間だけ
+  widgets: string[]; // 上から順、最大 3 つ
   ratio: number[]; // widget ごとの高さの取り分。widgets と同じ数で、合計で割る
+};
+// `kura config` の mod.sidebar と mod.abovePrompt。akapen / tldr / verbatim の生成は、
+// widget がどちらかに載っている間だけ走る。
+export type Layout = {
+  sidebar: Sidebar;
+  abovePrompt: { widgets: string[] }; // prompt 欄の上の band。いまは verbatim だけ
 };
 
 // agents widget の 1 行。`claude agents --json` の項目をそのまま持つ。status は status、
@@ -66,6 +74,7 @@ declare module "claude-code" {
       history: Entry[];
       turns: Turn[];
       sentence: Sentence | null;
+      bandView: BandView | null;
       layout: Layout | null;
       frame: number;
       agents: Agents;
